@@ -14,24 +14,14 @@ import { fmtMoney } from "../format";
 
 interface Props {
   history: HistoryByCurrency;
-  days: number;
-  onDaysChange: (days: number) => void;
 }
-
-const RANGES: { label: string; days: number }[] = [
-  { label: "1M", days: 30 },
-  { label: "3M", days: 90 },
-  { label: "6M", days: 180 },
-  { label: "1Y", days: 365 },
-  { label: "All", days: 1825 },
-];
 
 const CURRENCY_COLORS: Record<string, string> = {
   TWD: "#ffa657",
   USD: "#79c0ff",
 };
 
-export function PerformanceChart({ history, days, onDaysChange }: Props) {
+export function PerformanceChart({ history }: Props) {
   const [hoverCurrency, setHoverCurrency] = useState<string | null>(null);
 
   const { rows, currencies } = useMemo(() => {
@@ -56,32 +46,11 @@ export function PerformanceChart({ history, days, onDaysChange }: Props) {
 
   return (
     <div className="panel">
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 14,
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Portfolio Value Over Time</h2>
-        <div style={{ display: "flex", gap: 4 }}>
-          {RANGES.map((r) => (
-            <button
-              key={r.days}
-              className={r.days === days ? "" : "secondary"}
-              style={{ padding: "4px 10px", fontSize: 12 }}
-              onClick={() => onDaysChange(r.days)}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <h2>Cumulative Realized P/L</h2>
 
       {empty ? (
         <div className="empty">
-          Add some trades and we'll plot daily portfolio value here.
+          Record some sells and we'll plot cumulative realized P/L here.
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={320}>

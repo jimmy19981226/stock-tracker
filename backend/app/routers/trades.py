@@ -33,6 +33,25 @@ def create_trade(payload: TradeCreate, db: Session = Depends(get_db)):
     return trade
 
 
+@router.put("/{trade_id}", response_model=TradeOut)
+def update_trade(
+    trade_id: int, payload: TradeCreate, db: Session = Depends(get_db)
+):
+    trade = db.query(Trade).filter(Trade.id == trade_id).first()
+    if not trade:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    trade.type = payload.type
+    trade.ticker = payload.ticker.strip().upper()
+    trade.shares = payload.shares
+    trade.price = payload.price
+    trade.trade_date = payload.trade_date
+    trade.fee = payload.fee
+    trade.notes = payload.notes
+    db.commit()
+    db.refresh(trade)
+    return trade
+
+
 @router.delete("/{trade_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_trade(trade_id: int, db: Session = Depends(get_db)):
     trade = db.query(Trade).filter(Trade.id == trade_id).first()

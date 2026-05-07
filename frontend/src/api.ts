@@ -93,11 +93,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function uploadPortfolioCsv(
+  file: File,
+): Promise<{ trades: number; dividends: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/data/import", { method: "POST", body: form });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 export const api = {
   listTrades: () => request<Trade[]>("/api/trades"),
   createTrade: (t: TradeCreate) =>
     request<Trade>("/api/trades", {
       method: "POST",
+      body: JSON.stringify(t),
+    }),
+  updateTrade: (id: number, t: TradeCreate) =>
+    request<Trade>(`/api/trades/${id}`, {
+      method: "PUT",
       body: JSON.stringify(t),
     }),
   deleteTrade: (id: number) =>
@@ -108,10 +132,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify(d),
     }),
+  updateDividend: (id: number, d: DividendCreate) =>
+    request<Dividend>(`/api/dividends/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(d),
+    }),
   deleteDividend: (id: number) =>
     request<void>(`/api/dividends/${id}`, { method: "DELETE" }),
+  importPortfolioCsv: uploadPortfolioCsv,
+  exportPortfolioUrl: "/api/data/export",
+  getLastExport: () =>
+    request<{ last_export: string | null }>("/api/data/last-export"),
   getHoldings: () => request<Holding[]>("/api/portfolio/holdings"),
   getSummary: () => request<CurrencySummary[]>("/api/portfolio/summary"),
   getHistory: (days = 180) =>
     request<HistoryByCurrency>(`/api/portfolio/history?days=${days}`),
+  getRealizedHistory: (days = 180) =>
+    request<HistoryByCurrency>(`/api/portfolio/realized-history?days=${days}`),
 };

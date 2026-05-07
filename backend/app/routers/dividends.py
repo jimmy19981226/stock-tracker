@@ -44,6 +44,22 @@ def create_dividend(payload: DividendCreate, db: Session = Depends(get_db)):
     return _to_out(d)
 
 
+@router.put("/{dividend_id}", response_model=DividendOut)
+def update_dividend(
+    dividend_id: int, payload: DividendCreate, db: Session = Depends(get_db)
+):
+    d = db.query(Dividend).filter(Dividend.id == dividend_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Dividend not found")
+    d.ticker = payload.ticker.strip().upper()
+    d.amount = payload.amount
+    d.pay_date = payload.pay_date
+    d.notes = payload.notes
+    db.commit()
+    db.refresh(d)
+    return _to_out(d)
+
+
 @router.delete("/{dividend_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_dividend(dividend_id: int, db: Session = Depends(get_db)):
     d = db.query(Dividend).filter(Dividend.id == dividend_id).first()

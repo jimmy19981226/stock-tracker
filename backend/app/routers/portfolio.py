@@ -23,6 +23,13 @@ def get_history(days: int = Query(180, ge=7, le=1825), db: Session = Depends(get
     return portfolio.build_value_history(db, days=days)
 
 
+@router.get("/realized-history")
+def get_realized_history(
+    days: int = Query(180, ge=7, le=1825), db: Session = Depends(get_db)
+):
+    return portfolio.build_realized_history(db, days=days)
+
+
 @router.get("/quote/{ticker}")
 def get_quote(ticker: str):
     q = quotes.get_quote(ticker)

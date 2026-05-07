@@ -1,16 +1,70 @@
+import { useState } from "react";
 import { api, type Dividend } from "../api";
-import { fmtMoney, isTwTicker } from "../format";
+import { type DatePreset, fmtMoney, isTwTicker, presetRange } from "../format";
 
 interface Props {
   dividends: Dividend[];
-  onDeleted: () => void;
+  onChanged: () => void;
 }
 
-export function DividendList({ dividends, onDeleted }: Props) {
+type MarketFilter = "all" | "tw" | "us";
+
+export function DividendList({ dividends, onChanged }: Props) {
+  const [tickerQuery, setTickerQuery] = useState("");
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
+  const [preset, setPreset] = useState<DatePreset>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<Dividend | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function applyPreset(p: DatePreset) {
+    setPreset(p);
+    if (p !== "custom") {
+      const r = presetRange(p);
+      setFrom(r.from);
+      setTo(r.to);
+    }
+  }
+
   async function remove(id: number) {
     if (!confirm("Delete this dividend record?")) return;
     await api.deleteDividend(id);
-    onDeleted();
+    onChanged();
+  }
+
+  function startEdit(d: Dividend) {
+    setEditingId(d.id);
+    setDraft({ ...d });
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(null);
+    setError(null);
+  }
+
+  async function saveEdit() {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.updateDividend(draft.id, {
+        ticker: draft.ticker,
+        amount: Number(draft.amount),
+        pay_date: draft.pay_date,
+        notes: draft.notes ?? null,
+      });
+      cancelEdit();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (dividends.length === 0) {
@@ -24,20 +78,132 @@ export function DividendList({ dividends, onDeleted }: Props) {
     );
   }
 
+  const visible = dividends.filter((d) => {
+    if (
+      tickerQuery &&
+      !d.ticker.toLowerCase().includes(tickerQuery.trim().toLowerCase())
+    ) {
+      return false;
+    }
+    if (marketFilter !== "all") {
+      const tw = isTwTicker(d.ticker);
+      if (marketFilter === "tw" && !tw) return false;
+      if (marketFilter === "us" && tw) return false;
+    }
+    if (from && d.pay_date < from) return false;
+    if (to && d.pay_date > to) return false;
+    return true;
+  });
+
+  const filtersActive =
+    tickerQuery !== "" ||
+    marketFilter !== "all" ||
+    from !== "" ||
+    to !== "";
+
+  function clearFilters() {
+    setTickerQuery("");
+    setMarketFilter("all");
+    setPreset("all");
+    setFrom("");
+    setTo("");
+  }
+
   const totals = dividends.reduce<Record<string, number>>((acc, d) => {
     acc[d.currency] = (acc[d.currency] || 0) + d.amount;
     return acc;
   }, {});
 
+  const latest = dividends[0];
+
   return (
     <div className="panel">
       <h2>Dividend History ({dividends.length})</h2>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
+        Most recent: <strong>{latest.pay_date}</strong> · {latest.ticker} ·
+        continue from here next time.
+      </div>
       <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
         Total received:{" "}
         {Object.entries(totals)
           .map(([c, v]) => fmtMoney(v, c))
           .join("  ·  ")}
       </div>
+
+      <div className="filter-bar">
+        <input
+          placeholder="Filter by ticker…"
+          value={tickerQuery}
+          onChange={(e) => setTickerQuery(e.target.value)}
+          style={{ minWidth: 160 }}
+        />
+        <select
+          value={marketFilter}
+          onChange={(e) => setMarketFilter(e.target.value as MarketFilter)}
+        >
+          <option value="all">All markets</option>
+          <option value="tw">Taiwan only</option>
+          <option value="us">US only</option>
+        </select>
+        <select
+          value={preset}
+          onChange={(e) => applyPreset(e.target.value as DatePreset)}
+        >
+          <option value="all">All time</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 3 months</option>
+          <option value="180d">Last 6 months</option>
+          <option value="365d">Last 1 year</option>
+          <option value="ytd">Year to date</option>
+          <option value="custom">Custom range</option>
+        </select>
+        <label className="date-field">
+          From
+          <input
+            type="text"
+            placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}"
+            maxLength={10}
+            style={{ width: 120 }}
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              setPreset("custom");
+            }}
+          />
+        </label>
+        <label className="date-field">
+          To
+          <input
+            type="text"
+            placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}"
+            maxLength={10}
+            style={{ width: 120 }}
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value);
+              setPreset("custom");
+            }}
+          />
+        </label>
+        <span className="muted" style={{ fontSize: 12 }}>
+          Showing {visible.length} of {dividends.length}
+        </span>
+        {filtersActive && (
+          <button
+            className="secondary"
+            type="button"
+            onClick={clearFilters}
+            style={{ padding: "4px 10px", fontSize: 12 }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
       <table>
         <thead>
           <tr>
@@ -49,26 +215,124 @@ export function DividendList({ dividends, onDeleted }: Props) {
           </tr>
         </thead>
         <tbody>
-          {dividends.map((d) => (
-            <tr key={d.id}>
-              <td>{d.pay_date}</td>
-              <td>
-                {d.ticker}{" "}
-                <span className={`tag ${isTwTicker(d.ticker) ? "tw" : "us"}`}>
-                  {isTwTicker(d.ticker) ? "TW" : "US"}
-                </span>
-              </td>
-              <td className="pos">{fmtMoney(d.amount, d.currency)}</td>
-              <td style={{ textAlign: "left", maxWidth: 240 }} className="muted">
-                {d.notes || "—"}
-              </td>
-              <td>
-                <button className="danger" onClick={() => remove(d.id)}>
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
+          {visible.map((d) => {
+            const isEditing = editingId === d.id;
+            return (
+              <tr key={d.id}>
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <input
+                      type="text"
+                      className="cell-input"
+                      placeholder="YYYY-MM-DD"
+                      pattern="\d{4}-\d{2}-\d{2}"
+                      maxLength={10}
+                      value={draft.pay_date}
+                      onChange={(e) =>
+                        setDraft({ ...draft, pay_date: e.target.value })
+                      }
+                    />
+                  ) : (
+                    d.pay_date
+                  )}
+                </td>
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <input
+                      className="cell-input"
+                      value={draft.ticker}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          ticker: e.target.value.toUpperCase(),
+                        })
+                      }
+                    />
+                  ) : (
+                    <>
+                      {d.ticker}{" "}
+                      <span
+                        className={`tag ${isTwTicker(d.ticker) ? "tw" : "us"}`}
+                      >
+                        {isTwTicker(d.ticker) ? "TW" : "US"}
+                      </span>
+                    </>
+                  )}
+                </td>
+                <td className={isEditing ? "editing pos" : "pos"}>
+                  {isEditing && draft ? (
+                    <input
+                      type="number"
+                      step="any"
+                      className="cell-input"
+                      value={draft.amount}
+                      onChange={(e) =>
+                        setDraft({ ...draft, amount: Number(e.target.value) })
+                      }
+                    />
+                  ) : (
+                    fmtMoney(d.amount, d.currency)
+                  )}
+                </td>
+                <td
+                  style={{ textAlign: "left", maxWidth: 240 }}
+                  className={isEditing ? "editing muted" : "muted"}
+                >
+                  {isEditing && draft ? (
+                    <input
+                      className="cell-input"
+                      value={draft.notes || ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, notes: e.target.value })
+                      }
+                    />
+                  ) : (
+                    d.notes || "—"
+                  )}
+                </td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  {isEditing ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={saveEdit}
+                        disabled={saving}
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                      >
+                        {saving ? "…" : "Save"}
+                      </button>{" "}
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => startEdit(d)}
+                        style={{ padding: "4px 8px", fontSize: 12 }}
+                      >
+                        Edit
+                      </button>{" "}
+                      <button
+                        className="danger"
+                        onClick={() => remove(d.id)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

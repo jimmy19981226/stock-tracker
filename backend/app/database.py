@@ -42,6 +42,16 @@ class Dividend(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class Metadata(Base):
+    __tablename__ = "metadata"
+
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[str] = mapped_column(String(500))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 

@@ -8,6 +8,7 @@ import {
   type Trade,
 } from "./api";
 import { AllocationChart } from "./components/AllocationChart";
+import { DataPanel } from "./components/DataPanel";
 import { DividendForm } from "./components/DividendForm";
 import { DividendList } from "./components/DividendList";
 import { HoldingsTable } from "./components/HoldingsTable";
@@ -16,7 +17,7 @@ import { PortfolioSummary } from "./components/PortfolioSummary";
 import { TradeForm } from "./components/TradeForm";
 import { TradeList } from "./components/TradeList";
 
-type View = "dashboard" | "trades" | "dividends";
+type View = "dashboard" | "trades" | "dividends" | "data";
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
@@ -25,7 +26,6 @@ export default function App() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [summaries, setSummaries] = useState<CurrencySummary[]>([]);
   const [history, setHistory] = useState<HistoryByCurrency>({});
-  const [days, setDays] = useState(180);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +37,7 @@ export default function App() {
         api.listDividends(),
         api.getHoldings(),
         api.getSummary(),
-        api.getHistory(days),
+        api.getRealizedHistory(1825),
       ]);
       setTrades(t);
       setDividends(d);
@@ -49,7 +49,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -78,6 +78,12 @@ export default function App() {
           >
             Dividends
           </button>
+          <button
+            className={view === "data" ? "active" : ""}
+            onClick={() => setView("data")}
+          >
+            Data
+          </button>
           <button className="secondary" onClick={refresh} title="Refresh prices">
             ↻
           </button>
@@ -90,11 +96,7 @@ export default function App() {
       {view === "dashboard" && !loading && (
         <>
           <PortfolioSummary summaries={summaries} />
-          <PerformanceChart
-            history={history}
-            days={days}
-            onDaysChange={setDays}
-          />
+          <PerformanceChart history={history} />
           <div className="dual-grid">
             <HoldingsTable holdings={holdings} />
             <AllocationChart holdings={holdings} />
@@ -105,15 +107,23 @@ export default function App() {
       {view === "trades" && !loading && (
         <>
           <TradeForm onCreated={refresh} />
-          <TradeList trades={trades} onDeleted={refresh} />
+          <TradeList trades={trades} onChanged={refresh} />
         </>
       )}
 
       {view === "dividends" && !loading && (
         <>
           <DividendForm onCreated={refresh} />
-          <DividendList dividends={dividends} onDeleted={refresh} />
+          <DividendList dividends={dividends} onChanged={refresh} />
         </>
+      )}
+
+      {view === "data" && !loading && (
+        <DataPanel
+          trades={trades}
+          dividends={dividends}
+          onImported={refresh}
+        />
       )}
     </div>
   );

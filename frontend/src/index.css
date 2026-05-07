@@ -291,3 +291,54 @@ tr:last-child td {
   text-align: center;
   color: var(--muted);
 }
+
+.cell-input {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  text-align: inherit;
+}
+
+td.editing {
+  background: rgba(74, 158, 255, 0.05);
+}
+
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-bar input,
+.filter-bar select {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Hide the browser's locale-specific placeholder ("年/月/日" / "mm/dd/yyyy")
+   on empty date inputs — we render our own English labels next to them. */
+input[type="date"].date-empty::-webkit-datetime-edit {
+  color: transparent;
+}
+
+.date-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.date-field input {
+  margin: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}

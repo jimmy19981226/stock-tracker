@@ -95,7 +95,10 @@ export function TradeForm({ onCreated }: Props) {
         <label>
           Date
           <input
-            type="date"
+            type="text"
+            placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}"
+            maxLength={10}
             value={tradeDate}
             onChange={(e) => setTradeDate(e.target.value)}
           />

@@ -10,7 +10,7 @@ from typing import Iterable
 import yfinance as yf
 
 
-_TW_NUMERIC = re.compile(r"^\d{4,6}$")
+_TW_NUMERIC = re.compile(r"^\d{4,6}[A-Z]?$")
 _QUOTE_TTL_SECONDS = 60.0
 _HISTORY_TTL_SECONDS = 300.0
 

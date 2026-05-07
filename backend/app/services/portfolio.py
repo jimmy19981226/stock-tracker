@@ -214,6 +214,58 @@ def build_value_history(db: Session, days: int = 180) -> dict[str, list[dict]]:
     return out
 
 
+def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]]:
+    """Daily cumulative realized P/L per currency.
+
+    Walks trades chronologically and accumulates the realized P/L delta from
+    each sell. Trades that happened *before* the visible window are folded
+    into the starting balance so the chart picks up at the right level.
+    """
+    end = date.today()
+    start = end - timedelta(days=days)
+    trades = sorted(db.query(Trade).all(), key=lambda t: (t.trade_date, t.id))
+    if not trades:
+        return {}
+
+    states: dict[str, HoldingState] = {}
+    cumulative: dict[str, float] = defaultdict(float)
+    daily: dict[str, list[dict]] = defaultdict(list)
+
+    # Seed every currency that has any trades, so a flat line shows up
+    # even before its first event in the visible window.
+    for tr in trades:
+        currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+        cumulative.setdefault(currency, 0.0)
+
+    idx = 0
+    # Fold pre-window history into the starting balance.
+    while idx < len(trades) and trades[idx].trade_date < start:
+        tr = trades[idx]
+        state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
+        before = state.realized_pl
+        _apply_trade(state, tr)
+        currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+        cumulative[currency] += state.realized_pl - before
+        idx += 1
+
+    cursor = start
+    while cursor <= end:
+        while idx < len(trades) and trades[idx].trade_date == cursor:
+            tr = trades[idx]
+            state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
+            before = state.realized_pl
+            _apply_trade(state, tr)
+            currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+            cumulative[currency] += state.realized_pl - before
+            idx += 1
+
+        for currency, total in cumulative.items():
+            daily[currency].append({"date": cursor, "value": total})
+        cursor += timedelta(days=1)
+
+    return dict(daily)
+
+
 def _price_at_or_before(series: dict[date, float], target: date) -> float | None:
     if not series:
         return None

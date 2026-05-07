@@ -1,16 +1,109 @@
+import { useState } from "react";
 import { api, type Trade } from "../api";
-import { fmtNumber, isTwTicker } from "../format";
+import { type DatePreset, fmtNumber, isTwTicker, presetRange } from "../format";
 
 interface Props {
   trades: Trade[];
-  onDeleted: () => void;
+  onChanged: () => void;
 }
 
-export function TradeList({ trades, onDeleted }: Props) {
+type TypeFilter = "all" | "buy" | "sell";
+type MarketFilter = "all" | "tw" | "us";
+
+export function TradeList({ trades, onChanged }: Props) {
+  const [tickerQuery, setTickerQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
+  const [preset, setPreset] = useState<DatePreset>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<Trade | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function applyPreset(p: DatePreset) {
+    setPreset(p);
+    if (p !== "custom") {
+      const r = presetRange(p);
+      setFrom(r.from);
+      setTo(r.to);
+    }
+  }
+
   async function remove(id: number) {
     if (!confirm("Delete this trade?")) return;
     await api.deleteTrade(id);
-    onDeleted();
+    onChanged();
+  }
+
+  function startEdit(t: Trade) {
+    setEditingId(t.id);
+    setDraft({ ...t });
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(null);
+    setError(null);
+  }
+
+  async function saveEdit() {
+    if (!draft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.updateTrade(draft.id, {
+        type: draft.type as "buy" | "sell",
+        ticker: draft.ticker,
+        shares: Number(draft.shares),
+        price: Number(draft.price),
+        trade_date: draft.trade_date,
+        fee: Number(draft.fee),
+        notes: draft.notes ?? null,
+      });
+      cancelEdit();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const visible = trades.filter((t) => {
+    if (typeFilter !== "all" && t.type !== typeFilter) return false;
+    if (
+      tickerQuery &&
+      !t.ticker.toLowerCase().includes(tickerQuery.trim().toLowerCase())
+    ) {
+      return false;
+    }
+    if (marketFilter !== "all") {
+      const tw = isTwTicker(t.ticker);
+      if (marketFilter === "tw" && !tw) return false;
+      if (marketFilter === "us" && tw) return false;
+    }
+    if (from && t.trade_date < from) return false;
+    if (to && t.trade_date > to) return false;
+    return true;
+  });
+
+  const filtersActive =
+    tickerQuery !== "" ||
+    typeFilter !== "all" ||
+    marketFilter !== "all" ||
+    from !== "" ||
+    to !== "";
+
+  function clearFilters() {
+    setTickerQuery("");
+    setTypeFilter("all");
+    setMarketFilter("all");
+    setPreset("all");
+    setFrom("");
+    setTo("");
   }
 
   if (trades.length === 0) {
@@ -22,9 +115,99 @@ export function TradeList({ trades, onDeleted }: Props) {
     );
   }
 
+  const latest = trades[0];
+
   return (
     <div className="panel">
       <h2>Trade History ({trades.length})</h2>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        Most recent: <strong>{latest.trade_date}</strong> ·{" "}
+        {latest.type.toUpperCase()} {latest.ticker} · continue from here next
+        time.
+      </div>
+
+      <div className="filter-bar">
+        <input
+          placeholder="Filter by ticker…"
+          value={tickerQuery}
+          onChange={(e) => setTickerQuery(e.target.value)}
+          style={{ minWidth: 160 }}
+        />
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+        >
+          <option value="all">All types</option>
+          <option value="buy">Buy only</option>
+          <option value="sell">Sell only</option>
+        </select>
+        <select
+          value={marketFilter}
+          onChange={(e) => setMarketFilter(e.target.value as MarketFilter)}
+        >
+          <option value="all">All markets</option>
+          <option value="tw">Taiwan only</option>
+          <option value="us">US only</option>
+        </select>
+        <select
+          value={preset}
+          onChange={(e) => applyPreset(e.target.value as DatePreset)}
+        >
+          <option value="all">All time</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 3 months</option>
+          <option value="180d">Last 6 months</option>
+          <option value="365d">Last 1 year</option>
+          <option value="ytd">Year to date</option>
+          <option value="custom">Custom range</option>
+        </select>
+        <label className="date-field">
+          From
+          <input
+            type="text"
+            placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}"
+            maxLength={10}
+            style={{ width: 120 }}
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              setPreset("custom");
+            }}
+          />
+        </label>
+        <label className="date-field">
+          To
+          <input
+            type="text"
+            placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}"
+            maxLength={10}
+            style={{ width: 120 }}
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value);
+              setPreset("custom");
+            }}
+          />
+        </label>
+        <span className="muted" style={{ fontSize: 12 }}>
+          Showing {visible.length} of {trades.length}
+        </span>
+        {filtersActive && (
+          <button
+            className="secondary"
+            type="button"
+            onClick={clearFilters}
+            style={{ padding: "4px 10px", fontSize: 12 }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
       <table>
         <thead>
           <tr>
@@ -40,31 +223,173 @@ export function TradeList({ trades, onDeleted }: Props) {
           </tr>
         </thead>
         <tbody>
-          {trades.map((t) => {
+          {visible.map((t) => {
+            const isEditing = editingId === t.id;
             const total = t.shares * t.price + (t.type === "buy" ? t.fee : -t.fee);
             return (
               <tr key={t.id}>
-                <td>{t.trade_date}</td>
-                <td>
-                  <span className={`tag ${t.type}`}>{t.type.toUpperCase()}</span>
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <input
+                      type="text"
+                      className="cell-input"
+                      placeholder="YYYY-MM-DD"
+                      pattern="\d{4}-\d{2}-\d{2}"
+                      maxLength={10}
+                      value={draft.trade_date}
+                      onChange={(e) =>
+                        setDraft({ ...draft, trade_date: e.target.value })
+                      }
+                    />
+                  ) : (
+                    t.trade_date
+                  )}
                 </td>
-                <td>
-                  {t.ticker}{" "}
-                  <span className={`tag ${isTwTicker(t.ticker) ? "tw" : "us"}`}>
-                    {isTwTicker(t.ticker) ? "TW" : "US"}
-                  </span>
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <select
+                      className="cell-input"
+                      value={draft.type}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          type: e.target.value as "buy" | "sell",
+                        })
+                      }
+                    >
+                      <option value="buy">buy</option>
+                      <option value="sell">sell</option>
+                    </select>
+                  ) : (
+                    <span className={`tag ${t.type}`}>
+                      {t.type.toUpperCase()}
+                    </span>
+                  )}
                 </td>
-                <td>{fmtNumber(t.shares, 4)}</td>
-                <td>{fmtNumber(t.price, 2)}</td>
-                <td>{fmtNumber(t.fee, 2)}</td>
-                <td>{fmtNumber(total, 2)}</td>
-                <td style={{ textAlign: "left", maxWidth: 200 }} className="muted">
-                  {t.notes || "—"}
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <input
+                      className="cell-input"
+                      value={draft.ticker}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          ticker: e.target.value.toUpperCase(),
+                        })
+                      }
+                    />
+                  ) : (
+                    <>
+                      {t.ticker}{" "}
+                      <span
+                        className={`tag ${isTwTicker(t.ticker) ? "tw" : "us"}`}
+                      >
+                        {isTwTicker(t.ticker) ? "TW" : "US"}
+                      </span>
+                    </>
+                  )}
                 </td>
-                <td>
-                  <button className="danger" onClick={() => remove(t.id)}>
-                    Delete
-                  </button>
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <input
+                      type="number"
+                      step="any"
+                      className="cell-input"
+                      value={draft.shares}
+                      onChange={(e) =>
+                        setDraft({ ...draft, shares: Number(e.target.value) })
+                      }
+                    />
+                  ) : (
+                    fmtNumber(t.shares, 4)
+                  )}
+                </td>
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <input
+                      type="number"
+                      step="any"
+                      className="cell-input"
+                      value={draft.price}
+                      onChange={(e) =>
+                        setDraft({ ...draft, price: Number(e.target.value) })
+                      }
+                    />
+                  ) : (
+                    fmtNumber(t.price, 2)
+                  )}
+                </td>
+                <td className={isEditing ? "editing" : ""}>
+                  {isEditing && draft ? (
+                    <input
+                      type="number"
+                      step="any"
+                      className="cell-input"
+                      value={draft.fee}
+                      onChange={(e) =>
+                        setDraft({ ...draft, fee: Number(e.target.value) })
+                      }
+                    />
+                  ) : (
+                    fmtNumber(t.fee, 2)
+                  )}
+                </td>
+                <td>{isEditing ? "—" : fmtNumber(total, 2)}</td>
+                <td
+                  style={{ textAlign: "left", maxWidth: 200 }}
+                  className={isEditing ? "editing muted" : "muted"}
+                >
+                  {isEditing && draft ? (
+                    <input
+                      className="cell-input"
+                      value={draft.notes || ""}
+                      onChange={(e) =>
+                        setDraft({ ...draft, notes: e.target.value })
+                      }
+                    />
+                  ) : (
+                    t.notes || "—"
+                  )}
+                </td>
+                <td style={{ whiteSpace: "nowrap" }}>
+                  {isEditing ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={saveEdit}
+                        disabled={saving}
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                      >
+                        {saving ? "…" : "Save"}
+                      </button>{" "}
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => startEdit(t)}
+                        style={{ padding: "4px 8px", fontSize: 12 }}
+                      >
+                        Edit
+                      </button>{" "}
+                      <button
+                        className="danger"
+                        onClick={() => remove(t.id)}
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             );

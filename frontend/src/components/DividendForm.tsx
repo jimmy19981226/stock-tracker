@@ -69,7 +69,10 @@ export function DividendForm({ onCreated }: Props) {
         <label>
           Pay Date
           <input
-            type="date"
+            type="text"
+            placeholder="YYYY-MM-DD"
+            pattern="\d{4}-\d{2}-\d{2}"
+            maxLength={10}
             value={payDate}
             onChange={(e) => setPayDate(e.target.value)}
           />
