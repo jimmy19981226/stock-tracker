@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Trade } from "../api";
 import { type DatePreset, fmtNumber, isTwTicker, presetRange } from "../format";
+import { Pagination } from "./Pagination";
 
 interface Props {
   trades: Trade[];
@@ -21,6 +22,8 @@ export function TradeList({ trades, onChanged }: Props) {
   const [draft, setDraft] = useState<Trade | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   function applyPreset(p: DatePreset) {
     setPreset(p);
@@ -96,6 +99,13 @@ export function TradeList({ trades, onChanged }: Props) {
     marketFilter !== "all" ||
     from !== "" ||
     to !== "";
+
+  // Reset to first page whenever filters change the visible total.
+  useEffect(() => {
+    setPage(1);
+  }, [tickerQuery, typeFilter, marketFilter, from, to]);
+
+  const pageRows = visible.slice((page - 1) * pageSize, page * pageSize);
 
   function clearFilters() {
     setTickerQuery("");
@@ -223,7 +233,7 @@ export function TradeList({ trades, onChanged }: Props) {
           </tr>
         </thead>
         <tbody>
-          {visible.map((t) => {
+          {pageRows.map((t) => {
             const isEditing = editingId === t.id;
             const total = t.shares * t.price + (t.type === "buy" ? t.fee : -t.fee);
             return (
@@ -396,6 +406,17 @@ export function TradeList({ trades, onChanged }: Props) {
           })}
         </tbody>
       </table>
+
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={visible.length}
+        onPageChange={setPage}
+        onPageSizeChange={(s) => {
+          setPageSize(s);
+          setPage(1);
+        }}
+      />
     </div>
   );
 }

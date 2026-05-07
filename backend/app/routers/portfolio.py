@@ -30,6 +30,13 @@ def get_realized_history(
     return portfolio.build_realized_history(db, days=days)
 
 
+@router.get("/earnings-history")
+def get_earnings_history(
+    days: int = Query(180, ge=7, le=1825), db: Session = Depends(get_db)
+):
+    return portfolio.build_earnings_history(db, days=days)
+
+
 @router.get("/quote/{ticker}")
 def get_quote(ticker: str):
     q = quotes.get_quote(ticker)

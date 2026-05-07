@@ -266,6 +266,87 @@ def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]
     return dict(daily)
 
 
+def build_earnings_history(db: Session, days: int = 180) -> dict[str, list[dict]]:
+    """Daily cumulative realized P/L, dividends, and total earned per currency.
+
+    Walks both trades and dividends chronologically, accumulating per-currency
+    deltas. Events before the visible window are folded into the starting
+    balance so the chart picks up at the right level.
+    """
+    end = date.today()
+    start = end - timedelta(days=days)
+
+    trades = sorted(db.query(Trade).all(), key=lambda t: (t.trade_date, t.id))
+    dividends = sorted(
+        db.query(Dividend).all(), key=lambda d: (d.pay_date, d.id)
+    )
+    if not trades and not dividends:
+        return {}
+
+    states: dict[str, HoldingState] = {}
+    cum_realized: dict[str, float] = defaultdict(float)
+    cum_dividends: dict[str, float] = defaultdict(float)
+    daily: dict[str, list[dict]] = defaultdict(list)
+
+    # Discover currencies up front so flat-line series show up before
+    # their first event in the visible window.
+    currencies: set[str] = set()
+    for tr in trades:
+        currencies.add(quotes.detect_currency(quotes.resolve_symbol(tr.ticker)))
+    for d in dividends:
+        currencies.add(quotes.detect_currency(quotes.resolve_symbol(d.ticker)))
+    for c in currencies:
+        cum_realized.setdefault(c, 0.0)
+        cum_dividends.setdefault(c, 0.0)
+
+    t_idx = 0
+    d_idx = 0
+    while t_idx < len(trades) and trades[t_idx].trade_date < start:
+        tr = trades[t_idx]
+        state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
+        before = state.realized_pl
+        _apply_trade(state, tr)
+        currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+        cum_realized[currency] += state.realized_pl - before
+        t_idx += 1
+    while d_idx < len(dividends) and dividends[d_idx].pay_date < start:
+        d = dividends[d_idx]
+        currency = quotes.detect_currency(quotes.resolve_symbol(d.ticker))
+        cum_dividends[currency] += d.amount
+        d_idx += 1
+
+    cursor = start
+    while cursor <= end:
+        while t_idx < len(trades) and trades[t_idx].trade_date == cursor:
+            tr = trades[t_idx]
+            state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
+            before = state.realized_pl
+            _apply_trade(state, tr)
+            currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+            cum_realized[currency] += state.realized_pl - before
+            t_idx += 1
+        while d_idx < len(dividends) and dividends[d_idx].pay_date == cursor:
+            d = dividends[d_idx]
+            currency = quotes.detect_currency(quotes.resolve_symbol(d.ticker))
+            cum_dividends[currency] += d.amount
+            d_idx += 1
+
+        for c in currencies:
+            r = cum_realized[c]
+            div = cum_dividends[c]
+            daily[c].append(
+                {
+                    "date": cursor,
+                    "realized": r,
+                    "dividends": div,
+                    "total": r + div,
+                }
+            )
+        cursor += timedelta(days=1)
+
+    return dict(daily)
+
+
 def _price_at_or_before(series: dict[date, float], target: date) -> float | None:
     if not series:
         return None

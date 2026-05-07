@@ -3,7 +3,7 @@ import {
   api,
   type CurrencySummary,
   type Dividend,
-  type HistoryByCurrency,
+  type EarningsByCurrency,
   type Holding,
   type Trade,
 } from "./api";
@@ -25,7 +25,7 @@ export default function App() {
   const [dividends, setDividends] = useState<Dividend[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [summaries, setSummaries] = useState<CurrencySummary[]>([]);
-  const [history, setHistory] = useState<HistoryByCurrency>({});
+  const [history, setHistory] = useState<EarningsByCurrency>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +37,7 @@ export default function App() {
         api.listDividends(),
         api.getHoldings(),
         api.getSummary(),
-        api.getRealizedHistory(1825),
+        api.getEarningsHistory(1825),
       ]);
       setTrades(t);
       setDividends(d);

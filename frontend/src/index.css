@@ -582,3 +582,56 @@ td.editing {
   color: var(--accent);
   font-weight: 600;
 }
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.pagination .page-controls {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.pagination button.page-btn {
+  background: transparent;
+  color: var(--text-2);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  box-shadow: none;
+  min-width: 30px;
+}
+
+.pagination button.page-btn:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+  transform: none;
+  filter: none;
+}
+
+.pagination button.page-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--border-accent) inset;
+}
+
+.pagination button.page-btn:disabled {
+  color: var(--muted);
+  opacity: 0.4;
+}
+
+.pagination select {
+  padding: 4px 8px;
+  font-size: 12px;
+}

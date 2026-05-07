@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Dividend } from "../api";
 import { type DatePreset, fmtMoney, isTwTicker, presetRange } from "../format";
+import { Pagination } from "./Pagination";
 
 interface Props {
   dividends: Dividend[];
@@ -19,6 +20,8 @@ export function DividendList({ dividends, onChanged }: Props) {
   const [draft, setDraft] = useState<Dividend | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   function applyPreset(p: DatePreset) {
     setPreset(p);
@@ -100,6 +103,12 @@ export function DividendList({ dividends, onChanged }: Props) {
     marketFilter !== "all" ||
     from !== "" ||
     to !== "";
+
+  useEffect(() => {
+    setPage(1);
+  }, [tickerQuery, marketFilter, from, to]);
+
+  const pageRows = visible.slice((page - 1) * pageSize, page * pageSize);
 
   function clearFilters() {
     setTickerQuery("");
@@ -215,7 +224,7 @@ export function DividendList({ dividends, onChanged }: Props) {
           </tr>
         </thead>
         <tbody>
-          {visible.map((d) => {
+          {pageRows.map((d) => {
             const isEditing = editingId === d.id;
             return (
               <tr key={d.id}>
@@ -335,6 +344,17 @@ export function DividendList({ dividends, onChanged }: Props) {
           })}
         </tbody>
       </table>
+
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={visible.length}
+        onPageChange={setPage}
+        onPageSizeChange={(s) => {
+          setPageSize(s);
+          setPage(1);
+        }}
+      />
     </div>
   );
 }

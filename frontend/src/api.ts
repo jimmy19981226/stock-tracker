@@ -74,6 +74,15 @@ export interface HistoryPoint {
 
 export type HistoryByCurrency = Record<string, HistoryPoint[]>;
 
+export interface EarningsPoint {
+  date: string;
+  realized: number;
+  dividends: number;
+  total: number;
+}
+
+export type EarningsByCurrency = Record<string, EarningsPoint[]>;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -149,4 +158,6 @@ export const api = {
     request<HistoryByCurrency>(`/api/portfolio/history?days=${days}`),
   getRealizedHistory: (days = 180) =>
     request<HistoryByCurrency>(`/api/portfolio/realized-history?days=${days}`),
+  getEarningsHistory: (days = 180) =>
+    request<EarningsByCurrency>(`/api/portfolio/earnings-history?days=${days}`),
 };
