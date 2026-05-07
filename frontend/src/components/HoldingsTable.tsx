@@ -1,11 +1,16 @@
+import { useState } from "react";
 import type { Holding } from "../api";
 import { fmtMoney, fmtNumber, fmtPct, plClass } from "../format";
+import { Pagination } from "./Pagination";
 
 interface Props {
   holdings: Holding[];
 }
 
 export function HoldingsTable({ holdings }: Props) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   if (holdings.length === 0) {
     return (
       <div className="panel">
@@ -35,6 +40,7 @@ export function HoldingsTable({ holdings }: Props) {
         const items = [...rawItems].sort((a, b) =>
           a.ticker.localeCompare(b.ticker, undefined, { numeric: true }),
         );
+        const pageItems = items.slice((page - 1) * pageSize, page * pageSize);
         return (
         <div key={currency} style={{ marginBottom: 16 }}>
           <div
@@ -63,7 +69,7 @@ export function HoldingsTable({ holdings }: Props) {
               </tr>
             </thead>
             <tbody>
-              {items.map((h) => (
+              {pageItems.map((h) => (
                 <tr key={h.ticker}>
                   <td>
                     <div style={{ display: "flex", flexDirection: "column" }}>
@@ -95,6 +101,16 @@ export function HoldingsTable({ holdings }: Props) {
               ))}
             </tbody>
           </table>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={items.length}
+            onPageChange={setPage}
+            onPageSizeChange={(s) => {
+              setPageSize(s);
+              setPage(1);
+            }}
+          />
         </div>
         );
       })}

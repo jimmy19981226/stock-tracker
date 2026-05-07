@@ -1,5 +1,7 @@
+import { useState } from "react";
 import type { Holding } from "../api";
 import { fmtMoney, fmtPct } from "../format";
+import { Pagination } from "./Pagination";
 
 interface Props {
   holdings: Holding[];
@@ -7,6 +9,9 @@ interface Props {
 }
 
 export function UnrealizedChart({ holdings, names = {} }: Props) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
   const open = holdings.filter(
     (h) => h.shares > 0 && h.unrealized_pl !== null,
   );
@@ -42,6 +47,8 @@ export function UnrealizedChart({ holdings, names = {} }: Props) {
         const sorted = [...items].sort(
           (a, b) => (b.unrealized_pl || 0) - (a.unrealized_pl || 0),
         );
+        // Computed across the full set so bar widths stay comparable
+        // across pages — page 2 still shows tiny bars relative to 2330.
         const maxAbs =
           Math.max(...sorted.map((h) => Math.abs(h.unrealized_pl || 0))) || 1;
         const totalPl = sorted.reduce(
@@ -50,6 +57,7 @@ export function UnrealizedChart({ holdings, names = {} }: Props) {
         );
         const wins = sorted.filter((h) => (h.unrealized_pl || 0) > 0).length;
         const losses = sorted.filter((h) => (h.unrealized_pl || 0) < 0).length;
+        const pageRows = sorted.slice((page - 1) * pageSize, page * pageSize);
 
         return (
           <div key={currency} style={{ marginTop: idx === 0 ? 14 : 28 }}>
@@ -95,7 +103,7 @@ export function UnrealizedChart({ holdings, names = {} }: Props) {
             </div>
 
             <div className="pl-list">
-              {sorted.map((h) => {
+              {pageRows.map((h) => {
                 const pl = h.unrealized_pl || 0;
                 const pct = h.unrealized_pl_pct || 0;
                 const positive = pl >= 0;
@@ -131,6 +139,17 @@ export function UnrealizedChart({ holdings, names = {} }: Props) {
                 );
               })}
             </div>
+
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={sorted.length}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+            />
           </div>
         );
       })}
