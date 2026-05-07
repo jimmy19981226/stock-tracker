@@ -21,7 +21,7 @@ Live header with TW market status (open/closed) and a polling indicator.
 Hero "Total Earned" card, summary grid with live unrealized P/L, and the
 cumulative earnings chart with stacked Realized + Dividends.
 
-![Dashboard](docs/screenshots/hero.svg)
+![Dashboard](docs/screenshots/dashboard.png)
 
 ### Unrealized P/L by position
 
@@ -29,7 +29,7 @@ Divergent horizontal bars showing each open holding's paper gain or
 loss at the current market price. Sorted, color-coded green/red,
 re-painted every 5 seconds while the dashboard is visible.
 
-![Unrealized P/L](docs/screenshots/unrealized.svg)
+![Unrealized P/L](docs/screenshots/unrealized.png)
 
 ### Trades — filter, paginate, edit inline
 
@@ -37,7 +37,7 @@ Filter bar combining ticker search, market (TW/US), trade type, status
 (open/closed), and a date range with quick presets. Stock names show
 under each ticker. Pagination at the bottom; inline edit on every row.
 
-![Trades](docs/screenshots/trades.svg)
+![Trades](docs/screenshots/trades.png)
 
 ### Data tab — CSV import / export with last-export tracking
 
@@ -45,7 +45,7 @@ One unified `portfolio.csv` for trades and dividends. Import always
 appends; the "Last export" card shows when you last backed up, in
 relative time.
 
-![Data tab](docs/screenshots/data-tab.svg)
+![Data tab](docs/screenshots/data-tab.png)
 
 ### AI Assistant — persistent chat history sidebar
 
@@ -54,7 +54,8 @@ natural-language Q&A over your local data via Google Gemini. Every
 conversation is saved to SQLite — pick up where you left off, rename
 threads, or delete the ones you don't want to keep.
 
-![AI Assistant](docs/screenshots/assistant.svg)
+![AI Assistant — chat list](docs/screenshots/assistant-list.png)
+![AI Assistant — conversation](docs/screenshots/assistant-messages.png)
 
 ---
 
