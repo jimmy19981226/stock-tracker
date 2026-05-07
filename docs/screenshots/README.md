@@ -1,7 +1,12 @@
 # Screenshots
 
-Drop PNG captures here with these exact filenames so the main
-[README](../../README.md) picks them up:
+The current README references **SVG mockups** in this folder
+(`hero.svg`, `trades.svg`, `data-tab.svg`) — stylized illustrations of
+the UI in the app's actual color palette, not real captures.
+
+To swap them out for real screenshots, save PNGs here with these names
+and update the matching `![…](docs/screenshots/…)` line in the main
+[README](../../README.md):
 
 | Filename              | What to capture                                                       |
 |-----------------------|------------------------------------------------------------------------|

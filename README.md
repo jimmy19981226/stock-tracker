@@ -11,59 +11,34 @@ fintech-style dashboard with cumulative earnings charts.
 
 ---
 
-## What you get
+## Demo
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│ ◆ Stock Tracker          [Dashboard] Trades  Dividends  Data    ↻ │
-├────────────────────────────────────────────────────────────────────┤
-│ TWD Portfolio · 2 holdings                                         │
-│                                                                    │
-│ ┌─ TOTAL EARNED ──────────────────┐ ┌─ MARKET VALUE ─┐ ┌─ TODAY ─┐ │
-│ │ NT$301,206.54                   │ │ NT$232,500.00  │ │ +NT$7.5k│ │
-│ │ Realized 189,728 · Div 111,478  │ │ Cost: 90,050   │ │ +3.33%  │ │
-│ └─────────────────────────────────┘ └────────────────┘ └─────────┘ │
-│                                                                    │
-│ CUMULATIVE EARNINGS                                                │
-│                                          ■ Realized   NT$189,728   │
-│                                          ■ Dividends  NT$111,478   │
-│                                          ■ Total      NT$301,206   │
-│ 300k│                                              ▄▄▄▄▄▄▄▄▄▄▄▄    │
-│     │                                       ▄▄▄▄▄▄▄                │
-│ 200k│                                ▄▄▄▄▄▄▄                       │
-│     │                       ▄▄▄▄▄▄▄▄▄                              │
-│ 100k│             ▄▄▄▄▄▄▄▄▄▄                                       │
-│   0 │▄▄▄▄▄▄▄▄▄▄▄▄                                                  │
-│     2023      2024      2025      2026                             │
-│                                                                    │
-│ HOLDINGS                                          ALLOCATION       │
-│ Ticker   Shares  Avg Cost  Price    Value         ◐ 2330  78%      │
-│ 2330      100    900.50   2,325   232,500         ◑ AAPL  22%      │
-│ AAPL      10     150.60     287.51  2,875                          │
-└────────────────────────────────────────────────────────────────────┘
-```
+Stylized mockups in the app's actual color palette. (Real screenshots
+can be dropped into [docs/screenshots/](docs/screenshots/) to replace
+these — see the folder's README.)
 
-### The four tabs
+### Dashboard
 
-**Dashboard** — Hero "Total Earned" card, cumulative earnings chart
-(stacked area: blue = realized P/L, amber = dividends), holdings table
-with live prices, and allocation donut. Per-currency, no FX mixing.
+Hero "Total Earned" card, summary grid, and the cumulative earnings
+chart with stacked Realized + Dividends.
 
-**Trades** — Buy/sell entry form. List with ticker search, market filter
-(TW/US), buy/sell filter, date-range presets (1M / 3M / 6M / 1Y / YTD /
-Custom), inline editing, and pagination (10/20/50/100 per page).
+![Dashboard](docs/screenshots/hero.svg)
 
-**Dividends** — Dividend payout entry. Same filter and pagination
-toolset as Trades. Currency auto-detected from the ticker.
+### Trades — filter, paginate, edit inline
 
-**Data** — One-click CSV export and import for the whole portfolio.
-"Last export" card shows when you last backed up, in relative time.
-Drop a CSV at `backend/data/seed/portfolio.csv` and the backend auto-
-loads it on first boot.
+Filter bar combining ticker search, market (TW/US), trade type, and a
+date range with quick presets. Pagination at the bottom; inline edit on
+every row.
 
-> **Want screenshots in this section?** Capture them and drop them into
-> [`docs/screenshots/`](docs/screenshots/) following the filename
-> convention there. The README will pick them up.
+![Trades](docs/screenshots/trades.svg)
+
+### Data tab — CSV import / export with last-export tracking
+
+One unified `portfolio.csv` for trades and dividends. Import always
+appends; the "Last export" card shows when you last backed up, in
+relative time.
+
+![Data tab](docs/screenshots/data-tab.svg)
 
 ---
 

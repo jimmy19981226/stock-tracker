@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#07090d"/>
+      <stop offset="100%" stop-color="#0a0e15"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="540" fill="url(#bg)"/>
+
+  <!-- Panel -->
+  <g transform="translate(40, 32)">
+    <rect width="1120" height="476" rx="16" fill="#11161f" stroke="rgba(255,255,255,0.06)"/>
+
+    <!-- Title -->
+    <text x="22" y="30" font-size="11" font-weight="700" fill="#6b7589" letter-spacing="0.1em">TRADE HISTORY (50)</text>
+    <text x="22" y="54" font-size="12" fill="#a8b3c7">Most recent: <tspan font-weight="600" fill="#e8ecf2">2026-04-28</tspan> · SELL 3034 · continue from here next time.</text>
+
+    <!-- Filter bar -->
+    <g transform="translate(22, 70)">
+      <rect width="1076" height="50" rx="10" fill="#161c27" stroke="rgba(255,255,255,0.06)"/>
+      <!-- Search input -->
+      <rect x="12" y="11" width="180" height="28" rx="8" fill="#1c2330" stroke="rgba(255,255,255,0.06)"/>
+      <text x="22" y="30" font-size="13" fill="#6b7589">Filter by ticker…</text>
+      <!-- Select: type -->
+      <rect x="204" y="11" width="120" height="28" rx="8" fill="#1c2330" stroke="rgba(255,255,255,0.06)"/>
+      <text x="214" y="30" font-size="13" fill="#e8ecf2">All types</text>
+      <text x="312" y="30" font-size="11" fill="#6b7589">▾</text>
+      <!-- Select: market -->
+      <rect x="336" y="11" width="130" height="28" rx="8" fill="#1c2330" stroke="rgba(255,255,255,0.06)"/>
+      <text x="346" y="30" font-size="13" fill="#e8ecf2">All markets</text>
+      <text x="454" y="30" font-size="11" fill="#6b7589">▾</text>
+      <!-- Select: period -->
+      <rect x="478" y="11" width="120" height="28" rx="8" fill="#1c2330" stroke="rgba(255,255,255,0.06)"/>
+      <text x="488" y="30" font-size="13" fill="#e8ecf2">All time</text>
+      <text x="586" y="30" font-size="11" fill="#6b7589">▾</text>
+      <!-- From -->
+      <text x="614" y="30" font-size="11" font-weight="700" fill="#6b7589" letter-spacing="0.08em">FROM</text>
+      <rect x="660" y="11" width="120" height="28" rx="8" fill="#1c2330" stroke="rgba(255,255,255,0.06)"/>
+      <text x="670" y="30" font-size="13" fill="#6b7589">YYYY-MM-DD</text>
+      <!-- To -->
+      <text x="794" y="30" font-size="11" font-weight="700" fill="#6b7589" letter-spacing="0.08em">TO</text>
+      <rect x="822" y="11" width="120" height="28" rx="8" fill="#1c2330" stroke="rgba(255,255,255,0.06)"/>
+      <text x="832" y="30" font-size="13" fill="#6b7589">YYYY-MM-DD</text>
+      <!-- Counter -->
+      <text x="960" y="30" font-size="12" fill="#6b7589">Showing 20 of 50</text>
+    </g>
+
+    <!-- Table header -->
+    <g transform="translate(22, 142)" font-size="10" font-weight="700" fill="#6b7589" letter-spacing="0.1em">
+      <text x="0">DATE</text>
+      <text x="120">TYPE</text>
+      <text x="200">TICKER</text>
+      <text x="850" text-anchor="end">SHARES</text>
+      <text x="950" text-anchor="end">PRICE</text>
+      <text x="1050" text-anchor="end">TOTAL</text>
+    </g>
+    <line x1="22" y1="152" x2="1098" y2="152" stroke="rgba(255,255,255,0.06)"/>
+
+    <!-- Rows -->
+    <g font-size="13" font-family="Inter, monospace">
+      <!-- Row 1 -->
+      <g transform="translate(22, 174)">
+        <text fill="#e8ecf2">2026-04-28</text>
+        <g transform="translate(120, -10)">
+          <rect width="40" height="18" rx="4" fill="rgba(248,113,113,0.12)"/>
+          <text x="20" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#f87171" letter-spacing="0.06em">SELL</text>
+        </g>
+        <text x="200" fill="#e8ecf2" font-weight="600">3034</text>
+        <g transform="translate(238, -10)">
+          <rect width="26" height="18" rx="4" fill="rgba(251,191,36,0.12)"/>
+          <text x="13" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#fbbf24" letter-spacing="0.06em">TW</text>
+        </g>
+        <text x="850" text-anchor="end" fill="#e8ecf2">100.0000</text>
+        <text x="950" text-anchor="end" fill="#e8ecf2">417.00</text>
+        <text x="1050" text-anchor="end" fill="#e8ecf2">41,516.00</text>
+      </g>
+      <line x1="22" y1="190" x2="1098" y2="190" stroke="rgba(255,255,255,0.04)"/>
+
+      <!-- Row 2 -->
+      <g transform="translate(22, 212)">
+        <text fill="#e8ecf2">2026-04-24</text>
+        <g transform="translate(120, -10)">
+          <rect width="40" height="18" rx="4" fill="rgba(248,113,113,0.12)"/>
+          <text x="20" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#f87171" letter-spacing="0.06em">SELL</text>
+        </g>
+        <text x="200" fill="#e8ecf2" font-weight="600">00915</text>
+        <g transform="translate(248, -10)">
+          <rect width="26" height="18" rx="4" fill="rgba(251,191,36,0.12)"/>
+          <text x="13" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#fbbf24" letter-spacing="0.06em">TW</text>
+        </g>
+        <text x="850" text-anchor="end" fill="#e8ecf2">2,000.0000</text>
+        <text x="950" text-anchor="end" fill="#e8ecf2">24.75</text>
+        <text x="1050" text-anchor="end" fill="#e8ecf2">49,381.00</text>
+      </g>
+      <line x1="22" y1="228" x2="1098" y2="228" stroke="rgba(255,255,255,0.04)"/>
+
+      <!-- Row 3 -->
+      <g transform="translate(22, 250)">
+        <text fill="#e8ecf2">2026-04-22</text>
+        <g transform="translate(120, -10)">
+          <rect width="40" height="18" rx="4" fill="rgba(248,113,113,0.12)"/>
+          <text x="20" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#f87171" letter-spacing="0.06em">SELL</text>
+        </g>
+        <text x="200" fill="#e8ecf2" font-weight="600">6024</text>
+        <g transform="translate(238, -10)">
+          <rect width="26" height="18" rx="4" fill="rgba(251,191,36,0.12)"/>
+          <text x="13" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#fbbf24" letter-spacing="0.06em">TW</text>
+        </g>
+        <text x="850" text-anchor="end" fill="#e8ecf2">1,000.0000</text>
+        <text x="950" text-anchor="end" fill="#e8ecf2">55.60</text>
+        <text x="1050" text-anchor="end" fill="#e8ecf2">55,355.00</text>
+      </g>
+      <line x1="22" y1="266" x2="1098" y2="266" stroke="rgba(255,255,255,0.04)"/>
+
+      <!-- Row 4 -->
+      <g transform="translate(22, 288)">
+        <text fill="#e8ecf2">2026-02-24</text>
+        <g transform="translate(120, -10)">
+          <rect width="40" height="18" rx="4" fill="rgba(248,113,113,0.12)"/>
+          <text x="20" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#f87171" letter-spacing="0.06em">SELL</text>
+        </g>
+        <text x="200" fill="#e8ecf2" font-weight="600">2882</text>
+        <g transform="translate(238, -10)">
+          <rect width="26" height="18" rx="4" fill="rgba(251,191,36,0.12)"/>
+          <text x="13" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#fbbf24" letter-spacing="0.06em">TW</text>
+        </g>
+        <text x="850" text-anchor="end" fill="#e8ecf2">1,000.0000</text>
+        <text x="950" text-anchor="end" fill="#e8ecf2">78.60</text>
+        <text x="1050" text-anchor="end" fill="#e8ecf2">78,253.00</text>
+      </g>
+      <line x1="22" y1="304" x2="1098" y2="304" stroke="rgba(255,255,255,0.04)"/>
+
+      <!-- Row 5 -->
+      <g transform="translate(22, 326)">
+        <text fill="#e8ecf2">2026-01-29</text>
+        <g transform="translate(120, -10)">
+          <rect width="40" height="18" rx="4" fill="rgba(52,211,153,0.12)"/>
+          <text x="20" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#34d399" letter-spacing="0.06em">BUY</text>
+        </g>
+        <text x="200" fill="#e8ecf2" font-weight="600">8016</text>
+        <g transform="translate(238, -10)">
+          <rect width="26" height="18" rx="4" fill="rgba(251,191,36,0.12)"/>
+          <text x="13" y="13" text-anchor="middle" font-size="10" font-weight="700" fill="#fbbf24" letter-spacing="0.06em">TW</text>
+        </g>
+        <text x="850" text-anchor="end" fill="#e8ecf2">300.0000</text>
+        <text x="950" text-anchor="end" fill="#e8ecf2">182.76</text>
+        <text x="1050" text-anchor="end" fill="#e8ecf2">54,828.00</text>
+      </g>
+    </g>
+
+    <!-- Pagination -->
+    <g transform="translate(22, 410)">
+      <line x1="0" y1="-10" x2="1076" y2="-10" stroke="rgba(255,255,255,0.06)"/>
+      <text x="0" y="14" font-size="12" fill="#6b7589">Showing <tspan fill="#e8ecf2" font-weight="600">1–20</tspan> of <tspan fill="#e8ecf2" font-weight="600">50</tspan></text>
+
+      <!-- Page buttons centered -->
+      <g transform="translate(440, 0)">
+        <rect x="0" y="0" width="30" height="26" rx="6" fill="transparent"/>
+        <text x="15" y="18" text-anchor="middle" font-size="13" fill="#6b7589">‹</text>
+
+        <rect x="36" y="0" width="30" height="26" rx="6" fill="rgba(99,132,255,0.14)" stroke="rgba(99,132,255,0.35)"/>
+        <text x="51" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="#6384ff">1</text>
+
+        <rect x="72" y="0" width="30" height="26" rx="6" fill="transparent"/>
+        <text x="87" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="#a8b3c7">2</text>
+
+        <rect x="108" y="0" width="30" height="26" rx="6" fill="transparent"/>
+        <text x="123" y="18" text-anchor="middle" font-size="13" font-weight="700" fill="#a8b3c7">3</text>
+
+        <rect x="144" y="0" width="30" height="26" rx="6" fill="transparent"/>
+        <text x="159" y="18" text-anchor="middle" font-size="13" fill="#a8b3c7">›</text>
+      </g>
+
+      <!-- Per page -->
+      <g transform="translate(900, 0)">
+        <text x="0" y="18" font-size="12" fill="#6b7589">Per page</text>
+        <rect x="56" y="0" width="48" height="24" rx="6" fill="#1c2330" stroke="rgba(255,255,255,0.06)"/>
+        <text x="68" y="17" font-size="12" fill="#e8ecf2">20</text>
+        <text x="92" y="17" font-size="10" fill="#6b7589">▾</text>
+      </g>
+    </g>
+  </g>
+</svg>
