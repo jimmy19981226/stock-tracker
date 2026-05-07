@@ -10,12 +10,20 @@ interface Props {
 
 type Status =
   | { kind: "idle" }
-  | { kind: "uploading" }
-  | { kind: "success"; trades: number; dividends: number }
+  | { kind: "uploading"; mode: "append" | "replace" }
+  | {
+      kind: "success";
+      mode: "append" | "replace";
+      trades: number;
+      dividends: number;
+      deletedTrades: number;
+      deletedDividends: number;
+    }
   | { kind: "error"; message: string };
 
 export function DataPanel({ trades, dividends, onImported }: Props) {
-  const fileRef = useRef<HTMLInputElement>(null);
+  const appendRef = useRef<HTMLInputElement>(null);
+  const replaceRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [lastExport, setLastExport] = useState<string | null>(null);
 
@@ -33,18 +41,21 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
   }, []);
 
   function onExportClicked() {
-    // The export endpoint records the timestamp server-side; refresh it
-    // shortly after the download fires.
     setTimeout(refreshLastExport, 800);
   }
 
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setStatus({ kind: "uploading" });
+  async function runImport(file: File, mode: "append" | "replace") {
+    setStatus({ kind: "uploading", mode });
     try {
-      const { trades, dividends } = await api.importPortfolioCsv(file);
-      setStatus({ kind: "success", trades, dividends });
+      const r = await api.importPortfolioCsv(file, mode);
+      setStatus({
+        kind: "success",
+        mode,
+        trades: r.trades,
+        dividends: r.dividends,
+        deletedTrades: r.deleted_trades,
+        deletedDividends: r.deleted_dividends,
+      });
       onImported();
     } catch (err) {
       setStatus({
@@ -52,8 +63,28 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
         message: err instanceof Error ? err.message : "Import failed",
       });
     } finally {
-      if (fileRef.current) fileRef.current.value = "";
+      if (appendRef.current) appendRef.current.value = "";
+      if (replaceRef.current) replaceRef.current.value = "";
     }
+  }
+
+  async function handleAppend(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await runImport(file, "append");
+  }
+
+  async function handleReplace(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ok = window.confirm(
+      `Replace mode will delete all existing data (${trades.length} trades + ${dividends.length} dividends) and import this CSV in its place.\n\nThis cannot be undone. Make sure the CSV is what you want.\n\nProceed?`,
+    );
+    if (!ok) {
+      if (replaceRef.current) replaceRef.current.value = "";
+      return;
+    }
+    await runImport(file, "replace");
   }
 
   const latestTrade = trades[0];
@@ -81,21 +112,54 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
         <button
           className="secondary"
           type="button"
-          onClick={() => fileRef.current?.click()}
+          onClick={() => appendRef.current?.click()}
           disabled={status.kind === "uploading"}
+          title="Append rows from CSV to existing data"
         >
-          {status.kind === "uploading" ? "Uploading…" : "⤒ Import portfolio.csv"}
+          {status.kind === "uploading" && status.mode === "append"
+            ? "Uploading…"
+            : "⤒ Import (append)"}
+        </button>
+        <button
+          className="secondary"
+          type="button"
+          onClick={() => replaceRef.current?.click()}
+          disabled={status.kind === "uploading"}
+          title="Wipe existing data and replace with the CSV — destructive"
+          style={{
+            color: "var(--red)",
+            boxShadow:
+              "0 1px 0 rgba(255,255,255,0.04) inset, 0 0 0 1px rgba(248,113,113,0.3)",
+          }}
+        >
+          {status.kind === "uploading" && status.mode === "replace"
+            ? "Replacing…"
+            : "↻ Import (replace all)"}
         </button>
         <input
-          ref={fileRef}
+          ref={appendRef}
           type="file"
           accept=".csv,text/csv"
           style={{ display: "none" }}
-          onChange={handleFile}
+          onChange={handleAppend}
         />
-        {status.kind === "success" && (
+        <input
+          ref={replaceRef}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: "none" }}
+          onChange={handleReplace}
+        />
+        {status.kind === "success" && status.mode === "append" && (
           <span className="pos">
-            ✓ Imported {status.trades} trades + {status.dividends} dividends
+            ✓ Appended {status.trades} trades + {status.dividends} dividends
+          </span>
+        )}
+        {status.kind === "success" && status.mode === "replace" && (
+          <span className="pos">
+            ✓ Replaced — wiped {status.deletedTrades} trades +{" "}
+            {status.deletedDividends} dividends, imported {status.trades} +{" "}
+            {status.dividends}
           </span>
         )}
         {status.kind === "error" && (

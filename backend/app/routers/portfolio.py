@@ -18,11 +18,6 @@ def get_summary(db: Session = Depends(get_db)):
     return portfolio.summarize(holdings, db)
 
 
-@router.get("/history")
-def get_history(days: int = Query(180, ge=7, le=1825), db: Session = Depends(get_db)):
-    return portfolio.build_value_history(db, days=days)
-
-
 @router.get("/realized-history")
 def get_realized_history(
     days: int = Query(180, ge=7, le=1825), db: Session = Depends(get_db)

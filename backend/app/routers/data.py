@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -45,8 +46,17 @@ def export_portfolio(db: Session = Depends(get_db)):
 
 @router.post("/import")
 async def import_portfolio(
-    file: UploadFile = File(...), db: Session = Depends(get_db)
+    file: UploadFile = File(...),
+    mode: Literal["append", "replace"] = Query("append"),
+    db: Session = Depends(get_db),
 ):
+    """Import a unified portfolio CSV.
+
+    - ``mode=append`` (default): adds rows to existing data
+    - ``mode=replace``: deletes all existing trades + dividends FIRST,
+      then imports the file. Atomic: parsing happens before any
+      destructive change, and the whole operation commits once.
+    """
     raw = await file.read()
     try:
         text = raw.decode("utf-8-sig")
@@ -56,9 +66,26 @@ async def import_portfolio(
         trades, dividends = csv_io.parse_portfolio_csv(text)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    csv_io.insert_trades(db, trades)
-    csv_io.insert_dividends(db, dividends)
-    return {"trades": len(trades), "dividends": len(dividends)}
+
+    deleted_trades = 0
+    deleted_dividends = 0
+    if mode == "replace":
+        deleted_trades = db.query(Trade).delete()
+        deleted_dividends = db.query(Dividend).delete()
+
+    for t in trades:
+        db.add(t)
+    for d in dividends:
+        db.add(d)
+    db.commit()
+
+    return {
+        "mode": mode,
+        "trades": len(trades),
+        "dividends": len(dividends),
+        "deleted_trades": deleted_trades,
+        "deleted_dividends": deleted_dividends,
+    }
 
 
 @router.get("/last-export")

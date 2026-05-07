@@ -106,12 +106,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface ImportResult {
+  mode: "append" | "replace";
+  trades: number;
+  dividends: number;
+  deleted_trades: number;
+  deleted_dividends: number;
+}
+
 async function uploadPortfolioCsv(
   file: File,
-): Promise<{ trades: number; dividends: number }> {
+  mode: "append" | "replace" = "append",
+): Promise<ImportResult> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch("/api/data/import", { method: "POST", body: form });
+  const res = await fetch(`/api/data/import?mode=${mode}`, {
+    method: "POST",
+    body: form,
+  });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
@@ -169,8 +181,6 @@ export const api = {
       currency?: string;
     }>(`/api/portfolio/quote/${encodeURIComponent(ticker)}`),
   getSummary: () => request<CurrencySummary[]>("/api/portfolio/summary"),
-  getHistory: (days = 180) =>
-    request<HistoryByCurrency>(`/api/portfolio/history?days=${days}`),
   getRealizedHistory: (days = 180) =>
     request<HistoryByCurrency>(`/api/portfolio/realized-history?days=${days}`),
   getEarningsHistory: (days = 180) =>

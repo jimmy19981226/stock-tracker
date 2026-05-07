@@ -211,6 +211,11 @@ def parse_portfolio_csv(text: str) -> tuple[list[Trade], list[Dividend]]:
 
     Each row's ``kind`` column dispatches to a Trade or Dividend record.
     Returns (trades, dividends) ready to be inserted.
+
+    Trades come back sorted by (date asc, buy-before-sell). This is the
+    canonical order avg-cost / FIFO calculations expect: when a CSV is
+    re-imported, auto-increment IDs end up in the right order so the
+    matching logic produces the same realized P/L as before.
     """
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
@@ -282,4 +287,8 @@ def parse_portfolio_csv(text: str) -> tuple[list[Trade], list[Dividend]]:
                 f"Line {i}: kind must be 'trade' or 'dividend', got {kind!r}"
             )
 
+    # Canonical ordering for FIFO/avg-cost correctness on re-import:
+    # within a single trade_date, buys must precede sells.
+    trades.sort(key=lambda t: (t.trade_date, 0 if t.type == "buy" else 1))
+    dividends.sort(key=lambda d: d.pay_date)
     return trades, dividends

@@ -192,57 +192,6 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
     return summaries
 
 
-def build_value_history(db: Session, days: int = 180) -> dict[str, list[dict]]:
-    """Daily portfolio market value per currency over the last ``days`` days.
-
-    For each day we walk trades up to that day to find shares held, then
-    multiply by that day's close price (carrying forward last known price).
-    """
-    end = date.today()
-    start = end - timedelta(days=days)
-    trades = sorted(db.query(Trade).all(), key=lambda t: (t.trade_date, t.id))
-    if not trades:
-        return {}
-
-    tickers = sorted({t.ticker for t in trades})
-    price_series: dict[str, dict[date, float]] = {}
-    earliest = min(t.trade_date for t in trades)
-    history_start = min(start, earliest)
-    for ticker in tickers:
-        series = quotes.get_price_history(ticker, history_start, end)
-        price_series[ticker] = dict(series)
-
-    out: dict[str, list[dict]] = defaultdict(list)
-    cursor = start
-    while cursor <= end:
-        # holdings as of cursor
-        shares: dict[str, float] = defaultdict(float)
-        for tr in trades:
-            if tr.trade_date > cursor:
-                break
-            if tr.type == "buy":
-                shares[tr.ticker] += tr.shares
-            else:
-                shares[tr.ticker] -= tr.shares
-
-        per_currency: dict[str, float] = defaultdict(float)
-        for ticker, qty in shares.items():
-            if qty <= 0:
-                continue
-            currency = quotes.detect_currency(quotes.resolve_symbol(ticker))
-            price = _price_at_or_before(price_series.get(ticker, {}), cursor)
-            if price is None:
-                continue
-            per_currency[currency] += qty * price
-
-        for currency, value in per_currency.items():
-            out[currency].append({"date": cursor, "value": value})
-
-        cursor += timedelta(days=1)
-
-    return out
-
-
 def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]]:
     """Daily cumulative realized P/L per currency.
 
@@ -374,14 +323,3 @@ def build_earnings_history(db: Session, days: int = 180) -> dict[str, list[dict]
         cursor += timedelta(days=1)
 
     return dict(daily)
-
-
-def _price_at_or_before(series: dict[date, float], target: date) -> float | None:
-    if not series:
-        return None
-    if target in series:
-        return series[target]
-    earlier = [d for d in series if d <= target]
-    if not earlier:
-        return None
-    return series[max(earlier)]

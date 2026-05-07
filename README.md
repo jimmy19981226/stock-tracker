@@ -305,7 +305,6 @@ it on startup — **but only when both tables are empty.**
 | GET    | /api/portfolio/holdings             | per-ticker open positions + live P/L     |
 | GET    | /api/portfolio/summary              | TWD totals incl. dividends + total earned|
 | GET    | /api/portfolio/names                | ticker → short-name map (e.g. 2330→台積電) |
-| GET    | /api/portfolio/history?days=N       | daily market value series (open holdings)|
 | GET    | /api/portfolio/realized-history?days=N | daily cumulative realized P/L         |
 | GET    | /api/portfolio/earnings-history?days=N | daily cumulative realized + dividends |
 | GET    | /api/portfolio/quote/{ticker}       | live spot quote (price + name)           |
