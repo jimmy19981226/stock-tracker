@@ -157,7 +157,7 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
       >{`kind,type,ticker,shares,price,date,fee,amount,notes
 trade,buy,2330,100,950,2024-01-15,28,,initial buy
 trade,sell,2330,100,1100,2024-06-01,30,,closed
-dividend,,2330,,,2024-08-15,,5,Q2 cash dividend`}</pre>
+dividend,,2330,,,2024-08-15,,500,Q2 cash dividend`}</pre>
       <ul className="muted" style={{ fontSize: 12, lineHeight: 1.7, paddingLeft: 18 }}>
         <li>
           <strong>kind=trade</strong>: fill <code>type</code>, <code>shares</code>,

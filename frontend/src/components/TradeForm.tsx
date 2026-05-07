@@ -69,7 +69,7 @@ export function TradeForm({ names, onCreated }: Props) {
           <input
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
-            placeholder="2330 / AAPL"
+            placeholder="2330 / 00919"
             autoCapitalize="characters"
           />
           <span
@@ -143,7 +143,8 @@ export function TradeForm({ names, onCreated }: Props) {
           {submitting ? "Saving…" : "Add Trade"}
         </button>
         <span className="muted" style={{ fontSize: 12 }}>
-          Tip: use 4-digit tickers (e.g. 2330) for Taiwan, symbols (e.g. AAPL) for US.
+          Tip: 4-digit codes for stocks (2330), 5-digit for ETFs (00919),
+          letter suffix for bond ETFs (00937B).
         </span>
       </div>
       {error && <div className="error">{error}</div>}

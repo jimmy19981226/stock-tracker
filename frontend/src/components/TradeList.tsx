@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Trade } from "../api";
-import { type DatePreset, fmtNumber, isTwTicker, presetRange } from "../format";
+import { type DatePreset, fmtNumber, presetRange } from "../format";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -10,13 +10,11 @@ interface Props {
 }
 
 type TypeFilter = "all" | "buy" | "sell";
-type MarketFilter = "all" | "tw" | "us";
 type StatusFilter = "all" | "open" | "closed";
 
 export function TradeList({ trades, names, onChanged }: Props) {
   const [tickerQuery, setTickerQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [preset, setPreset] = useState<DatePreset>("all");
   const [from, setFrom] = useState("");
@@ -87,11 +85,6 @@ export function TradeList({ trades, names, onChanged }: Props) {
     ) {
       return false;
     }
-    if (marketFilter !== "all") {
-      const tw = isTwTicker(t.ticker);
-      if (marketFilter === "tw" && !tw) return false;
-      if (marketFilter === "us" && tw) return false;
-    }
     if (from && t.trade_date < from) return false;
     if (to && t.trade_date > to) return false;
     return true;
@@ -100,7 +93,6 @@ export function TradeList({ trades, names, onChanged }: Props) {
   const filtersActive =
     tickerQuery !== "" ||
     typeFilter !== "all" ||
-    marketFilter !== "all" ||
     statusFilter !== "all" ||
     from !== "" ||
     to !== "";
@@ -108,14 +100,13 @@ export function TradeList({ trades, names, onChanged }: Props) {
   // Reset to first page whenever filters change the visible total.
   useEffect(() => {
     setPage(1);
-  }, [tickerQuery, typeFilter, marketFilter, statusFilter, from, to]);
+  }, [tickerQuery, typeFilter, statusFilter, from, to]);
 
   const pageRows = visible.slice((page - 1) * pageSize, page * pageSize);
 
   function clearFilters() {
     setTickerQuery("");
     setTypeFilter("all");
-    setMarketFilter("all");
     setStatusFilter("all");
     setPreset("all");
     setFrom("");
@@ -159,14 +150,6 @@ export function TradeList({ trades, names, onChanged }: Props) {
           <option value="all">All types</option>
           <option value="buy">Buy only</option>
           <option value="sell">Sell only</option>
-        </select>
-        <select
-          value={marketFilter}
-          onChange={(e) => setMarketFilter(e.target.value as MarketFilter)}
-        >
-          <option value="all">All markets</option>
-          <option value="tw">Taiwan only</option>
-          <option value="us">US only</option>
         </select>
         <select
           value={statusFilter}
@@ -313,14 +296,7 @@ export function TradeList({ trades, names, onChanged }: Props) {
                     />
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span>
-                        {t.ticker}{" "}
-                        <span
-                          className={`tag ${isTwTicker(t.ticker) ? "tw" : "us"}`}
-                        >
-                          {isTwTicker(t.ticker) ? "TW" : "US"}
-                        </span>
-                      </span>
+                      <strong>{t.ticker}</strong>
                       {names[t.ticker] && (
                         <span
                           className="muted"

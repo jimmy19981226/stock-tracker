@@ -54,7 +54,7 @@ export function DividendForm({ names, onCreated }: Props) {
           <input
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
-            placeholder="2330 / AAPL"
+            placeholder="2330 / 00919"
             autoCapitalize="characters"
           />
           <span
@@ -107,7 +107,7 @@ export function DividendForm({ names, onCreated }: Props) {
           {submitting ? "Saving…" : "Add Dividend"}
         </button>
         <span className="muted" style={{ fontSize: 12 }}>
-          Currency is auto-detected from the ticker (TWD for Taiwan, USD for US).
+          Amounts are recorded in TWD.
         </span>
       </div>
       {error && <div className="error">{error}</div>}

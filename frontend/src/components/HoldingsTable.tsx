@@ -31,7 +31,11 @@ export function HoldingsTable({ holdings }: Props) {
           {holdings.length} OPEN
         </span>
       </h2>
-      {Object.entries(byCurrency).map(([currency, items]) => (
+      {Object.entries(byCurrency).map(([currency, rawItems]) => {
+        const items = [...rawItems].sort((a, b) =>
+          a.ticker.localeCompare(b.ticker, undefined, { numeric: true }),
+        );
+        return (
         <div key={currency} style={{ marginBottom: 16 }}>
           <div
             className="muted"
@@ -92,7 +96,8 @@ export function HoldingsTable({ holdings }: Props) {
             </tbody>
           </table>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

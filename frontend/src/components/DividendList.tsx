@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Dividend } from "../api";
-import { type DatePreset, fmtMoney, isTwTicker, presetRange } from "../format";
+import { type DatePreset, fmtMoney, presetRange } from "../format";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -9,11 +9,8 @@ interface Props {
   onChanged: () => void;
 }
 
-type MarketFilter = "all" | "tw" | "us";
-
 export function DividendList({ dividends, names, onChanged }: Props) {
   const [tickerQuery, setTickerQuery] = useState("");
-  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const [preset, setPreset] = useState<DatePreset>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -89,31 +86,22 @@ export function DividendList({ dividends, names, onChanged }: Props) {
     ) {
       return false;
     }
-    if (marketFilter !== "all") {
-      const tw = isTwTicker(d.ticker);
-      if (marketFilter === "tw" && !tw) return false;
-      if (marketFilter === "us" && tw) return false;
-    }
     if (from && d.pay_date < from) return false;
     if (to && d.pay_date > to) return false;
     return true;
   });
 
   const filtersActive =
-    tickerQuery !== "" ||
-    marketFilter !== "all" ||
-    from !== "" ||
-    to !== "";
+    tickerQuery !== "" || from !== "" || to !== "";
 
   useEffect(() => {
     setPage(1);
-  }, [tickerQuery, marketFilter, from, to]);
+  }, [tickerQuery, from, to]);
 
   const pageRows = visible.slice((page - 1) * pageSize, page * pageSize);
 
   function clearFilters() {
     setTickerQuery("");
-    setMarketFilter("all");
     setPreset("all");
     setFrom("");
     setTo("");
@@ -147,14 +135,6 @@ export function DividendList({ dividends, names, onChanged }: Props) {
           onChange={(e) => setTickerQuery(e.target.value)}
           style={{ minWidth: 160 }}
         />
-        <select
-          value={marketFilter}
-          onChange={(e) => setMarketFilter(e.target.value as MarketFilter)}
-        >
-          <option value="all">All markets</option>
-          <option value="tw">Taiwan only</option>
-          <option value="us">US only</option>
-        </select>
         <select
           value={preset}
           onChange={(e) => applyPreset(e.target.value as DatePreset)}
@@ -260,14 +240,7 @@ export function DividendList({ dividends, names, onChanged }: Props) {
                     />
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                      <span>
-                        {d.ticker}{" "}
-                        <span
-                          className={`tag ${isTwTicker(d.ticker) ? "tw" : "us"}`}
-                        >
-                          {isTwTicker(d.ticker) ? "TW" : "US"}
-                        </span>
-                      </span>
+                      <strong>{d.ticker}</strong>
                       {names[d.ticker] && (
                         <span
                           className="muted"
