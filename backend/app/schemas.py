@@ -24,10 +24,12 @@ class TradeOut(BaseModel):
     fee: float
     notes: str | None
     created_at: datetime
+    status: str = "open"  # "open" (unrealized) or "closed" (realized)
 
 
 class Holding(BaseModel):
     ticker: str
+    name: str = ""
     currency: str
     shares: float
     avg_cost: float

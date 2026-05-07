@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { api, type DividendCreate } from "../api";
+import { useTickerName } from "../hooks/useTickerName";
 
 interface Props {
+  names: Record<string, string>;
   onCreated: () => void;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function DividendForm({ onCreated }: Props) {
+export function DividendForm({ names, onCreated }: Props) {
   const [ticker, setTicker] = useState("");
+  const resolvedName = useTickerName(ticker, names);
   const [amount, setAmount] = useState("");
   const [payDate, setPayDate] = useState(today());
   const [notes, setNotes] = useState("");
@@ -54,6 +57,19 @@ export function DividendForm({ onCreated }: Props) {
             placeholder="2330 / AAPL"
             autoCapitalize="characters"
           />
+          <span
+            className="muted"
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              marginTop: 2,
+              minHeight: 14,
+              textTransform: "none",
+              letterSpacing: "normal",
+            }}
+          >
+            {resolvedName || (ticker ? "…" : " ")}
+          </span>
         </label>
         <label>
           Amount Received

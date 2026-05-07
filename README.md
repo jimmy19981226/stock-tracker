@@ -1,13 +1,15 @@
 # Stock Tracker
 
-A self-hosted portfolio tracker for **Taiwan** and **US** equities. Manual
-trade entry, dividend tracking, live prices via Yahoo Finance, and a
-fintech-style dashboard with cumulative earnings charts.
+A self-hosted portfolio tracker for **Taiwan** and **US** equities with
+**near-real-time TW prices** during market hours, manual trade entry,
+dividend tracking, and a fintech-style dashboard with stacked earnings
+and unrealized-P/L charts.
 
 > Built because every off-the-shelf portfolio tracker either ignores
 > Taiwanese tickers, charges money, or sends your trade history to a
 > third party. This one runs on your laptop, stores everything in a local
-> SQLite file, and the only outbound call is to fetch quotes from Yahoo.
+> SQLite file, and only talks to TWSE MIS (Taiwan exchange feed) and
+> Yahoo Finance to fetch quotes.
 
 ---
 
@@ -15,16 +17,25 @@ fintech-style dashboard with cumulative earnings charts.
 
 ### Dashboard
 
-Hero "Total Earned" card, summary grid, and the cumulative earnings
-chart with stacked Realized + Dividends.
+Live header with TW market status (open/closed) and a polling indicator.
+Hero "Total Earned" card, summary grid with live unrealized P/L, and the
+cumulative earnings chart with stacked Realized + Dividends.
 
 ![Dashboard](docs/screenshots/hero.svg)
 
+### Unrealized P/L by position
+
+Divergent horizontal bars showing each open holding's paper gain or
+loss at the current market price. Sorted, color-coded green/red,
+re-painted every 5 seconds while the dashboard is visible.
+
+![Unrealized P/L](docs/screenshots/unrealized.svg)
+
 ### Trades — filter, paginate, edit inline
 
-Filter bar combining ticker search, market (TW/US), trade type, and a
-date range with quick presets. Pagination at the bottom; inline edit on
-every row.
+Filter bar combining ticker search, market (TW/US), trade type, status
+(open/closed), and a date range with quick presets. Stock names show
+under each ticker. Pagination at the bottom; inline edit on every row.
 
 ![Trades](docs/screenshots/trades.svg)
 
@@ -43,19 +54,33 @@ relative time.
 - **TW + US tickers** — bare 4-6 digit codes (e.g. `2330`) auto-resolve
   to `2330.TW`. Bond ETFs with letter suffixes (`00937B`, `00720B`) are
   supported. US tickers (`AAPL`, `MSFT`) pass through unchanged.
-- **Live quotes** via Yahoo Finance with in-process caching (60 s for
-  spot quotes, 5 min for daily history).
+- **Near-real-time TW prices** via the TWSE MIS endpoint — the same
+  feed the exchange's own website uses. ~5-second granularity during
+  09:00–13:30 Taipei time, weekdays. Falls back to yfinance when MIS
+  is unavailable.
+- **Stock names** auto-pulled from MIS — `2330` shows `台積電` next
+  to it on holdings, trades, dividends, allocation, and the entry forms.
+- **5-second polling** while the Dashboard tab is visible — pauses when
+  you switch tabs, minimize, or navigate to another view; resumes on
+  return.
+- **Market status pill** — green `● TW OPEN` when the market is trading,
+  grey `● TW CLOSED` outside hours; auto-flips at 09:00 / 13:30 Taipei.
 - **Per-currency P/L** — TWD and USD are kept separate (no FX
   conversion). Each currency gets its own summary card group, holdings
   table, and chart panel.
 - **Hero "Total Earned" card** — the headline number (realized + dividends)
   with gradient styling, sized for at-a-glance reading.
 - **Cumulative earnings chart** — stacked area showing realized P/L and
-  dividends accumulated over time.
+  dividends accumulated over time, per currency.
+- **Unrealized P/L by position chart** — divergent horizontal bars,
+  sorted by P/L, color-coded green/red. Live-updates with the polling.
+- **FIFO open/closed status** — every trade is classified as still
+  contributing to an open position or fully realized; filterable in
+  the Trades tab.
 - **CSV import/export** — one unified file (`portfolio.csv`) with a
   `kind` column. Auto-load from a `seed/` folder on first boot.
-- **Filtering** — ticker search, market (TW/US), date range with presets,
-  trade type. Combine freely.
+- **Filtering** — ticker search, market (TW/US), trade type, open/closed
+  status, date range with presets. Combine freely.
 - **Inline editing** — click Edit on any row, fields become inputs, save
   or cancel. Backed by `PUT /api/{trades,dividends}/{id}`.
 - **Pagination** — 10/20/50/100 per page with ellipsis and prev/next.
@@ -83,17 +108,20 @@ python-multipart                   Pure CSS (no framework)
 ```mermaid
 flowchart LR
   subgraph Browser
-    UI[React + Vite UI]
+    UI[React + Vite UI<br/>polls every 5s]
   end
   subgraph Backend["FastAPI :8000"]
     Trades[/api/trades/]
     Dividends[/api/dividends/]
     Portfolio[/api/portfolio/*/]
     Data[/api/data/*/]
-    Quotes[Quote service<br/>+ in-mem cache]
+    Quotes[Quote dispatcher<br/>+ in-mem cache]
+    TwQuotes[tw_quotes.py<br/>5s cache]
+    YfQuotes[yfinance<br/>60s cache]
     DB[(SQLite<br/>trades.db)]
   end
-  Yahoo[(Yahoo Finance)]
+  TWSE[(TWSE MIS<br/>~5s updates)]
+  Yahoo[(Yahoo Finance<br/>20-min delay)]
 
   UI -- "fetch /api/*" --> Trades
   UI --> Dividends
@@ -104,7 +132,10 @@ flowchart LR
   Data --> DB
   Portfolio --> DB
   Portfolio --> Quotes
-  Quotes -- "yfinance" --> Yahoo
+  Quotes -->|TW ticker| TwQuotes
+  Quotes -->|US or fallback| YfQuotes
+  TwQuotes --> TWSE
+  YfQuotes --> Yahoo
 ```
 
 ---
@@ -118,12 +149,13 @@ backend/
     database.py        Trade, Dividend, Metadata SQLAlchemy models
     schemas.py         Pydantic request/response models
     routers/
-      trades.py        CRUD + PUT for trades
+      trades.py        CRUD + PUT + FIFO open/closed status per row
       dividends.py     CRUD + PUT for dividends
-      portfolio.py     holdings / summary / earnings-history / quote
+      portfolio.py     holdings / summary / earnings-history / names / quote
       data.py          unified portfolio.csv import + export
     services/
-      quotes.py        yfinance wrapper + ticker resolution + caching
+      quotes.py        dispatcher: TW → MIS, US/fallback → yfinance
+      tw_quotes.py     TWSE MIS client (batched, 5s cache, name capture)
       portfolio.py     avg-cost, realized P/L, daily earnings series
       csv_io.py        unified CSV parse + serialize
   data/trades.db       (auto-created, gitignored)
@@ -135,15 +167,19 @@ frontend/
     index.css          premium dark theme + Inter font
     components/
       PortfolioSummary.tsx    hero + per-currency cards
-      PerformanceChart.tsx    stacked area earnings chart
-      AllocationChart.tsx     donut chart
-      HoldingsTable.tsx       open positions
-      TradeForm.tsx           buy/sell entry form
-      TradeList.tsx           filter + paginate + inline edit
-      DividendForm.tsx        dividend entry form
+      PerformanceChart.tsx    stacked area earnings chart (custom tooltip)
+      UnrealizedChart.tsx     divergent bar chart, sorted by P/L
+      AllocationChart.tsx     donut + custom legend with names
+      HoldingsTable.tsx       open positions with live prices
+      TradeForm.tsx           buy/sell entry with live name lookup
+      TradeList.tsx           filter + paginate + inline edit + status
+      DividendForm.tsx        dividend entry with live name lookup
       DividendList.tsx        filter + paginate + inline edit
       DataPanel.tsx           CSV import/export + last-export tracker
+      MarketStatus.tsx        TW market open/closed pill
       Pagination.tsx          reusable page-size + page-number controls
+    hooks/
+      useTickerName.ts        debounced ticker → name resolution
 ```
 
 ---
@@ -175,17 +211,47 @@ Open <http://127.0.0.1:5173>. Vite proxies `/api/*` to the backend on `:8000`.
 ## How it works
 
 - **Ticker resolution** — bare 4-6 digit codes (with optional letter
-  suffix, e.g. `2330`, `00937B`) are queried as `…​.TW` against Yahoo
-  Finance. Anything else (`AAPL`, `2330.TW`, `0050.TWO`) passes through
-  unchanged.
+  suffix, e.g. `2330`, `00937B`) are queried as `…​.TW` against the
+  data sources. Anything else (`AAPL`, `2330.TW`, `0050.TWO`) passes
+  through unchanged.
+- **TW quote dispatch** — TW tickers go to TWSE MIS first, batched
+  into a single HTTP call (`tse_2330.tw|otc_00919.tw|...`). On miss
+  or failure, the dispatcher silently falls back to yfinance.
+- **US quotes** — yfinance only.
 - **Currencies** — TW symbols report TWD, everything else USD. Holdings,
-  summaries, and the earnings chart are kept separate per currency (no
-  FX conversion).
+  summaries, and the charts are kept separate per currency (no FX
+  conversion).
 - **Cost basis** — weighted-average. Sells reduce the open cost basis
   proportionally and realize the difference vs. average price (minus
   fees).
-- **Caching** — quotes 60 s, daily history 5 min, both in-process. No DB
-  cache, so restarting the backend re-fetches.
+- **Open vs closed status** — every trade is FIFO-matched per ticker:
+  buys queue up; sells consume buy lots front-first; any buy lot with
+  leftover shares is `open`, fully-consumed buys and all sells are
+  `closed`.
+- **Caching** — TW quotes 5 s, US quotes 60 s, daily history 5 min,
+  all in-process. No DB cache, so restarting the backend re-fetches.
+
+### Live data flow
+
+The Dashboard tab polls `/api/portfolio/{holdings,summary,earnings-history,names}`
+every 5 seconds while it's the active view AND the browser tab is
+visible. The backend's MIS cache (5s TTL) absorbs duplicate calls so
+even with multiple browser tabs open you'll hit MIS once per 5s per
+ticker batch, not once per browser request.
+
+The header shows two pills:
+
+- `● TW OPEN` (green, pulsing) when 09:00 ≤ Taipei time < 13:30 on
+  weekdays. `● TW CLOSED` (grey) otherwise. Auto-flips at 09:00 and
+  13:30; checks every 60 s.
+- `● LIVE` (green, pulsing) appears whenever the polling loop is
+  active. Disappears the moment you switch tabs, minimize, or
+  navigate away from the Dashboard.
+
+Outside market hours MIS returns the previous close, so the prices
+look frozen — that's the data source, not a bug. The polling still
+runs (and the LIVE pill still shows) so the moment 09:00 Taipei
+arrives, prices start ticking automatically.
 
 ---
 
@@ -240,12 +306,13 @@ it on startup — **but only when both tables are empty.**
 | GET    | /api/data/export                    | download unified portfolio CSV           |
 | POST   | /api/data/import                    | upload unified CSV (trades + dividends)  |
 | GET    | /api/data/last-export               | timestamp of most recent export          |
-| GET    | /api/portfolio/holdings             | per-ticker open positions + P/L          |
+| GET    | /api/portfolio/holdings             | per-ticker open positions + live P/L     |
 | GET    | /api/portfolio/summary              | per-currency totals incl. dividends      |
+| GET    | /api/portfolio/names                | ticker → short-name map (e.g. 2330→台積電) |
 | GET    | /api/portfolio/history?days=N       | daily market value series (open holdings)|
 | GET    | /api/portfolio/realized-history?days=N | daily cumulative realized P/L         |
 | GET    | /api/portfolio/earnings-history?days=N | daily cumulative realized + dividends |
-| GET    | /api/portfolio/quote/{ticker}       | spot quote (debug aid)                   |
+| GET    | /api/portfolio/quote/{ticker}       | live spot quote (price + name + currency)|
 
 ---
 

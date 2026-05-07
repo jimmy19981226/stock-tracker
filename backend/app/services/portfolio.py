@@ -53,12 +53,15 @@ def build_holdings(db: Session) -> list[dict]:
     trades = db.query(Trade).all()
     states = compute_states(trades)
 
+    open_tickers = [t for t, st in states.items() if st.shares > 0]
+    quote_map = quotes.get_quotes(open_tickers)
+
     out: list[dict] = []
     for ticker, st in states.items():
         if st.shares <= 0:
             continue
         avg_cost = st.cost_basis / st.shares if st.shares else 0.0
-        quote = quotes.get_quote(ticker)
+        quote = quote_map.get(ticker)
         currency = quote.currency if quote else quotes.detect_currency(
             quotes.resolve_symbol(ticker)
         )
@@ -86,6 +89,7 @@ def build_holdings(db: Session) -> list[dict]:
         out.append(
             {
                 "ticker": ticker,
+                "name": quote.name if quote else "",
                 "currency": currency,
                 "shares": st.shares,
                 "avg_cost": avg_cost,

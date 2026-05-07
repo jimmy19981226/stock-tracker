@@ -226,6 +226,12 @@ header.app-header {
   border-bottom: 1px solid var(--border);
 }
 
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 header.app-header h1 {
   margin: 0;
   font-size: 22px;
@@ -305,7 +311,7 @@ header.app-header nav button.active {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
 }
 
@@ -315,6 +321,7 @@ header.app-header nav button.active {
   border-radius: 12px;
   padding: 18px 20px;
   position: relative;
+  min-width: 0; /* let the cell shrink so flex/grid children don't overflow */
   transition:
     transform 160ms ease,
     border-color 160ms ease,
@@ -336,18 +343,24 @@ header.app-header nav button.active {
 }
 
 .summary-card .value {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 700;
   margin-top: 6px;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .summary-card .sub {
   font-size: 12px;
   margin-top: 4px;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .summary-card.hero {
@@ -361,7 +374,7 @@ header.app-header nav button.active {
 }
 
 .summary-card.hero .value {
-  font-size: 36px;
+  font-size: 32px;
   background: var(--grad-brand);
   -webkit-background-clip: text;
   background-clip: text;
@@ -457,12 +470,20 @@ tr:last-child td {
   background: var(--red-soft);
   color: var(--red);
 }
+.tag.status-open {
+  background: rgba(99, 132, 255, 0.14);
+  color: var(--accent);
+}
+.tag.status-closed {
+  background: rgba(107, 117, 137, 0.18);
+  color: var(--muted);
+}
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 14px;
-  align-items: end;
+  align-items: start;
 }
 
 .row-actions {
@@ -581,6 +602,130 @@ td.editing {
 .banner strong {
   color: var(--accent);
   font-weight: 600;
+}
+
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+}
+
+.market-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: help;
+}
+
+.market-pill .market-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.market-pill.open {
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+}
+
+.market-pill.open .market-dot {
+  background: var(--green);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.market-pill.closed {
+  color: var(--muted);
+  background: rgba(107, 117, 137, 0.1);
+  border: 1px solid rgba(107, 117, 137, 0.25);
+}
+
+.market-pill.closed .market-dot {
+  background: var(--muted);
+}
+
+.alloc-legend {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.alloc-legend li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) 48px 88px;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background-color 120ms ease;
+}
+
+.alloc-legend li:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.alloc-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.alloc-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alloc-pct {
+  color: var(--muted);
+  text-align: right;
+}
+
+.alloc-val {
+  color: var(--text-2);
+  text-align: right;
+}
+
+.live-indicator::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
 }
 
 .pagination {

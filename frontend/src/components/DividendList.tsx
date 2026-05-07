@@ -5,12 +5,13 @@ import { Pagination } from "./Pagination";
 
 interface Props {
   dividends: Dividend[];
+  names: Record<string, string>;
   onChanged: () => void;
 }
 
 type MarketFilter = "all" | "tw" | "us";
 
-export function DividendList({ dividends, onChanged }: Props) {
+export function DividendList({ dividends, names, onChanged }: Props) {
   const [tickerQuery, setTickerQuery] = useState("");
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const [preset, setPreset] = useState<DatePreset>("all");
@@ -258,14 +259,24 @@ export function DividendList({ dividends, onChanged }: Props) {
                       }
                     />
                   ) : (
-                    <>
-                      {d.ticker}{" "}
-                      <span
-                        className={`tag ${isTwTicker(d.ticker) ? "tw" : "us"}`}
-                      >
-                        {isTwTicker(d.ticker) ? "TW" : "US"}
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span>
+                        {d.ticker}{" "}
+                        <span
+                          className={`tag ${isTwTicker(d.ticker) ? "tw" : "us"}`}
+                        >
+                          {isTwTicker(d.ticker) ? "TW" : "US"}
+                        </span>
                       </span>
-                    </>
+                      {names[d.ticker] && (
+                        <span
+                          className="muted"
+                          style={{ fontSize: 11, fontWeight: 500 }}
+                        >
+                          {names[d.ticker]}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className={isEditing ? "editing pos" : "pos"}>

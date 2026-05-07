@@ -22,14 +22,28 @@ export function HoldingsTable({ holdings }: Props) {
 
   return (
     <div className="panel">
-      <h2>Holdings</h2>
+      <h2>
+        Open Positions{" "}
+        <span
+          className="tag status-open"
+          style={{ marginLeft: 8, verticalAlign: "middle" }}
+        >
+          {holdings.length} OPEN
+        </span>
+      </h2>
       {Object.entries(byCurrency).map(([currency, items]) => (
         <div key={currency} style={{ marginBottom: 16 }}>
           <div
             className="muted"
-            style={{ fontSize: 12, marginBottom: 6, fontWeight: 600 }}
+            style={{
+              fontSize: 11,
+              marginBottom: 8,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+            }}
           >
-            {currency}
+            {currency} · {items.length}
           </div>
           <table>
             <thead>
@@ -48,7 +62,17 @@ export function HoldingsTable({ holdings }: Props) {
               {items.map((h) => (
                 <tr key={h.ticker}>
                   <td>
-                    <strong>{h.ticker}</strong>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <strong>{h.ticker}</strong>
+                      {h.name && (
+                        <span
+                          className="muted"
+                          style={{ fontSize: 11, fontWeight: 500 }}
+                        >
+                          {h.name}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td>{fmtNumber(h.shares, 4)}</td>
                   <td>{fmtMoney(h.avg_cost, currency)}</td>

@@ -71,6 +71,52 @@ export function presetRange(preset: DatePreset): {
   }
 }
 
+/** Is the Taiwan stock market currently open? 09:00–13:30 Taipei time,
+ *  Monday-Friday. Doesn't account for public holidays — close enough
+ *  for a visual indicator. */
+export function isTwMarketOpen(now: Date = new Date()): boolean {
+  // Taipei is UTC+8, no DST. Compute "wall clock" time in Taipei from UTC.
+  const utcMs = now.getTime();
+  const taipeiMs = utcMs + 8 * 60 * 60 * 1000;
+  const tw = new Date(taipeiMs);
+  const day = tw.getUTCDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return false;
+  const minutes = tw.getUTCHours() * 60 + tw.getUTCMinutes();
+  return minutes >= 9 * 60 && minutes < 13 * 60 + 30;
+}
+
+/** Minutes until TW market open or close, whichever applies. */
+export function nextTwMarketTransition(now: Date = new Date()): {
+  open: boolean;
+  inMinutes: number;
+} {
+  const open = isTwMarketOpen(now);
+  const utcMs = now.getTime();
+  const taipeiMs = utcMs + 8 * 60 * 60 * 1000;
+  const tw = new Date(taipeiMs);
+  const minsNow = tw.getUTCHours() * 60 + tw.getUTCMinutes();
+
+  if (open) {
+    return { open: true, inMinutes: 13 * 60 + 30 - minsNow };
+  }
+  // Currently closed — find next opening.
+  const day = tw.getUTCDay();
+  let daysAhead = 0;
+  // If before 09:00 today and today is a weekday, opens later today.
+  if (day >= 1 && day <= 5 && minsNow < 9 * 60) {
+    daysAhead = 0;
+  } else {
+    // After 13:30 weekday, or weekend — find next weekday.
+    daysAhead = 1;
+    while (((day + daysAhead) % 7) === 0 || ((day + daysAhead) % 7) === 6) {
+      daysAhead += 1;
+    }
+  }
+  const minsToNextOpen =
+    daysAhead * 24 * 60 + (9 * 60 - minsNow);
+  return { open: false, inMinutes: minsToNextOpen };
+}
+
 export function fmtRelativeTime(iso: string | null | undefined): string {
   if (!iso) return "never";
   const then = new Date(iso + (iso.endsWith("Z") ? "" : "Z"));

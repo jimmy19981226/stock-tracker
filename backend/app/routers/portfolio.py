@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import Dividend, Trade, get_db
 from ..services import portfolio, quotes
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
@@ -37,6 +37,22 @@ def get_earnings_history(
     return portfolio.build_earnings_history(db, days=days)
 
 
+@router.get("/names")
+def get_names(db: Session = Depends(get_db)):
+    """Ticker → short-name map for every ticker the user has touched.
+    Pulled from the live quote service (TWSE MIS for TW)."""
+    trade_tickers = {t for (t,) in db.query(Trade.ticker).distinct()}
+    dividend_tickers = {t for (t,) in db.query(Dividend.ticker).distinct()}
+    all_tickers = sorted(trade_tickers | dividend_tickers)
+    if not all_tickers:
+        return {}
+    quote_map = quotes.get_quotes(all_tickers)
+    return {
+        t: (quote_map[t].name if t in quote_map and quote_map[t].name else "")
+        for t in all_tickers
+    }
+
+
 @router.get("/quote/{ticker}")
 def get_quote(ticker: str):
     q = quotes.get_quote(ticker)
@@ -46,6 +62,7 @@ def get_quote(ticker: str):
         "ticker": ticker,
         "found": True,
         "symbol": q.symbol,
+        "name": q.name,
         "price": q.price,
         "previous_close": q.previous_close,
         "currency": q.currency,

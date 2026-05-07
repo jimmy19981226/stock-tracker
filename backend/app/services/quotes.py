@@ -40,6 +40,7 @@ class QuoteData:
     price: float
     previous_close: float | None
     currency: str
+    name: str = ""  # short name from the data source (e.g. "台積電")
 
 
 _quote_cache: dict[str, tuple[float, QuoteData]] = {}
@@ -48,10 +49,23 @@ _lock = Lock()
 
 
 def get_quote(ticker: str) -> QuoteData | None:
-    """Return the latest quote for ``ticker`` or ``None`` if it cannot be fetched."""
-    symbol = resolve_symbol(ticker)
-    now = time.time()
+    """Return the latest quote for ``ticker`` or ``None`` if it cannot be fetched.
 
+    Routes TW tickers through TWSE MIS first (near-real-time, ~5s cache);
+    falls back to yfinance on miss/failure or for non-TW tickers.
+    """
+    symbol = resolve_symbol(ticker)
+    if detect_currency(symbol) == "TWD":
+        # Lazy import to avoid a circular dependency at module load time.
+        from . import tw_quotes
+        q = tw_quotes.get_quote(ticker)
+        if q is not None:
+            return q
+    return _yfinance_quote(symbol)
+
+
+def _yfinance_quote(symbol: str) -> QuoteData | None:
+    now = time.time()
     with _lock:
         cached = _quote_cache.get(symbol)
         if cached and now - cached[0] < _QUOTE_TTL_SECONDS:
@@ -79,9 +93,32 @@ def get_quote(ticker: str) -> QuoteData | None:
 
 
 def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
+    """Batch-fetch quotes. TW tickers are batched into one MIS HTTP call.
+    Anything MIS doesn't return (or non-TW tickers) goes through yfinance
+    one at a time.
+    """
+    tickers = list(tickers)
+    if not tickers:
+        return {}
+
     out: dict[str, QuoteData] = {}
+
+    # Group TW tickers and ask MIS in one shot.
+    tw_tickers: list[str] = []
+    other_tickers: list[str] = []
     for t in tickers:
-        q = get_quote(t)
+        if detect_currency(resolve_symbol(t)) == "TWD":
+            tw_tickers.append(t)
+        else:
+            other_tickers.append(t)
+
+    if tw_tickers:
+        from . import tw_quotes
+        out.update(tw_quotes.get_quotes(tw_tickers))
+
+    # Fall back to yfinance for anything missing.
+    for t in other_tickers + [t for t in tw_tickers if t not in out]:
+        q = _yfinance_quote(resolve_symbol(t))
         if q is not None:
             out[t] = q
     return out

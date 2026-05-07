@@ -1,5 +1,7 @@
 export type TradeType = "buy" | "sell";
 
+export type TradeStatus = "open" | "closed";
+
 export interface Trade {
   id: number;
   type: TradeType;
@@ -10,6 +12,7 @@ export interface Trade {
   fee: number;
   notes: string | null;
   created_at: string;
+  status: TradeStatus;
 }
 
 export interface TradeCreate {
@@ -24,6 +27,7 @@ export interface TradeCreate {
 
 export interface Holding {
   ticker: string;
+  name: string;
   currency: string;
   shares: number;
   avg_cost: number;
@@ -153,6 +157,17 @@ export const api = {
   getLastExport: () =>
     request<{ last_export: string | null }>("/api/data/last-export"),
   getHoldings: () => request<Holding[]>("/api/portfolio/holdings"),
+  getNames: () => request<Record<string, string>>("/api/portfolio/names"),
+  lookupQuote: (ticker: string) =>
+    request<{
+      ticker: string;
+      found: boolean;
+      symbol?: string;
+      name?: string;
+      price?: number;
+      previous_close?: number | null;
+      currency?: string;
+    }>(`/api/portfolio/quote/${encodeURIComponent(ticker)}`),
   getSummary: () => request<CurrencySummary[]>("/api/portfolio/summary"),
   getHistory: (days = 180) =>
     request<HistoryByCurrency>(`/api/portfolio/history?days=${days}`),

@@ -41,6 +41,21 @@
     <circle cx="26" cy="12" r="1.6" fill="white"/>
     <text x="46" y="22" font-size="20" font-weight="800" fill="url(#gradBrand)" letter-spacing="-0.02em">Stock Tracker</text>
 
+    <!-- Status pills next to brand -->
+    <g transform="translate(220, 4)" font-size="11" font-weight="700" letter-spacing="0.08em">
+      <!-- TW OPEN pill -->
+      <rect width="98" height="24" rx="8" fill="rgba(52,211,153,0.08)" stroke="rgba(52,211,153,0.25)"/>
+      <circle cx="11" cy="12" r="3.5" fill="#34d399"/>
+      <text x="22" y="16" fill="#34d399">TW OPEN</text>
+
+      <!-- LIVE pill -->
+      <g transform="translate(108, 0)">
+        <rect width="62" height="24" rx="8" fill="rgba(52,211,153,0.08)" stroke="rgba(52,211,153,0.25)"/>
+        <circle cx="11" cy="12" r="3.5" fill="#34d399"/>
+        <text x="22" y="16" fill="#34d399">LIVE</text>
+      </g>
+    </g>
+
     <!-- Nav pills -->
     <g transform="translate(700, 0)" font-size="13" font-weight="500">
       <rect width="100" height="32" rx="9" fill="#161c27" stroke="rgba(255,255,255,0.1)"/>

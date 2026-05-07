@@ -5,16 +5,19 @@ import { Pagination } from "./Pagination";
 
 interface Props {
   trades: Trade[];
+  names: Record<string, string>;
   onChanged: () => void;
 }
 
 type TypeFilter = "all" | "buy" | "sell";
 type MarketFilter = "all" | "tw" | "us";
+type StatusFilter = "all" | "open" | "closed";
 
-export function TradeList({ trades, onChanged }: Props) {
+export function TradeList({ trades, names, onChanged }: Props) {
   const [tickerQuery, setTickerQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [preset, setPreset] = useState<DatePreset>("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -77,6 +80,7 @@ export function TradeList({ trades, onChanged }: Props) {
 
   const visible = trades.filter((t) => {
     if (typeFilter !== "all" && t.type !== typeFilter) return false;
+    if (statusFilter !== "all" && t.status !== statusFilter) return false;
     if (
       tickerQuery &&
       !t.ticker.toLowerCase().includes(tickerQuery.trim().toLowerCase())
@@ -97,13 +101,14 @@ export function TradeList({ trades, onChanged }: Props) {
     tickerQuery !== "" ||
     typeFilter !== "all" ||
     marketFilter !== "all" ||
+    statusFilter !== "all" ||
     from !== "" ||
     to !== "";
 
   // Reset to first page whenever filters change the visible total.
   useEffect(() => {
     setPage(1);
-  }, [tickerQuery, typeFilter, marketFilter, from, to]);
+  }, [tickerQuery, typeFilter, marketFilter, statusFilter, from, to]);
 
   const pageRows = visible.slice((page - 1) * pageSize, page * pageSize);
 
@@ -111,10 +116,14 @@ export function TradeList({ trades, onChanged }: Props) {
     setTickerQuery("");
     setTypeFilter("all");
     setMarketFilter("all");
+    setStatusFilter("all");
     setPreset("all");
     setFrom("");
     setTo("");
   }
+
+  const openCount = trades.filter((t) => t.status === "open").length;
+  const closedCount = trades.length - openCount;
 
   if (trades.length === 0) {
     return (
@@ -158,6 +167,14 @@ export function TradeList({ trades, onChanged }: Props) {
           <option value="all">All markets</option>
           <option value="tw">Taiwan only</option>
           <option value="us">US only</option>
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+        >
+          <option value="all">All status</option>
+          <option value="open">Open · unrealized ({openCount})</option>
+          <option value="closed">Closed · realized ({closedCount})</option>
         </select>
         <select
           value={preset}
@@ -223,6 +240,7 @@ export function TradeList({ trades, onChanged }: Props) {
           <tr>
             <th>Date</th>
             <th>Type</th>
+            <th>Status</th>
             <th>Ticker</th>
             <th>Shares</th>
             <th>Price</th>
@@ -276,6 +294,11 @@ export function TradeList({ trades, onChanged }: Props) {
                     </span>
                   )}
                 </td>
+                <td>
+                  <span className={`tag status-${t.status}`}>
+                    {t.status === "open" ? "OPEN" : "CLOSED"}
+                  </span>
+                </td>
                 <td className={isEditing ? "editing" : ""}>
                   {isEditing && draft ? (
                     <input
@@ -289,14 +312,24 @@ export function TradeList({ trades, onChanged }: Props) {
                       }
                     />
                   ) : (
-                    <>
-                      {t.ticker}{" "}
-                      <span
-                        className={`tag ${isTwTicker(t.ticker) ? "tw" : "us"}`}
-                      >
-                        {isTwTicker(t.ticker) ? "TW" : "US"}
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span>
+                        {t.ticker}{" "}
+                        <span
+                          className={`tag ${isTwTicker(t.ticker) ? "tw" : "us"}`}
+                        >
+                          {isTwTicker(t.ticker) ? "TW" : "US"}
+                        </span>
                       </span>
-                    </>
+                      {names[t.ticker] && (
+                        <span
+                          className="muted"
+                          style={{ fontSize: 11, fontWeight: 500 }}
+                        >
+                          {names[t.ticker]}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </td>
                 <td className={isEditing ? "editing" : ""}>
