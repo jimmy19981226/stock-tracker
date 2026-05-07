@@ -11,43 +11,59 @@ fintech-style dashboard with cumulative earnings charts.
 
 ---
 
-## Demo
+## What you get
 
-Drop your own screenshots into [docs/screenshots/](docs/screenshots/) — the
-references below will pick them up automatically.
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ ◆ Stock Tracker          [Dashboard] Trades  Dividends  Data    ↻ │
+├────────────────────────────────────────────────────────────────────┤
+│ TWD Portfolio · 2 holdings                                         │
+│                                                                    │
+│ ┌─ TOTAL EARNED ──────────────────┐ ┌─ MARKET VALUE ─┐ ┌─ TODAY ─┐ │
+│ │ NT$301,206.54                   │ │ NT$232,500.00  │ │ +NT$7.5k│ │
+│ │ Realized 189,728 · Div 111,478  │ │ Cost: 90,050   │ │ +3.33%  │ │
+│ └─────────────────────────────────┘ └────────────────┘ └─────────┘ │
+│                                                                    │
+│ CUMULATIVE EARNINGS                                                │
+│                                          ■ Realized   NT$189,728   │
+│                                          ■ Dividends  NT$111,478   │
+│                                          ■ Total      NT$301,206   │
+│ 300k│                                              ▄▄▄▄▄▄▄▄▄▄▄▄    │
+│     │                                       ▄▄▄▄▄▄▄                │
+│ 200k│                                ▄▄▄▄▄▄▄                       │
+│     │                       ▄▄▄▄▄▄▄▄▄                              │
+│ 100k│             ▄▄▄▄▄▄▄▄▄▄                                       │
+│   0 │▄▄▄▄▄▄▄▄▄▄▄▄                                                  │
+│     2023      2024      2025      2026                             │
+│                                                                    │
+│ HOLDINGS                                          ALLOCATION       │
+│ Ticker   Shares  Avg Cost  Price    Value         ◐ 2330  78%      │
+│ 2330      100    900.50   2,325   232,500         ◑ AAPL  22%      │
+│ AAPL      10     150.60     287.51  2,875                          │
+└────────────────────────────────────────────────────────────────────┘
+```
 
-### Dashboard
+### The four tabs
 
-The Dashboard panel showing per-currency totals, the cumulative earnings
-chart with stacked Realized + Dividends, your holdings table, and the
-allocation donut chart.
+**Dashboard** — Hero "Total Earned" card, cumulative earnings chart
+(stacked area: blue = realized P/L, amber = dividends), holdings table
+with live prices, and allocation donut. Per-currency, no FX mixing.
 
-![Dashboard](docs/screenshots/dashboard.png)
+**Trades** — Buy/sell entry form. List with ticker search, market filter
+(TW/US), buy/sell filter, date-range presets (1M / 3M / 6M / 1Y / YTD /
+Custom), inline editing, and pagination (10/20/50/100 per page).
 
-### Cumulative earnings chart
+**Dividends** — Dividend payout entry. Same filter and pagination
+toolset as Trades. Currency auto-detected from the ticker.
 
-Stacked area chart per currency: blue = realized P/L from closed
-positions, amber = dividends. Stack height equals total earned at any
-point on the timeline. Hover for a tooltip with all three values.
+**Data** — One-click CSV export and import for the whole portfolio.
+"Last export" card shows when you last backed up, in relative time.
+Drop a CSV at `backend/data/seed/portfolio.csv` and the backend auto-
+loads it on first boot.
 
-![Earnings chart](docs/screenshots/earnings-chart.png)
-
-### Trades & Dividends with filters and inline editing
-
-Both lists support ticker search, market (TW/US), date range with quick
-presets (Last 30 days / 3 months / 6 months / 1 year / YTD / Custom),
-trade type (buy/sell), inline edit on every row, and pagination.
-
-![Trades](docs/screenshots/trades.png)
-
-### Data tab — CSV import / export
-
-Single `portfolio.csv` for both trades and dividends. Export to back up,
-edit in Excel, re-import. Drop a file at `backend/data/seed/portfolio.csv`
-and it auto-loads on first boot. Last-export time is shown right on the
-panel so you know how fresh your backup is.
-
-![Data tab](docs/screenshots/data-tab.png)
+> **Want screenshots in this section?** Capture them and drop them into
+> [`docs/screenshots/`](docs/screenshots/) following the filename
+> convention there. The README will pick them up.
 
 ---
 
