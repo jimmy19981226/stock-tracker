@@ -165,7 +165,7 @@ export default function App() {
         <>
           <PortfolioSummary summaries={summaries} />
           <PerformanceChart history={history} />
-          <UnrealizedChart holdings={holdings} />
+          <UnrealizedChart holdings={holdings} names={names} />
           <div className="dual-grid">
             <HoldingsTable holdings={holdings} />
             <AllocationChart holdings={holdings} names={names} />
