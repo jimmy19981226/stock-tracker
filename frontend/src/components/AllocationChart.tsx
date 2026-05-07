@@ -14,16 +14,16 @@ interface Props {
 }
 
 const PALETTE = [
-  "#4a9eff",
-  "#ffa657",
-  "#3fb950",
-  "#bc8cff",
-  "#f85149",
-  "#79c0ff",
-  "#ffd166",
-  "#39d0d8",
-  "#e377c2",
-  "#9aa6b2",
+  "#6384ff",
+  "#a78bfa",
+  "#34d399",
+  "#fbbf24",
+  "#f472b6",
+  "#22d3ee",
+  "#fb923c",
+  "#60a5fa",
+  "#c084fc",
+  "#94a3b8",
 ];
 
 export function AllocationChart({ holdings }: Props) {
@@ -68,10 +68,11 @@ export function AllocationChart({ holdings }: Props) {
                   data={data}
                   dataKey="value"
                   nameKey="name"
-                  innerRadius={50}
-                  outerRadius={85}
-                  paddingAngle={2}
-                  stroke="#1a2028"
+                  innerRadius={52}
+                  outerRadius={88}
+                  paddingAngle={3}
+                  stroke="#11161f"
+                  strokeWidth={2}
                 >
                   {data.map((_, i) => (
                     <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
@@ -79,9 +80,12 @@ export function AllocationChart({ holdings }: Props) {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    background: "#1a2028",
-                    border: "1px solid #2d3744",
-                    borderRadius: 6,
+                    background: "#161c27",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    boxShadow: "0 12px 36px -12px rgba(0,0,0,0.6)",
+                    padding: "8px 12px",
                   }}
                   formatter={(value: number) => fmtMoney(value, currency)}
                 />

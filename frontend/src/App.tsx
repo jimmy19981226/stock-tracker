@@ -58,7 +58,21 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>📈 Stock Tracker</h1>
+        <h1>
+          <span className="brand-mark" aria-hidden>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path
+                d="M3 18 L9 12 L13 16 L21 6"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="21" cy="6" r="1.6" fill="white" />
+            </svg>
+          </span>
+          <span className="brand-text">Stock Tracker</span>
+        </h1>
         <nav>
           <button
             className={view === "dashboard" ? "active" : ""}

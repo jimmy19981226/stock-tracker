@@ -24,6 +24,16 @@ export function PortfolioSummary({ summaries }: Props) {
             {s.holdings_count === 1 ? "holding" : "holdings"}
           </h2>
           <div className="summary-grid">
+            <div className="summary-card hero">
+              <div className="label">Total Earned</div>
+              <div className="value">
+                {fmtMoney(s.total_earned, s.currency)}
+              </div>
+              <div className="sub muted">
+                Realized {fmtMoney(s.realized_pl, s.currency)} ·
+                Dividends {fmtMoney(s.dividends, s.currency)}
+              </div>
+            </div>
             <div className="summary-card">
               <div className="label">Market Value</div>
               <div className="value">{fmtMoney(s.total_value, s.currency)}</div>
@@ -62,13 +72,6 @@ export function PortfolioSummary({ summaries }: Props) {
                 {fmtMoney(s.dividends, s.currency)}
               </div>
               <div className="sub muted">Cash payouts received</div>
-            </div>
-            <div className="summary-card" style={{ outline: "1px solid var(--accent)" }}>
-              <div className="label">Total Earned</div>
-              <div className={`value ${plClass(s.total_earned)}`}>
-                {fmtMoney(s.total_earned, s.currency)}
-              </div>
-              <div className="sub muted">Realized + dividends</div>
             </div>
           </div>
         </div>
