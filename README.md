@@ -13,10 +13,6 @@ fintech-style dashboard with cumulative earnings charts.
 
 ## Demo
 
-Stylized mockups in the app's actual color palette. (Real screenshots
-can be dropped into [docs/screenshots/](docs/screenshots/) to replace
-these — see the folder's README.)
-
 ### Dashboard
 
 Hero "Total Earned" card, summary grid, and the cumulative earnings
