@@ -47,6 +47,15 @@ relative time.
 
 ![Data tab](docs/screenshots/data-tab.svg)
 
+### AI Assistant — persistent chat history sidebar
+
+Slide-in sidebar (✦ Assistant button in the header) that does
+natural-language Q&A over your local data via Google Gemini. Every
+conversation is saved to SQLite — pick up where you left off, rename
+threads, or delete the ones you don't want to keep.
+
+![AI Assistant](docs/screenshots/assistant.svg)
+
 ---
 
 ## Features
@@ -141,14 +150,15 @@ flowchart LR
 ```
 backend/
   app/
-    main.py            FastAPI app + CORS + seed-load on startup
-    database.py        Trade, Dividend, Metadata SQLAlchemy models
+    main.py            FastAPI app + CORS + seed-load on startup + .env
+    database.py        Trade, Dividend, Metadata, Chat, ChatMessage models
     schemas.py         Pydantic request/response models
     routers/
       trades.py        CRUD + PUT + FIFO open/closed status per row
       dividends.py     CRUD + PUT for dividends
       portfolio.py     holdings / summary / earnings-history / names / quote
       data.py          unified portfolio.csv import + export
+      ai.py            Gemini Q&A + persistent chat history (CRUD)
     services/
       quotes.py        thin wrapper exposing QuoteData + symbol resolution
       tw_quotes.py     TWSE MIS client (batched, 5s cache, name capture)
@@ -175,6 +185,7 @@ frontend/
       DataPanel.tsx           CSV import/export + last-export tracker
       MarketStatus.tsx        TW market open/closed pill
       Pagination.tsx          reusable page-size + page-number controls
+      AssistantPanel.tsx      Gemini chat sidebar with persistent history
     hooks/
       useTickerName.ts        debounced ticker → name resolution
 ```
@@ -308,6 +319,70 @@ it on startup — **but only when both tables are empty.**
 | GET    | /api/portfolio/realized-history?days=N | daily cumulative realized P/L         |
 | GET    | /api/portfolio/earnings-history?days=N | daily cumulative realized + dividends |
 | GET    | /api/portfolio/quote/{ticker}       | live spot quote (price + name)           |
+| GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured  |
+| POST   | /api/ai/chat                        | send a message; persists to SQLite        |
+| GET    | /api/ai/chats                       | list saved conversations, newest first   |
+| GET    | /api/ai/chats/{id}                  | fetch one conversation with all messages |
+| PATCH  | /api/ai/chats/{id}                  | rename a conversation                    |
+| DELETE | /api/ai/chats/{id}                  | delete a conversation (cascades messages)|
+
+---
+
+## AI assistant (optional)
+
+The **✦ Assistant** button in the header opens a slide-in sidebar with
+natural-language Q&A over your portfolio, powered by Google Gemini. It's
+gated by an API key — without one the sidebar shows setup instructions
+and the rest of the app works as normal.
+
+### Setup (~30 seconds)
+
+1. Visit <https://aistudio.google.com/apikey> and click **Create API key**.
+   Free tier limits are generous (15 requests/minute on
+   `gemini-2.5-flash`).
+2. Copy `backend/.env.example` to `backend/.env` and paste in your key:
+
+   ```
+   GOOGLE_AI_API_KEY=AIza...
+   ```
+
+   `backend/.env` is gitignored, so the key never reaches GitHub.
+3. Restart the backend. The sidebar now opens to a chat panel instead
+   of the setup hint.
+
+### Persistent chat history
+
+Conversations are saved to SQLite (`chats` and `chat_messages` tables)
+so they survive restarts and reloads:
+
+- The first user message becomes the chat title (auto-truncated, can be
+  renamed).
+- Click **☰** in the sidebar header to see all saved chats with title,
+  message count, and relative time. Click a row to switch into it.
+- Hover any row for ✏ rename and 🗑 delete buttons.
+- Click **+** to start a fresh chat without losing your history.
+- The most recently viewed chat is restored automatically when you
+  reopen the sidebar.
+
+### What it can / can't do
+
+- ✅ Answer questions about your local data: "what was my best dividend
+  month in 2025?", "show me losing positions", "compare realized P/L
+  vs dividends".
+- ❌ Won't give buy/sell recommendations, predictions, or news. Try it
+  and see — the system prompt forbids those answers.
+
+### Privacy tradeoff
+
+When you ask a question, your portfolio JSON (holdings, trades,
+dividends, summary) is sent to Google's API for inference. Quotes from
+TWSE MIS still happen locally. If you don't want any data going to
+Google, leave `GOOGLE_AI_API_KEY` unset and the assistant stays
+disabled — the rest of the app continues working.
+
+> **Free tier note:** Google may use your prompts to improve their
+> models on the free Gemini API tier. Switch to billing-enabled Vertex
+> AI / Cloud if that's a dealbreaker.
 
 ---
 
@@ -316,6 +391,9 @@ it on startup — **but only when both tables are empty.**
 - Your trade data lives in `backend/data/trades.db` (SQLite, on disk).
 - The DB and any `seed/` files are in `.gitignore` — they're never
   pushed to GitHub.
-- The only outbound network call is to TWSE MIS
-  (`https://mis.twse.com.tw`) for live quotes. No analytics, no
-  telemetry, no third-party storage.
+- Outbound calls:
+  - **TWSE MIS** (`https://mis.twse.com.tw`) — live quotes, always.
+  - **Google AI** (`https://generativelanguage.googleapis.com`) — only
+    when you've set `GOOGLE_AI_API_KEY` and ask a question in the
+    Assistant tab.
+- No analytics, no telemetry, no third-party storage.

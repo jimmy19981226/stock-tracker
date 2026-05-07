@@ -185,4 +185,47 @@ export const api = {
     request<HistoryByCurrency>(`/api/portfolio/realized-history?days=${days}`),
   getEarningsHistory: (days = 180) =>
     request<EarningsByCurrency>(`/api/portfolio/earnings-history?days=${days}`),
+  getAiStatus: () =>
+    request<{ configured: boolean; model: string }>("/api/ai/status"),
+  listChats: () => request<ChatSummary[]>("/api/ai/chats"),
+  getChat: (id: number) => request<ChatDetail>(`/api/ai/chats/${id}`),
+  renameChat: (id: number, title: string) =>
+    request<ChatSummary>(`/api/ai/chats/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+  deleteChat: (id: number) =>
+    request<void>(`/api/ai/chats/${id}`, { method: "DELETE" }),
+  aiChat: (chatId: number | null, message: string) =>
+    request<ChatReply>("/api/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ chat_id: chatId, message }),
+    }),
 };
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatSummary {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ChatDetail {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: ChatMessage[];
+}
+
+export interface ChatReply {
+  chat_id: number;
+  title: string;
+  message: ChatMessage;
+}

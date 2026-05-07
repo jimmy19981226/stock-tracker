@@ -8,6 +8,7 @@ import {
   type Trade,
 } from "./api";
 import { AllocationChart } from "./components/AllocationChart";
+import { AssistantPanel } from "./components/AssistantPanel";
 import { DataPanel } from "./components/DataPanel";
 import { DividendForm } from "./components/DividendForm";
 import { DividendList } from "./components/DividendList";
@@ -31,6 +32,21 @@ export default function App() {
   const [names, setNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("assistant.open") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("assistant.open", String(assistantOpen));
+    } catch {
+      /* ignore */
+    }
+  }, [assistantOpen]);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -99,7 +115,8 @@ export default function App() {
   }, [view, refresh]);
 
   return (
-    <div className="app">
+    <div className="layout">
+      <main className="app">
       <header className="app-header">
         <div className="brand-block">
           <h1>
@@ -152,6 +169,13 @@ export default function App() {
           >
             Data
           </button>
+          <button
+            className={assistantOpen ? "active assistant-toggle" : "assistant-toggle"}
+            onClick={() => setAssistantOpen((o) => !o)}
+            title="Toggle AI assistant sidebar"
+          >
+            ✦ Assistant
+          </button>
           <button className="secondary" onClick={refresh} title="Refresh prices">
             ↻
           </button>
@@ -197,6 +221,11 @@ export default function App() {
           dividends={dividends}
           onImported={refresh}
         />
+      )}
+
+      </main>
+      {assistantOpen && (
+        <AssistantPanel onClose={() => setAssistantOpen(false)} />
       )}
     </div>
   );

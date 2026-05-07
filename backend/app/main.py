@@ -3,8 +3,17 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Load backend/.env (if present) before importing routers, since ai.py
+# reads GOOGLE_AI_MODEL at module-load time.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
 from .database import Dividend, SessionLocal, Trade, init_db
-from .routers import data, dividends, portfolio, trades
+from .routers import ai, data, dividends, portfolio, trades
 from .services import csv_io
 
 SEED_FILE = (
@@ -67,3 +76,4 @@ app.include_router(trades.router)
 app.include_router(dividends.router)
 app.include_router(portfolio.router)
 app.include_router(data.router)
+app.include_router(ai.router)
