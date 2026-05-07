@@ -1,4 +1,4 @@
-# Stock Tracker
+# AI Stock Tracker
 
 A self-hosted portfolio tracker for **Taiwan equities** with
 **near-real-time prices** during market hours, manual trade entry,
