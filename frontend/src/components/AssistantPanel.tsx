@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   api,
   type ChatDetail,
@@ -129,6 +131,8 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
   const [suggestionSeed, setSuggestionSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Lets the user cancel an in-flight chat request via the Stop button.
+  const abortRef = useRef<AbortController | null>(null);
 
   // User's top tickers by market value — used to fill {ticker} placeholders
   // in suggestion templates so prompts reference what they actually own.
@@ -227,21 +231,47 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
     setInput("");
     setBusy(true);
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const reply = await api.aiChat(activeChatId, trimmed);
+      const reply = await api.aiChat(activeChatId, trimmed, controller.signal);
       setActiveChatId(reply.chat_id);
       setActiveTitle(reply.title);
       localStorage.setItem(LAST_CHAT_KEY, String(reply.chat_id));
       setMessages([...optimistic, reply.message]);
       refreshChats();
     } catch (err) {
-      // Roll the optimistic user message back so the chat doesn't show
-      // a question that was never persisted.
-      setMessages(messages);
-      setError(err instanceof Error ? err.message : "Request failed");
+      // User-initiated cancel — keep the question in the chat (the
+      // backend may still complete and store the answer; refreshing
+      // the chat will pull it in). Just clear busy state.
+      if (
+        (err instanceof DOMException && err.name === "AbortError") ||
+        (err instanceof Error && err.message.toLowerCase().includes("abort"))
+      ) {
+        // Pull whatever the backend ended up storing so the user can see
+        // a late-arriving answer if one was generated.
+        if (activeChatId != null) {
+          refreshChats();
+          api
+            .getChat(activeChatId)
+            .then((d) => setMessages(d.messages))
+            .catch(() => {
+              /* leave optimistic state */
+            });
+        }
+        setError(null);
+      } else {
+        setMessages(messages);
+        setError(err instanceof Error ? err.message : "Request failed");
+      }
     } finally {
       setBusy(false);
+      abortRef.current = null;
     }
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
   }
 
   async function handleDelete(id: number) {
@@ -405,9 +435,21 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
               placeholder="Ask about your portfolio…"
               disabled={busy}
             />
-            <button type="submit" disabled={busy || !input.trim()}>
-              Send
-            </button>
+            {busy ? (
+              <button
+                type="button"
+                onClick={stopGeneration}
+                className="assistant-stop"
+                title="Stop generating"
+              >
+                <span className="assistant-stop-icon" aria-hidden />
+                Stop
+              </button>
+            ) : (
+              <button type="submit" disabled={!input.trim()}>
+                Send
+              </button>
+            )}
           </form>
         </>
       )}
@@ -579,7 +621,23 @@ function Bubble({ message }: { message: ChatMessage }) {
         {isUser ? "You" : "Assistant"}
       </div>
       <div className={`bubble ${isUser ? "bubble-user" : "bubble-assistant"}`}>
-        {message.content}
+        {isUser ? (
+          message.content
+        ) : (
+          <div className="md-content">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              // Keep links safe — open in new tab, no referrer.
+              components={{
+                a: (props) => (
+                  <a {...props} target="_blank" rel="noopener noreferrer" />
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </div>
   );

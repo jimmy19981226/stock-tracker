@@ -197,10 +197,11 @@ export const api = {
     }),
   deleteChat: (id: number) =>
     request<void>(`/api/ai/chats/${id}`, { method: "DELETE" }),
-  aiChat: (chatId: number | null, message: string) =>
+  aiChat: (chatId: number | null, message: string, signal?: AbortSignal) =>
     request<ChatReply>("/api/ai/chat", {
       method: "POST",
       body: JSON.stringify({ chat_id: chatId, message }),
+      signal,
     }),
   getStockDetail: (ticker: string, period: HistoryPeriod = "1y") =>
     request<StockDetail>(
