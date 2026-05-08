@@ -1180,6 +1180,232 @@ main.app {
   flex-direction: column;
 }
 
+/* Welcome / empty state */
+.assistant-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 4px 16px;
+  animation: assistant-welcome-in 280ms ease;
+}
+
+@keyframes assistant-welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.assistant-welcome-mark {
+  align-self: center;
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--grad-brand);
+  color: white;
+  font-size: 22px;
+  margin-bottom: 14px;
+  box-shadow:
+    0 12px 32px -8px rgba(99, 132, 255, 0.55),
+    0 1px 0 rgba(255, 255, 255, 0.18) inset;
+}
+
+.assistant-welcome-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.assistant-welcome-sub {
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+  padding: 0 8px;
+}
+
+.assistant-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suggestion-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px !important;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 132, 255, 0.06) 0%,
+    rgba(167, 139, 250, 0.04) 100%
+  ) !important;
+  border: 1px solid rgba(99, 132, 255, 0.18) !important;
+  border-radius: 12px !important;
+  cursor: pointer;
+  text-align: left !important;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+  width: 100%;
+  font-weight: 500 !important;
+  color: var(--text) !important;
+}
+
+.suggestion-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(99, 132, 255, 0.45) !important;
+  box-shadow:
+    0 6px 20px -8px rgba(99, 132, 255, 0.35),
+    0 0 0 1px rgba(99, 132, 255, 0.18) inset;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 132, 255, 0.10) 0%,
+    rgba(167, 139, 250, 0.07) 100%
+  ) !important;
+}
+
+.suggestion-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.suggestion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.suggestion-category {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.suggestion-prompt {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text);
+  white-space: normal;
+}
+
+/* Refined message bubbles */
+.bubble-row {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+  animation: bubble-in 220ms ease;
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bubble-row-user {
+  align-items: flex-end;
+}
+
+.bubble-row-assistant {
+  align-items: flex-start;
+}
+
+.bubble-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  margin-bottom: 5px;
+  color: var(--text-2);
+}
+
+.bubble-row-user .bubble-role {
+  color: var(--accent);
+}
+
+.bubble-row-assistant .bubble-role {
+  color: var(--accent-2);
+}
+
+.bubble-role-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  background: var(--grad-brand);
+  color: white;
+  font-size: 9px;
+  box-shadow: 0 1px 4px -1px rgba(99, 132, 255, 0.5);
+}
+
+.bubble {
+  max-width: 92%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+
+.bubble-user {
+  background: linear-gradient(
+    135deg,
+    rgba(99, 132, 255, 0.18) 0%,
+    rgba(99, 132, 255, 0.10) 100%
+  );
+  border: 1px solid rgba(99, 132, 255, 0.35);
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 2px 8px -3px rgba(99, 132, 255, 0.25);
+}
+
+.bubble-assistant {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  border: 1px solid var(--border-strong);
+  border-bottom-left-radius: 4px;
+}
+
 .assistant-input-row {
   display: flex;
   gap: 6px;

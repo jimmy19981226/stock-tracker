@@ -10,15 +10,33 @@ interface Props {
   onClose: () => void;
 }
 
-const SUGGESTIONS = [
-  "How is 2330 (台積電)'s monthly revenue trending?",
-  "Is 2330's gross margin improving over the last 4 quarters?",
-  "Which of my holdings has the strongest YoY revenue growth?",
-  "Compare 2330's current price to its 1-year analyst target.",
-  "Top 3 winners by % return?",
-  "Which positions are losing money?",
-  "Best dividend month in 2025?",
-  "Summarize my 2024 performance.",
+interface Suggestion {
+  icon: string;
+  category: string;
+  prompt: string;
+}
+
+const SUGGESTIONS: Suggestion[] = [
+  {
+    icon: "📈",
+    category: "Trend analysis",
+    prompt: "How is 2330 (台積電)'s monthly revenue trending?",
+  },
+  {
+    icon: "🔬",
+    category: "Margin deep-dive",
+    prompt: "Is 2330's gross margin improving over the last 4 quarters?",
+  },
+  {
+    icon: "🎯",
+    category: "Valuation check",
+    prompt: "Compare 2330's current price to its 1-year analyst target.",
+  },
+  {
+    icon: "🏆",
+    category: "Performance",
+    prompt: "Top 3 winners in my portfolio by % return?",
+  },
 ];
 
 const LAST_CHAT_KEY = "assistant.lastChatId";
@@ -224,32 +242,32 @@ export function AssistantPanel({ onClose }: Props) {
         <>
           <div ref={scrollRef} className="assistant-messages">
             {messages.length === 0 ? (
-              <div>
-                <div
-                  className="muted"
-                  style={{ fontSize: 12, marginBottom: 10 }}
-                >
-                  Ask anything about your portfolio. Suggestions:
+              <div className="assistant-welcome">
+                <div className="assistant-welcome-mark" aria-hidden>
+                  ✦
                 </div>
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 6 }}
-                >
+                <div className="assistant-welcome-title">
+                  Ask anything about your portfolio
+                </div>
+                <div className="assistant-welcome-sub muted">
+                  I can analyze trends, compare positions, and surface insights
+                  from your live data. Try one of these:
+                </div>
+                <div className="assistant-suggestions">
                   {SUGGESTIONS.map((s) => (
                     <button
-                      key={s}
+                      key={s.prompt}
                       type="button"
-                      className="secondary"
-                      onClick={() => send(s)}
-                      style={{
-                        textAlign: "left",
-                        padding: "8px 12px",
-                        fontSize: 12.5,
-                        fontWeight: 400,
-                        color: "var(--text-2)",
-                        lineHeight: 1.4,
-                      }}
+                      className="suggestion-card"
+                      onClick={() => send(s.prompt)}
                     >
-                      {s}
+                      <span className="suggestion-icon" aria-hidden>
+                        {s.icon}
+                      </span>
+                      <span className="suggestion-body">
+                        <span className="suggestion-category">{s.category}</span>
+                        <span className="suggestion-prompt">{s.prompt}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -458,41 +476,12 @@ function SetupHelp() {
 function Bubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: isUser ? "flex-end" : "flex-start",
-        marginBottom: 12,
-      }}
-    >
-      <div
-        className="muted"
-        style={{
-          fontSize: 9,
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          marginBottom: 4,
-          color: isUser ? "var(--accent)" : "var(--accent-2)",
-        }}
-      >
+    <div className={`bubble-row ${isUser ? "bubble-row-user" : "bubble-row-assistant"}`}>
+      <div className="bubble-role">
+        {!isUser && <span className="bubble-role-mark" aria-hidden>✦</span>}
         {isUser ? "You" : "Assistant"}
       </div>
-      <div
-        style={{
-          maxWidth: "92%",
-          padding: "9px 13px",
-          borderRadius: 11,
-          fontSize: 13,
-          lineHeight: 1.55,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          background: isUser ? "var(--accent-soft)" : "var(--panel-2)",
-          border: `1px solid ${isUser ? "var(--border-accent)" : "var(--border-strong)"}`,
-          color: "var(--text)",
-        }}
-      >
+      <div className={`bubble ${isUser ? "bubble-user" : "bubble-assistant"}`}>
         {message.content}
       </div>
     </div>
