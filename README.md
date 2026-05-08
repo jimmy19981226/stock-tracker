@@ -134,20 +134,20 @@ flowchart LR
     UI[React + Vite UI<br/>polls every 5s]
   end
   subgraph Backend["FastAPI :8000"]
-    Trades[/api/trades/]
-    Dividends[/api/dividends/]
-    Portfolio[/api/portfolio/*/]
-    Stock[/api/stock/{ticker}/detail/]
-    Data[/api/data/*/]
-    AI[/api/ai/*/]
-    Quotes[tw_quotes.py<br/>5s in-mem cache]
-    SInfo[stock_info.py<br/>1h fundamentals · 6h financials]
-    DB[(SQLite<br/>trades.db<br/>chats · chat_messages)]
+    Trades["/api/trades"]
+    Dividends["/api/dividends"]
+    Portfolio["/api/portfolio/*"]
+    Stock["/api/stock/:ticker/detail"]
+    Data["/api/data/*"]
+    AI["/api/ai/*"]
+    Quotes["tw_quotes.py — 5s in-mem cache"]
+    SInfo["stock_info.py — 1h fundamentals · 6h financials"]
+    DB[("SQLite trades.db<br/>chats · chat_messages")]
   end
-  TWSE[(TWSE MIS<br/>~5s)]
-  YF[(yfinance<br/>history · fundamentals)]
-  FM[(FinMind<br/>monthly revenue)]
-  Gemini[(Google Gemini<br/>opt-in)]
+  TWSE[("TWSE MIS<br/>~5s")]
+  YF[("yfinance<br/>history · fundamentals")]
+  FM[("FinMind<br/>monthly revenue")]
+  Gemini[("Google Gemini<br/>opt-in")]
 
   UI -- "fetch /api/*" --> Trades
   UI --> Dividends
