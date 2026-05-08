@@ -327,6 +327,24 @@ export interface StockDividendMarker {
   notes: string | null;
 }
 
+export interface MonthlyRevenue {
+  month: string; // YYYY-MM
+  revenue: number;
+  yoy_pct: number | null;
+}
+
+export interface QuarterlyFinancials {
+  quarter: string; // YYYY-MM-DD
+  revenue: number | null;
+  net_income: number | null;
+  gross_profit: number | null;
+  operating_income: number | null;
+  eps_diluted: number | null;
+  gross_margin: number | null;
+  operating_margin: number | null;
+  net_margin: number | null;
+}
+
 export interface StockDetail {
   ticker: string;
   symbol: string;
@@ -339,4 +357,6 @@ export interface StockDetail {
   trades: StockTradeMarker[];
   dividends: StockDividendMarker[];
   yield_on_cost: number | null;
+  monthly_revenue: MonthlyRevenue[];
+  quarterly_financials: QuarterlyFinancials[];
 }

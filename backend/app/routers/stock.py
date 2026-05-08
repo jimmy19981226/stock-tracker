@@ -56,10 +56,12 @@ def stock_detail(
         "volume": quote.volume if quote else None,
     }
 
-    # --- fundamentals + history (yfinance, cached) ---
+    # --- fundamentals + history + financials (yfinance/FinMind, cached) ---
     fundamentals = stock_info.get_fundamentals(ticker)
     history = stock_info.get_history(ticker, period)
     taiex = stock_info.get_taiex_history(period)
+    monthly_revenue = stock_info.get_monthly_revenue(ticker, months=24)
+    quarterly_financials = stock_info.get_quarterly_financials(ticker, quarters=8)
 
     # --- position state from user's trades ---
     trades = db.query(Trade).filter(Trade.ticker == ticker).order_by(Trade.trade_date).all()
@@ -168,4 +170,6 @@ def stock_detail(
         "trades": trade_markers,
         "dividends": dividend_markers,
         "yield_on_cost": yield_on_cost,
+        "monthly_revenue": monthly_revenue,
+        "quarterly_financials": quarterly_financials,
     }

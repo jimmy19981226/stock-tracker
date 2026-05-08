@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Bar,
   CartesianGrid,
   ComposedChart,
   Line,
@@ -9,7 +10,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, type HistoryPeriod, type StockDetail } from "../api";
+import {
+  api,
+  type HistoryPeriod,
+  type MonthlyRevenue,
+  type QuarterlyFinancials,
+  type StockDetail,
+} from "../api";
 import { fmtMoney, fmtNumber, fmtPct, plClass } from "../format";
 
 interface Props {
@@ -167,6 +174,20 @@ export function StockDetail({ ticker, onClose }: Props) {
                 <PriceChart detail={data} showTaiex={showTaiex} />
               </div>
             </div>
+
+            {data.monthly_revenue.length > 0 && (
+              <div className="stock-section">
+                <h3>Monthly revenue (月營收)</h3>
+                <MonthlyRevenueChart rows={data.monthly_revenue} />
+              </div>
+            )}
+
+            {data.quarterly_financials.length > 0 && (
+              <div className="stock-section">
+                <h3>Quarterly earnings (季報)</h3>
+                <QuarterlyFinancialsChart rows={data.quarterly_financials} />
+              </div>
+            )}
 
             {(data.trades.length > 0 || data.dividends.length > 0) && (
               <div className="stock-section">
@@ -554,6 +575,196 @@ function Stat({
       <div className={`stock-stat-value ${className ?? ""}`}>{value}</div>
       {sub && <div className={`muted ${className ?? ""}`} style={{ fontSize: 11 }}>{sub}</div>}
     </div>
+  );
+}
+
+function MonthlyRevenueChart({ rows }: { rows: MonthlyRevenue[] }) {
+  // Convert revenue to NT$ B for readable y-axis. Bars in blue, YoY% as
+  // a green/red overlay line on a secondary axis.
+  const data = rows.map((r) => ({
+    month: r.month.slice(2), // YY-MM
+    revenue_b: r.revenue / 1e9,
+    revenue_nt: r.revenue,
+    yoy: r.yoy_pct,
+  }));
+  const latest = rows[rows.length - 1];
+  const ytd = rows
+    .filter((r) => r.month.startsWith(latest.month.slice(0, 4)))
+    .reduce((s, r) => s + r.revenue, 0);
+
+  return (
+    <>
+      <div className="financials-summary">
+        <Stat
+          label={`Latest · ${latest.month}`}
+          value={`NT$${(latest.revenue / 1e9).toFixed(2)} B`}
+          sub={
+            latest.yoy_pct != null
+              ? `${latest.yoy_pct >= 0 ? "+" : ""}${latest.yoy_pct.toFixed(1)}% YoY`
+              : undefined
+          }
+          className={plClass(latest.yoy_pct)}
+        />
+        <Stat label="YTD revenue" value={`NT$${(ytd / 1e9).toFixed(2)} B`} />
+        <Stat label="Months shown" value={rows.length.toString()} />
+      </div>
+      <div style={{ width: "100%", height: 260 }}>
+        <ResponsiveContainer>
+          <ComposedChart data={data} margin={{ top: 16, right: 36, left: 0, bottom: 8 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="2 6" />
+            <XAxis dataKey="month" tick={{ fill: "#6b7589", fontSize: 11 }} minTickGap={20} />
+            <YAxis
+              yAxisId="left"
+              tick={{ fill: "#6b7589", fontSize: 11 }}
+              tickFormatter={(v) => `${v.toFixed(0)}B`}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tick={{ fill: "#6b7589", fontSize: 11 }}
+              tickFormatter={(v) => `${v.toFixed(0)}%`}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "#11161f",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+              labelStyle={{ color: "#e8ecf2" }}
+              formatter={(value, name) => {
+                const v = typeof value === "number" ? value : null;
+                if (v == null) return ["—", name as string];
+                if (name === "Revenue") return [`NT$${v.toFixed(2)} B`, name as string];
+                if (name === "YoY %") return [`${v >= 0 ? "+" : ""}${v.toFixed(2)}%`, name as string];
+                return [v.toFixed(2), name as string];
+              }}
+            />
+            <Bar yAxisId="left" dataKey="revenue_b" name="Revenue" fill="#6384ff" radius={[3, 3, 0, 0]} />
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="yoy"
+              name="YoY %"
+              stroke="#fbbf24"
+              strokeWidth={2}
+              dot={{ r: 2, fill: "#fbbf24" }}
+              connectNulls
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="stock-chart-legend">
+        <LegendItem color="#6384ff" label="Monthly revenue (NT$ B)" />
+        <LegendItem color="#fbbf24" label="YoY % (right axis)" />
+      </div>
+    </>
+  );
+}
+
+function QuarterlyFinancialsChart({ rows }: { rows: QuarterlyFinancials[] }) {
+  // Two compact bar groups: revenue & net income on the left axis (NT$ B),
+  // EPS as a line on the right axis.
+  const data = rows.map((r) => ({
+    quarter: r.quarter.slice(0, 7), // YYYY-MM
+    revenue_b: r.revenue != null ? r.revenue / 1e9 : null,
+    net_income_b: r.net_income != null ? r.net_income / 1e9 : null,
+    eps: r.eps_diluted,
+    gross_margin: r.gross_margin,
+    operating_margin: r.operating_margin,
+    net_margin: r.net_margin,
+  }));
+  const latest = rows[rows.length - 1];
+
+  return (
+    <>
+      <div className="financials-summary">
+        <Stat
+          label={`Latest · ${latest.quarter.slice(0, 7)}`}
+          value={
+            latest.eps_diluted != null ? `NT$${latest.eps_diluted.toFixed(2)} EPS` : "—"
+          }
+          sub={
+            latest.revenue != null
+              ? `Rev NT$${(latest.revenue / 1e9).toFixed(0)} B`
+              : undefined
+          }
+        />
+        <Stat
+          label="Gross margin"
+          value={
+            latest.gross_margin != null
+              ? `${latest.gross_margin.toFixed(1)}%`
+              : "—"
+          }
+        />
+        <Stat
+          label="Operating margin"
+          value={
+            latest.operating_margin != null
+              ? `${latest.operating_margin.toFixed(1)}%`
+              : "—"
+          }
+        />
+        <Stat
+          label="Net margin"
+          value={
+            latest.net_margin != null ? `${latest.net_margin.toFixed(1)}%` : "—"
+          }
+        />
+      </div>
+      <div style={{ width: "100%", height: 260 }}>
+        <ResponsiveContainer>
+          <ComposedChart data={data} margin={{ top: 16, right: 36, left: 0, bottom: 8 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="2 6" />
+            <XAxis dataKey="quarter" tick={{ fill: "#6b7589", fontSize: 11 }} />
+            <YAxis
+              yAxisId="left"
+              tick={{ fill: "#6b7589", fontSize: 11 }}
+              tickFormatter={(v) => `${v.toFixed(0)}B`}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tick={{ fill: "#6b7589", fontSize: 11 }}
+              tickFormatter={(v) => `${v.toFixed(0)}`}
+            />
+            <Tooltip
+              contentStyle={{
+                background: "#11161f",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+              labelStyle={{ color: "#e8ecf2" }}
+              formatter={(value, name) => {
+                const v = typeof value === "number" ? value : null;
+                if (v == null) return ["—", name as string];
+                if (name === "EPS") return [`NT$${v.toFixed(2)}`, name as string];
+                return [`NT$${v.toFixed(2)} B`, name as string];
+              }}
+            />
+            <Bar yAxisId="left" dataKey="revenue_b" name="Revenue" fill="#6384ff" radius={[3, 3, 0, 0]} />
+            <Bar yAxisId="left" dataKey="net_income_b" name="Net Income" fill="#34d399" radius={[3, 3, 0, 0]} />
+            <Line
+              yAxisId="right"
+              type="monotone"
+              dataKey="eps"
+              name="EPS"
+              stroke="#fbbf24"
+              strokeWidth={2}
+              dot={{ r: 3, fill: "#fbbf24" }}
+              connectNulls
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="stock-chart-legend">
+        <LegendItem color="#6384ff" label="Revenue (NT$ B)" />
+        <LegendItem color="#34d399" label="Net income (NT$ B)" />
+        <LegendItem color="#fbbf24" label="Diluted EPS (NT$, right)" />
+      </div>
+    </>
   );
 }
 

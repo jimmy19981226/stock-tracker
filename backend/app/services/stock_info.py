@@ -13,7 +13,10 @@ MIS so it reflects intraday movement, not yesterday's close.
 """
 from __future__ import annotations
 
+import json
 import time
+import urllib.parse
+import urllib.request
 from datetime import date, datetime, timezone
 from threading import Lock
 from typing import Any
@@ -21,12 +24,21 @@ from typing import Any
 from .quotes import resolve_symbol
 
 
-_FUNDAMENTALS_TTL = 3600.0   # 1 hour
-_HISTORY_TTL = 1800.0        # 30 minutes
+_FUNDAMENTALS_TTL = 3600.0    # 1 hour
+_HISTORY_TTL = 1800.0          # 30 minutes
+_FINANCIALS_TTL = 6 * 3600.0   # 6 hours — month/quarter data updates rarely
 
 _fundamentals_cache: dict[str, tuple[float, dict]] = {}
 _history_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+_monthly_revenue_cache: dict[str, tuple[float, list[dict]]] = {}
+_quarterly_financials_cache: dict[str, tuple[float, list[dict]]] = {}
 _lock = Lock()
+
+
+def _bare_tw(ticker: str) -> str:
+    """Strip .TW/.TWO suffix to get the numeric code FinMind expects."""
+    t = ticker.strip().upper()
+    return t.split(".", 1)[0] if "." in t else t
 
 
 def _yticker(ticker: str):
@@ -203,3 +215,142 @@ def get_history(ticker: str, period: str = "1y") -> list[dict]:
 def get_taiex_history(period: str = "1y") -> list[dict]:
     """TAIEX (台股加權) daily history for benchmark comparison."""
     return get_history("^TWII", period)
+
+
+# ---------------------------------------------------------------------
+# Taiwan-specific financials — monthly revenue + quarterly EPS
+# ---------------------------------------------------------------------
+
+_FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
+
+
+def get_monthly_revenue(ticker: str, months: int = 24) -> list[dict]:
+    """Last `months` months of revenue from FinMind (free tier, no key
+    needed for this dataset). Each row: {month, revenue, yoy_pct}.
+
+    The `month` field is the actual reporting month (e.g. "2026-04" =
+    April 2026 revenue), not FinMind's internal `date` (which is the
+    filing date). yoy_pct compares to the same month a year prior.
+    """
+    bare = _bare_tw(ticker)
+    if not bare.isdigit() and not (bare[:-1].isdigit() and bare[-1].isalpha()):
+        return []
+
+    now = time.time()
+    with _lock:
+        cached = _monthly_revenue_cache.get(bare)
+        if cached and now - cached[0] < _FINANCIALS_TTL:
+            return cached[1][-months:]
+
+    # Pull a wide window so YoY pairs always have prior-year data.
+    start = (datetime.now(timezone.utc).date().replace(day=1)).replace(
+        year=datetime.now(timezone.utc).year - 3
+    ).isoformat()
+    url = f"{_FINMIND_URL}?" + urllib.parse.urlencode({
+        "dataset": "TaiwanStockMonthRevenue",
+        "data_id": bare,
+        "start_date": start,
+    })
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = json.loads(resp.read())
+    except Exception:
+        return []
+
+    raw = payload.get("data") or []
+    # Build a {YYYY-MM: revenue} lookup keyed by the actual reporting month.
+    by_month: dict[str, int] = {}
+    for r in raw:
+        try:
+            y = int(r["revenue_year"])
+            m = int(r["revenue_month"])
+            v = int(r["revenue"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        by_month[f"{y:04d}-{m:02d}"] = v
+
+    if not by_month:
+        return []
+
+    rows: list[dict] = []
+    for key in sorted(by_month):
+        rev = by_month[key]
+        # YoY: compare to the same month in the prior year.
+        y = int(key[:4]) - 1
+        m = key[5:]
+        prev = by_month.get(f"{y}-{m}")
+        yoy_pct = ((rev - prev) / prev * 100) if prev else None
+        rows.append({"month": key, "revenue": rev, "yoy_pct": yoy_pct})
+
+    with _lock:
+        _monthly_revenue_cache[bare] = (now, rows)
+    return rows[-months:]
+
+
+def get_quarterly_financials(ticker: str, quarters: int = 8) -> list[dict]:
+    """Last `quarters` quarters from yfinance's quarterly_income_stmt.
+
+    Each row: {quarter, revenue, net_income, gross_profit, operating_income,
+    eps_diluted, gross_margin, operating_margin, net_margin}.
+    Margins computed locally as percentages.
+    """
+    sym = resolve_symbol(ticker)
+    now = time.time()
+    with _lock:
+        cached = _quarterly_financials_cache.get(sym)
+        if cached and now - cached[0] < _FINANCIALS_TTL:
+            return cached[1][-quarters:]
+
+    try:
+        df = _yticker(ticker).quarterly_income_stmt
+    except Exception:
+        return []
+
+    if df is None or df.empty:
+        return []
+
+    def _row(label: str, col) -> float | None:
+        if label not in df.index:
+            return None
+        v = df.loc[label, col]
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return None
+        # NaN check
+        return v if v == v else None
+
+    out: list[dict] = []
+    # Columns are Timestamps, newest first; iterate so output is oldest-first.
+    for col in reversed(list(df.columns)):
+        revenue = _row("Total Revenue", col)
+        net_income = _row("Net Income", col)
+        gross_profit = _row("Gross Profit", col)
+        operating_income = _row("Operating Income", col)
+        eps = _row("Diluted EPS", col) or _row("Basic EPS", col)
+
+        gross_margin = (gross_profit / revenue * 100) if revenue and gross_profit else None
+        operating_margin = (operating_income / revenue * 100) if revenue and operating_income else None
+        net_margin = (net_income / revenue * 100) if revenue and net_income else None
+
+        try:
+            qkey = col.date().isoformat() if hasattr(col, "date") else str(col)[:10]
+        except Exception:
+            qkey = str(col)[:10]
+
+        out.append({
+            "quarter": qkey,
+            "revenue": int(revenue) if revenue else None,
+            "net_income": int(net_income) if net_income else None,
+            "gross_profit": int(gross_profit) if gross_profit else None,
+            "operating_income": int(operating_income) if operating_income else None,
+            "eps_diluted": eps,
+            "gross_margin": gross_margin,
+            "operating_margin": operating_margin,
+            "net_margin": net_margin,
+        })
+
+    with _lock:
+        _quarterly_financials_cache[sym] = (now, out)
+    return out[-quarters:]
