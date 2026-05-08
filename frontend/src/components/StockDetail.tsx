@@ -57,6 +57,12 @@ export function StockDetail({ ticker, onClose }: Props) {
     };
   }, [ticker, period]);
 
+  // True only on the very first fetch (no data yet). Period changes show the
+  // existing modal contents until the new data arrives, with a subtle spinner
+  // on the chart section so the rest of the page doesn't blink.
+  const initialLoading = loading && !data;
+  const refreshing = loading && !!data;
+
   // Close on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -101,10 +107,10 @@ export function StockDetail({ ticker, onClose }: Props) {
           </button>
         </header>
 
-        {loading && <div className="empty" style={{ padding: 32 }}>Loading…</div>}
+        {initialLoading && <div className="empty" style={{ padding: 32 }}>Loading…</div>}
         {error && <div className="error">{error}</div>}
 
-        {data && !loading && (
+        {data && (
           <div className="stock-modal-body">
             <PriceRow detail={data} />
             {data.position && <PositionCard detail={data} />}
@@ -112,7 +118,20 @@ export function StockDetail({ ticker, onClose }: Props) {
 
             <div className="stock-section">
               <div className="stock-section-header">
-                <h3>Price history</h3>
+                <h3>
+                  Price history
+                  {refreshing && (
+                    <span
+                      className="muted"
+                      style={{ marginLeft: 8, fontSize: 10, fontWeight: 500 }}
+                    >
+                      <span className="thinking-dots">
+                        <span /> <span /> <span />
+                      </span>{" "}
+                      Loading…
+                    </span>
+                  )}
+                </h3>
                 <div className="stock-period-tabs">
                   {PERIODS.map((p) => (
                     <button
@@ -120,6 +139,7 @@ export function StockDetail({ ticker, onClose }: Props) {
                       type="button"
                       className={`secondary ${period === p.value ? "active" : ""}`}
                       onClick={() => setPeriod(p.value)}
+                      disabled={refreshing}
                     >
                       {p.label}
                     </button>
@@ -143,7 +163,9 @@ export function StockDetail({ ticker, onClose }: Props) {
                   </label>
                 </div>
               </div>
-              <PriceChart detail={data} showTaiex={showTaiex} />
+              <div style={{ opacity: refreshing ? 0.55 : 1, transition: "opacity 150ms" }}>
+                <PriceChart detail={data} showTaiex={showTaiex} />
+              </div>
             </div>
 
             {(data.trades.length > 0 || data.dividends.length > 0) && (
