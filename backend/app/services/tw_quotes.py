@@ -18,10 +18,31 @@ import re
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Iterable
 
 from .quotes import QuoteData, resolve_symbol
+
+
+_TAIPEI = timezone(timedelta(hours=8))
+
+
+def _is_tw_market_open(now: datetime | None = None) -> bool:
+    """09:00-13:30 Taipei time, Monday-Friday. Used to decide whether MIS's
+    `y` field is yesterday's close (during session) vs today's close that
+    has rolled over (after session)."""
+    tw = (now or datetime.now(timezone.utc)).astimezone(_TAIPEI)
+    if tw.weekday() >= 5:
+        return False
+    minutes = tw.hour * 60 + tw.minute
+    return 9 * 60 <= minutes < 13 * 60 + 30
+
+
+def _first_token(s: str) -> str:
+    """MIS bid/ask fields look like 2300.0000_2305.0000_..._. Return the
+    first token, stripped."""
+    return s.strip().split("_", 1)[0].strip() if s else ""
 
 
 _MIS_URL = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp"
@@ -36,6 +57,12 @@ _TTL_SECONDS = 5.0
 _TICKER_RE = re.compile(r"^\d{4,6}[A-Z]?$")
 
 _cache: dict[str, tuple[float, QuoteData]] = {}
+# Long-lived "last good" snapshot per ticker. MIS returns z="-" between
+# trades and rolls `y` to today's close after the session ends, so a naive
+# read shows today_change = 0. We hold onto the most recent QuoteData where
+# z was a real number (and y was still yesterday's close) and serve that
+# whenever MIS gives us a degraded response.
+_last_good: dict[str, QuoteData] = {}
 _lock = Lock()
 
 
@@ -105,29 +132,78 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
     except Exception:
         return out  # silent failure; caller falls back
 
+    market_open = _is_tw_market_open()
     fresh: dict[str, QuoteData] = {}
     for item in payload.get("msgArray", []) or []:
         bare = (item.get("c") or "").strip()
         if not bare:
             continue
         z = (item.get("z") or "").strip()  # last trade price
-        y = (item.get("y") or "").strip()  # yesterday's close
-        try:
-            price: float | None = (
-                float(z) if z and z != "-" else (float(y) if y and y != "-" else None)
-            )
-            prev: float | None = float(y) if y and y != "-" else None
-        except ValueError:
-            continue
+        y = (item.get("y") or "").strip()  # yesterday's close (rolls after market close)
+        n = (item.get("n") or "").strip()
+        z_valid = z and z != "-"
+        y_valid = y and y != "-"
+        last = _last_good.get(bare)
+
+        # Current price priority: z (live trade) → bid/ask midpoint
+        # (between trades but session active) → today's open → cached last
+        # good → y. MIS uses "0.0000" as a placeholder in some bid/ask
+        # levels, so anything ≤ 0 is treated as invalid.
+        def _pos_float(s: str) -> float | None:
+            s = (s or "").strip()
+            if not s or s == "-":
+                return None
+            try:
+                v = float(s)
+            except ValueError:
+                return None
+            return v if v > 0 else None
+
+        price: float | None = _pos_float(z) if z_valid else None
+        if price is None:
+            a0 = _pos_float(_first_token(item.get("a") or ""))
+            b0 = _pos_float(_first_token(item.get("b") or ""))
+            if a0 is not None and b0 is not None:
+                price = (a0 + b0) / 2
+            elif a0 is not None:
+                price = a0
+            elif b0 is not None:
+                price = b0
+        if price is None:
+            price = _pos_float(item.get("o") or "")
+        if price is None and last is not None:
+            price = last.price
+        if price is None and y_valid:
+            price = _pos_float(y)
         if price is None:
             continue
-        fresh[bare] = QuoteData(
+
+        # Previous close: trust y only during market hours (it rolls to
+        # today's close after the session ends). Outside market hours,
+        # prefer the cached value captured during the last session.
+        prev: float | None = None
+        if market_open and y_valid:
+            try:
+                prev = float(y)
+            except ValueError:
+                pass
+        elif last is not None:
+            prev = last.previous_close
+        elif y_valid:
+            try:
+                prev = float(y)
+            except ValueError:
+                pass
+
+        q = QuoteData(
             symbol=resolve_symbol(bare),
             price=price,
             previous_close=prev,
             currency="TWD",
-            name=(item.get("n") or "").strip(),
+            name=n or (last.name if last else ""),
         )
+        _last_good[bare] = q
+        fresh[bare] = q
 
     with _lock:
         for bare, q in fresh.items():
