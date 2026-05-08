@@ -14,6 +14,7 @@ MIS so it reflects intraday movement, not yesterday's close.
 from __future__ import annotations
 
 import time
+from datetime import date, datetime, timezone
 from threading import Lock
 from typing import Any
 
@@ -35,6 +36,38 @@ def _yticker(ticker: str):
     return yf.Ticker(resolve_symbol(ticker))
 
 
+def _normalize_date(value: Any) -> str | None:
+    """yfinance returns calendar dates as Unix-epoch ints, datetime/date
+    objects, or already-formatted strings (and sometimes lists for ranged
+    earnings estimates). Always return a single ISO date string or None."""
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)) and value:
+        # Earnings estimates often come as [start, end]; show the earliest.
+        value = value[0]
+    if isinstance(value, (datetime, date)):
+        return (value.date() if isinstance(value, datetime) else value).isoformat()
+    if isinstance(value, (int, float)):
+        # Unix epoch seconds (sometimes ms — rough sanity threshold).
+        try:
+            secs = float(value)
+            if secs > 1e12:  # likely ms
+                secs /= 1000
+            return datetime.fromtimestamp(secs, tz=timezone.utc).date().isoformat()
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return None
+        # Already an ISO date or datetime string?
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).date().isoformat()
+        except ValueError:
+            return s  # unrecognized but non-empty — pass through
+    return None
+
+
 def get_fundamentals(ticker: str) -> dict[str, Any]:
     """Return a small subset of yfinance ``info`` keys: market cap, P/E, EPS,
     dividend yield, 52-week range, sector, industry, name. Missing fields
@@ -47,8 +80,19 @@ def get_fundamentals(ticker: str) -> dict[str, Any]:
             return cached[1]
 
     info: dict = {}
+    calendar: dict | None = None
     try:
-        info = _yticker(ticker).info or {}
+        yt = _yticker(ticker)
+        info = yt.info or {}
+        # ticker.calendar holds the next earnings date (a dict with
+        # "Earnings Date": [d1, d2]) when yfinance can find it. info's
+        # "earningsDate" is unreliable — often missing for non-US tickers.
+        try:
+            cal = yt.calendar
+            if isinstance(cal, dict):
+                calendar = cal
+        except Exception:
+            calendar = None
     except Exception:
         info = {}
 
@@ -83,6 +127,30 @@ def get_fundamentals(ticker: str) -> dict[str, Any]:
         "book_value": info.get("bookValue"),
         "price_to_book": info.get("priceToBook"),
         "shares_outstanding": info.get("sharesOutstanding"),
+        # Volume averages — Yahoo's "Avg. Volume" is the 3-month avg
+        # (info["averageVolume"]); the 10-day version is also useful
+        # for short-term context.
+        "average_volume": info.get("averageVolume"),
+        "average_volume_10d": info.get("averageVolume10days") or info.get("averageDailyVolume10Day"),
+        # Calendar dates — yfinance returns these as ISO strings, ints
+        # (Unix epoch in seconds), or datetime/date objects depending
+        # on the ticker and version. Normalize all to ISO date strings.
+        # Prefer ticker.calendar for earnings date (info field is often
+        # missing on non-US tickers).
+        "earnings_date": _normalize_date(
+            (calendar or {}).get("Earnings Date")
+            or info.get("earningsDate")
+        ),
+        "ex_dividend_date": _normalize_date(info.get("exDividendDate")),
+        "last_dividend_date": _normalize_date(info.get("lastDividendDate")),
+        # Analyst price targets
+        "target_mean_price": info.get("targetMeanPrice"),
+        "target_median_price": info.get("targetMedianPrice"),
+        "target_high_price": info.get("targetHighPrice"),
+        "target_low_price": info.get("targetLowPrice"),
+        "analyst_count": info.get("numberOfAnalystOpinions"),
+        "recommendation_mean": info.get("recommendationMean"),
+        "recommendation_key": info.get("recommendationKey"),
     }
 
     with _lock:

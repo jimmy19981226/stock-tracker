@@ -112,9 +112,9 @@ export function StockDetail({ ticker, onClose }: Props) {
 
         {data && (
           <div className="stock-modal-body">
-            <PriceRow detail={data} />
+            <PriceHero detail={data} />
+            <KeyStatsGrid detail={data} />
             {data.position && <PositionCard detail={data} />}
-            <FundamentalsGrid detail={data} />
 
             <div className="stock-section">
               <div className="stock-section-header">
@@ -181,40 +181,126 @@ export function StockDetail({ ticker, onClose }: Props) {
   );
 }
 
-function PriceRow({ detail }: { detail: StockDetail }) {
+function PriceHero({ detail }: { detail: StockDetail }) {
   const { live } = detail;
+  return (
+    <div className="stock-price-hero">
+      <div className="muted micro-label">Last price</div>
+      <div className="stock-price">{fmtMoney(live.price, "TWD")}</div>
+      <div className={`sub ${plClass(live.today_change)}`} style={{ fontSize: 14 }}>
+        {live.today_change != null
+          ? `${live.today_change > 0 ? "+" : ""}${live.today_change.toFixed(2)}`
+          : "—"}{" "}
+        ({fmtPct(live.today_change_pct)})
+      </div>
+    </div>
+  );
+}
+
+function KeyStatsGrid({ detail }: { detail: StockDetail }) {
+  const { live, fundamentals: f } = detail;
+
+  // Volume: MIS gives 張 (lots of 1000). Convert to shares for parity with
+  // Yahoo's display, but keep 張 in a sub-line so TW investors recognize it.
+  const liveVolumeShares = live.volume != null ? live.volume * 1000 : null;
+
+  const fmtMcap = (v: number | null | undefined) => {
+    if (v == null) return "—";
+    if (v >= 1e12) return `${(v / 1e12).toFixed(3)}T`;
+    if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+    if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+    return v.toLocaleString();
+  };
+
+  const fmtBigInt = (v: number | null | undefined) =>
+    v != null ? Math.round(v).toLocaleString() : "—";
+
   const dayRange =
     live.day_low != null && live.day_high != null
       ? `${live.day_low.toFixed(2)} – ${live.day_high.toFixed(2)}`
       : "—";
+
+  const wkRange =
+    f.fifty_two_week_low != null && f.fifty_two_week_high != null
+      ? `${f.fifty_two_week_low.toFixed(2)} – ${f.fifty_two_week_high.toFixed(2)}`
+      : "—";
+
+  const fwdDivYield =
+    f.dividend_rate != null && f.dividend_yield != null
+      ? `${f.dividend_rate.toFixed(2)} (${(f.dividend_yield * 100).toFixed(2)}%)`
+      : f.dividend_rate != null
+        ? f.dividend_rate.toFixed(2)
+        : "—";
+
   return (
-    <div className="stock-price-row">
-      <div>
-        <div className="muted micro-label">Last price</div>
-        <div className="stock-price">{fmtMoney(live.price, "TWD")}</div>
-        <div className={`sub ${plClass(live.today_change)}`} style={{ fontSize: 13 }}>
-          {live.today_change != null
-            ? `${live.today_change > 0 ? "+" : ""}${live.today_change.toFixed(2)}`
-            : "—"}{" "}
-          ({fmtPct(live.today_change_pct)})
-        </div>
+    <div className="stock-keystats">
+      <div className="stock-keystats-col">
+        <KV label="Previous Close" value={fmtMoney(live.previous_close, "TWD")} />
+        <KV label="Open" value={fmtMoney(live.day_open, "TWD")} />
+        <KV label="Bid" value={live.bid != null ? `${live.bid.toFixed(2)} x —` : "—"} />
+        <KV label="Ask" value={live.ask != null ? `${live.ask.toFixed(2)} x —` : "—"} />
       </div>
-      <Stat label="Open" value={fmtMoney(live.day_open, "TWD")} />
-      <Stat label="Day range" value={dayRange} />
-      <Stat label="Bid / Ask" value={`${fmtMoney(live.bid, "TWD")} / ${fmtMoney(live.ask, "TWD")}`} />
-      <Stat
-        label="Volume"
-        value={
-          live.volume != null
-            ? `${live.volume.toLocaleString()} 張`
-            : "—"
-        }
-        sub={
-          live.volume != null
-            ? `${(live.volume * 1000).toLocaleString()} shares`
-            : undefined
-        }
-      />
+      <div className="stock-keystats-col">
+        <KV label="Day's Range" value={dayRange} />
+        <KV label="52 Week Range" value={wkRange} />
+        <KV label="Volume" value={fmtBigInt(liveVolumeShares)} sub={live.volume != null ? `${live.volume.toLocaleString()} 張` : undefined} />
+        <KV label="Avg. Volume" value={fmtBigInt(f.average_volume)} />
+      </div>
+      <div className="stock-keystats-col">
+        <KV label="Market Cap (intraday)" value={fmtMcap(f.market_cap)} />
+        <KV label="Beta (5Y Monthly)" value={f.beta != null ? f.beta.toFixed(2) : "—"} />
+        <KV label="PE Ratio (TTM)" value={f.pe != null ? f.pe.toFixed(2) : "—"} />
+        <KV label="EPS (TTM)" value={f.eps != null ? f.eps.toFixed(2) : "—"} />
+      </div>
+      <div className="stock-keystats-col">
+        <KV label="Earnings Date (est.)" value={fmtPrettyDate(f.earnings_date)} />
+        <KV label="Forward Dividend & Yield" value={fwdDivYield} />
+        <KV label="Ex-Dividend Date" value={fmtPrettyDate(f.ex_dividend_date)} />
+        <KV
+          label="1y Target Est"
+          value={f.target_mean_price != null ? f.target_mean_price.toFixed(2) : "—"}
+          sub={
+            f.analyst_count != null && f.analyst_count > 0
+              ? `${f.analyst_count} analysts`
+              : undefined
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function fmtPrettyDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function KV({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="stock-kv">
+      <span className="stock-kv-label">{label}</span>
+      <span className="stock-kv-value">
+        {value}
+        {sub && <span className="stock-kv-sub muted"> · {sub}</span>}
+      </span>
     </div>
   );
 }
@@ -266,72 +352,6 @@ function PositionCard({ detail }: { detail: StockDetail }) {
         />
         <Stat label="Trades" value={p.trade_count.toString()} />
         <Stat label="Fees paid" value={fmtMoney(p.fees_paid, "TWD")} />
-      </div>
-    </div>
-  );
-}
-
-function FundamentalsGrid({ detail }: { detail: StockDetail }) {
-  const f = detail.fundamentals;
-  if (!f || Object.values(f).every((v) => v == null)) {
-    return null;
-  }
-  const fmtMcap = (v: number | null | undefined) => {
-    if (v == null) return "—";
-    if (v >= 1e12) return `NT$${(v / 1e12).toFixed(2)} T`;
-    if (v >= 1e9) return `NT$${(v / 1e9).toFixed(2)} B`;
-    if (v >= 1e6) return `NT$${(v / 1e6).toFixed(2)} M`;
-    return fmtMoney(v, "TWD");
-  };
-  return (
-    <div className="stock-section">
-      <h3>Market data</h3>
-      <div className="stock-stat-grid">
-        <Stat label="Market cap" value={fmtMcap(f.market_cap)} />
-        <Stat
-          label="P/E (TTM)"
-          value={f.pe != null ? f.pe.toFixed(2) : "—"}
-        />
-        <Stat
-          label="EPS (TTM)"
-          value={f.eps != null ? `NT$${f.eps.toFixed(2)}` : "—"}
-        />
-        <Stat
-          label="Dividend yield"
-          value={
-            f.dividend_yield != null
-              ? `${(f.dividend_yield * 100).toFixed(2)}%`
-              : "—"
-          }
-        />
-        <Stat
-          label="52-week high"
-          value={fmtMoney(f.fifty_two_week_high ?? null, "TWD")}
-        />
-        <Stat
-          label="52-week low"
-          value={fmtMoney(f.fifty_two_week_low ?? null, "TWD")}
-        />
-        <Stat
-          label="50-day avg"
-          value={fmtMoney(f.fifty_day_avg ?? null, "TWD")}
-        />
-        <Stat
-          label="200-day avg"
-          value={fmtMoney(f.two_hundred_day_avg ?? null, "TWD")}
-        />
-        <Stat
-          label="Beta"
-          value={f.beta != null ? f.beta.toFixed(2) : "—"}
-        />
-        <Stat
-          label="P/B"
-          value={f.price_to_book != null ? f.price_to_book.toFixed(2) : "—"}
-        />
-        <Stat
-          label="Industry"
-          value={f.industry ?? "—"}
-        />
       </div>
     </div>
   );

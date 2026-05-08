@@ -272,6 +272,18 @@ export interface StockDetailFundamentals {
   book_value?: number | null;
   price_to_book?: number | null;
   shares_outstanding?: number | null;
+  average_volume?: number | null;
+  average_volume_10d?: number | null;
+  earnings_date?: string | null;
+  ex_dividend_date?: string | null;
+  last_dividend_date?: string | null;
+  target_mean_price?: number | null;
+  target_median_price?: number | null;
+  target_high_price?: number | null;
+  target_low_price?: number | null;
+  analyst_count?: number | null;
+  recommendation_mean?: number | null;
+  recommendation_key?: string | null;
 }
 
 export interface StockDetailPosition {
