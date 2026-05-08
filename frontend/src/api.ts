@@ -42,12 +42,13 @@ export interface Holding {
 
 export interface CurrencySummary {
   currency: string;
-  total_value: number;
+  // null while MIS quotes are temporarily unavailable for every position
+  total_value: number | null;
   total_cost: number;
-  total_pl: number;
-  total_pl_pct: number;
-  today_pl: number;
-  today_pl_pct: number;
+  total_pl: number | null;
+  total_pl_pct: number | null;
+  today_pl: number | null;
+  today_pl_pct: number | null;
   realized_pl: number;
   dividends: number;
   total_earned: number;

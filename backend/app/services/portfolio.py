@@ -161,13 +161,24 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
     summaries: list[dict] = []
     for currency in all_currencies:
         items = groups.get(currency, [])
-        total_value = sum((h["market_value"] or 0.0) for h in items)
         total_cost = sum(h["cost_basis"] for h in items)
-        total_pl = total_value - total_cost
-        total_pl_pct = (total_pl / total_cost * 100) if total_cost > 0 else 0.0
-        today_pl = sum((h["today_change"] or 0.0) for h in items)
-        prev_value = total_value - today_pl
-        today_pl_pct = (today_pl / prev_value * 100) if prev_value > 0 else 0.0
+        # When MIS returns no price for ANY position (transient failure),
+        # report null for live-data fields so the UI shows "—" instead of a
+        # fake -100% loss. Cost / realized / dividends still render normally.
+        priced = [h for h in items if h["market_value"] is not None]
+        if items and not priced:
+            total_value: float | None = None
+            total_pl: float | None = None
+            total_pl_pct: float | None = None
+            today_pl: float | None = None
+            today_pl_pct: float | None = None
+        else:
+            total_value = sum((h["market_value"] or 0.0) for h in items)
+            total_pl = total_value - total_cost
+            total_pl_pct = (total_pl / total_cost * 100) if total_cost > 0 else 0.0
+            today_pl = sum((h["today_change"] or 0.0) for h in items)
+            prev_value = total_value - today_pl
+            today_pl_pct = (today_pl / prev_value * 100) if prev_value > 0 else 0.0
         realized = realized_by_currency.get(currency, 0.0)
         dividends = dividends_by_currency.get(currency, 0.0)
         summaries.append(
