@@ -272,17 +272,20 @@ function KeyStatsGrid({ detail }: { detail: StockDetail }) {
 
 function fmtPrettyDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  } catch {
-    return iso;
-  }
+  // Parse YYYY-MM-DD without TZ. `new Date("2026-07-15")` parses as UTC
+  // midnight, and locale-formatting then shifts to local — which makes
+  // the date display one day earlier in browsers west of UTC.
+  // Build a local Date from the components so the calendar date the
+  // backend sent is preserved verbatim.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function KV({
