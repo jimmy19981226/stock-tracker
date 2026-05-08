@@ -148,6 +148,7 @@ body::after {
   color: var(--text);
 }
 
+/* Themed scrollbars — Chromium */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -164,6 +165,28 @@ body::after {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.14);
   background-clip: padding-box;
+}
+
+/* Themed scrollbars — Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+/* Smooth in-page anchor scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Branded keyboard-focus ring (mouse focus styles stay intact via :focus) */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+button:focus-visible,
+.row-clickable:focus-visible {
+  outline-offset: 3px;
 }
 
 /* Buttons */
@@ -408,6 +431,33 @@ header.app-header nav button.active {
     0 1px 0 rgba(255, 255, 255, 0.06) inset,
     0 0 0 1px var(--border-strong),
     0 4px 12px -4px rgba(0, 0, 0, 0.4);
+  position: relative;
+}
+
+/* Subtle accent underline glow on the active tab — feels more app-like
+   than just a fill change. */
+header.app-header nav button.active::after {
+  content: "";
+  position: absolute;
+  left: 28%;
+  right: 28%;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--grad-brand);
+  box-shadow: 0 0 8px rgba(99, 132, 255, 0.5);
+  animation: nav-underline-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes nav-underline-in {
+  from {
+    transform: scaleX(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
 }
 
 header.app-header nav .secondary {
@@ -424,11 +474,36 @@ header.app-header nav .secondary {
   margin-bottom: 18px;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 200ms ease, border-color 200ms ease;
+  /* Fade up on mount — fires when the parent view's conditional swaps
+     subtrees (e.g. Dashboard -> Trades). Stays still during polling
+     refreshes since the panels stay mounted. */
+  animation: panel-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .panel:hover {
   box-shadow: var(--shadow-md);
 }
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Stagger the panels in a view so they cascade in instead of all
+   appearing at once. Capped at 6 because that's the most we ever stack. */
+main.app > .panel:nth-of-type(1) { animation-delay: 0ms; }
+main.app > .panel:nth-of-type(2) { animation-delay: 50ms; }
+main.app > .panel:nth-of-type(3) { animation-delay: 100ms; }
+main.app > .panel:nth-of-type(4) { animation-delay: 150ms; }
+main.app > .panel:nth-of-type(5) { animation-delay: 200ms; }
+main.app > .panel:nth-of-type(6) { animation-delay: 250ms; }
+main.app > .dual-grid { animation-delay: 200ms; }
 
 .panel h2 {
   margin: 0 0 18px;
@@ -450,6 +525,7 @@ header.app-header nav .secondary {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 14px;
+  font-variant-numeric: tabular-nums;
   padding: 20px 22px;
   position: relative;
   min-width: 0;
