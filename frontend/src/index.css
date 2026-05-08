@@ -1240,6 +1240,26 @@ main.app {
   gap: 8px;
 }
 
+.assistant-shuffle {
+  margin-top: 12px;
+  align-self: center;
+  padding: 6px 14px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: var(--text-2) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 999px !important;
+  letter-spacing: 0.02em;
+  transition: all 140ms ease;
+}
+
+.assistant-shuffle:hover {
+  color: var(--accent) !important;
+  border-color: rgba(99, 132, 255, 0.4) !important;
+  background: rgba(99, 132, 255, 0.06) !important;
+}
+
 .suggestion-card {
   display: flex;
   align-items: flex-start;

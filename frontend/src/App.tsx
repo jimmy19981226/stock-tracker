@@ -227,7 +227,10 @@ export default function App() {
 
       </main>
       {assistantOpen && (
-        <AssistantPanel onClose={() => setAssistantOpen(false)} />
+        <AssistantPanel
+          holdings={holdings}
+          onClose={() => setAssistantOpen(false)}
+        />
       )}
       {selectedTicker && (
         <StockDetail
