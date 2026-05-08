@@ -69,10 +69,10 @@ threads, or delete the ones you don't want to keep.
   09:00–13:30 Taipei time, weekdays.
 - **Stock names** auto-pulled from MIS — `2330` shows `台積電` next
   to it on holdings, trades, dividends, allocation, and the entry forms.
-- **Broker-matching P/L** — market values and unrealized P/L are net of
-  estimated TW sell-side fees (0.4425% common stock / 0.2425% ETF /
-  0.1425% bond ETF), so totals line up with what `永豐 e-Leader`,
-  `元大投資先生`, and other broker apps display under 總現值 / 損益試算.
+- **Broker-matching P/L** — market values and unrealized P/L are gross
+  (price × shares − cost), matching what most TW broker apps display
+  under 總現值 / 損益試算. Note: brokers vary — some show gross like this,
+  some deduct estimated sell-side fees. This app picks gross.
 - **5-second polling** while the Dashboard tab is visible — pauses when
   you switch tabs, minimize, or navigate to another view; resumes on
   return.
@@ -164,7 +164,7 @@ backend/
       quotes.py        thin wrapper exposing QuoteData + symbol resolution
       tw_quotes.py     TWSE MIS client (batched, 5s cache, name capture)
       portfolio.py     avg-cost, realized P/L, daily earnings series,
-                       broker-matching net market value
+                       gross market value
       csv_io.py        unified CSV parse + serialize
   data/trades.db       (auto-created, gitignored)
 frontend/
@@ -229,9 +229,10 @@ Open <http://127.0.0.1:5173>. Vite proxies `/api/*` to the backend on `:8000`.
 - **Cost basis** — weighted-average. Sells reduce the open cost basis
   proportionally and realize the difference vs. average price (minus
   fees).
-- **Net market value** — `current_price × shares` minus the standard
-  TW sell-side fee (0.4425% common stock / 0.2425% ETF / 0.1425% bond
-  ETF), so totals match `永豐 e-Leader` and similar broker apps.
+- **Market value** — `current_price × shares`, gross. Matches the
+  總現值 / 損益試算 fields in most TW broker apps. Note: a residual gap
+  vs your broker is normal — MIS public feed lags broker-direct feeds
+  by a few seconds and prices drift intraday.
 - **Open vs closed status** — every trade is FIFO-matched per ticker:
   buys queue up; sells consume buy lots front-first; any buy lot with
   leftover shares is `open`, fully-consumed buys and all sells are

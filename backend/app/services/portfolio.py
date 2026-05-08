@@ -49,23 +49,6 @@ def compute_states(trades: Iterable[Trade]) -> dict[str, HoldingState]:
     return states
 
 
-def _tw_sell_cost_rate(ticker: str) -> float:
-    """Estimated TW sell-side cost rate (transaction tax + broker fee).
-    Matches the convention TW broker apps use to display "if you sold
-    now" net P/L. Uses the standard published rates (no broker discount):
-
-      - Bond ETF (xxxxxB):  0.1425%  (broker fee only, no tax)
-      - Regular ETF (00xxx): 0.2425%  (0.1% tax + 0.1425% fee)
-      - Common stock:        0.4425%  (0.3% tax + 0.1425% fee)
-    """
-    t = ticker.strip().upper()
-    if t.endswith("B"):
-        return 0.001425
-    if t.startswith("00"):
-        return 0.002425
-    return 0.004425
-
-
 def build_holdings(db: Session) -> list[dict]:
     trades = db.query(Trade).all()
     states = compute_states(trades)
@@ -84,15 +67,9 @@ def build_holdings(db: Session) -> list[dict]:
         )
         current_price = quote.price if quote else None
         prev_close = quote.previous_close if quote else None
-        gross_mv = current_price * st.shares if current_price is not None else None
-        # For TWD, show "estimated net value if sold today" so the dashboard
-        # totals (Market Value, Unrealized P/L) line up with what TW broker
-        # apps display under 總現值 / 損益試算. US prices carry no transaction
-        # tax so we leave them at gross.
-        if currency == "TWD" and gross_mv is not None:
-            market_value = gross_mv * (1 - _tw_sell_cost_rate(ticker))
-        else:
-            market_value = gross_mv
+        # Gross market value (price × shares), matching what TW broker apps
+        # display as 總現值 / 損益試算 — no sell-side fee deduction.
+        market_value = current_price * st.shares if current_price is not None else None
         unrealized = (
             market_value - st.cost_basis if market_value is not None else None
         )
