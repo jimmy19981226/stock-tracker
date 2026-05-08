@@ -98,29 +98,52 @@ body {
   min-height: 100vh;
 }
 
-/* Decorative background — subtle radial mesh + faint dot grid */
+/* Decorative background — multi-layer mesh that breathes slowly,
+   plus a finer dot grid pinned in place. The mesh is extended beyond
+   the viewport (-10% inset) so the drift animation stays seamless. */
 body::before {
   content: "";
   position: fixed;
-  inset: 0;
+  inset: -12%;
   pointer-events: none;
   background:
     radial-gradient(
-      60% 50% at 50% -10%,
-      rgba(99, 132, 255, 0.1) 0%,
-      transparent 50%
+      36% 36% at 18% -2%,
+      rgba(99, 132, 255, 0.20) 0%,
+      transparent 65%
     ),
     radial-gradient(
-      50% 50% at 100% 30%,
-      rgba(167, 139, 250, 0.06) 0%,
-      transparent 60%
+      30% 30% at 88% 18%,
+      rgba(167, 139, 250, 0.18) 0%,
+      transparent 65%
     ),
     radial-gradient(
-      40% 50% at 0% 60%,
-      rgba(99, 132, 255, 0.05) 0%,
-      transparent 60%
+      40% 36% at 52% 110%,
+      rgba(192, 132, 252, 0.14) 0%,
+      transparent 65%
+    ),
+    radial-gradient(
+      24% 28% at 4% 68%,
+      rgba(99, 132, 255, 0.10) 0%,
+      transparent 65%
+    ),
+    radial-gradient(
+      20% 24% at 96% 80%,
+      rgba(99, 132, 255, 0.08) 0%,
+      transparent 65%
     );
   z-index: 0;
+  animation: bg-drift 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes bg-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(1.4%, -0.8%, 0) scale(1.035);
+  }
 }
 
 body::after {
@@ -128,14 +151,61 @@ body::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  /* Finer 22px grid at lower opacity — gives the dark surfaces a
+     sense of texture without competing with the data on top. */
   background-image: radial-gradient(
     circle at 1px 1px,
-    rgba(255, 255, 255, 0.025) 1px,
+    rgba(255, 255, 255, 0.022) 1px,
     transparent 0
   );
-  background-size: 28px 28px;
+  background-size: 22px 22px;
   z-index: 0;
-  opacity: 0.6;
+  opacity: 0.55;
+  /* Vignette: fade the dot grid out toward the edges so the mesh
+     gradient takes over visually in the corners. */
+  mask-image: radial-gradient(
+    ellipse 80% 70% at 50% 40%,
+    black 40%,
+    transparent 95%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 80% 70% at 50% 40%,
+    black 40%,
+    transparent 95%
+  );
+}
+
+/* Honor the user's "reduce motion" OS setting — disables the drift. */
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
+  }
+}
+
+/* Top-edge horizon line — a 1px gradient at the very top of the
+   viewport, like the highlight on a metal surface or a macOS menu
+   bar. Subtle but adds visible "polish" framing. */
+#root {
+  position: relative;
+}
+
+#root::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(99, 132, 255, 0.35) 25%,
+    rgba(167, 139, 250, 0.45) 50%,
+    rgba(99, 132, 255, 0.35) 75%,
+    transparent 100%
+  );
+  z-index: 200;
+  pointer-events: none;
 }
 
 #root {
