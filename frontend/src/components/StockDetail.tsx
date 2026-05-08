@@ -368,6 +368,7 @@ function PriceChart({
   }
 
   return (
+    <>
     <div style={{ width: "100%", height: 360 }}>
       <ResponsiveContainer>
         <ComposedChart data={taiexScaled} margin={{ top: 16, right: 24, left: 0, bottom: 8 }}>
@@ -455,14 +456,15 @@ function PriceChart({
           })}
         </ComposedChart>
       </ResponsiveContainer>
-      <div className="stock-chart-legend">
-        <LegendItem color="#6384ff" label="Price" />
-        <LegendItem color="#34d399" label="Buy" />
-        <LegendItem color="#f87171" label="Sell" />
-        <LegendItem color="#fbbf24" label="Dividend" />
-        {showTaiex && <LegendItem color="#a78bfa" label="TAIEX (scaled)" />}
-      </div>
     </div>
+    <div className="stock-chart-legend">
+      <LegendItem color="#6384ff" label="Price" />
+      <LegendItem color="#34d399" label="Buy" />
+      <LegendItem color="#f87171" label="Sell" />
+      <LegendItem color="#fbbf24" label="Dividend" />
+      {showTaiex && <LegendItem color="#a78bfa" label="TAIEX (scaled)" />}
+    </div>
+    </>
   );
 }
 
