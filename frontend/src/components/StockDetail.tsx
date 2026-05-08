@@ -204,7 +204,16 @@ function PriceRow({ detail }: { detail: StockDetail }) {
       <Stat label="Bid / Ask" value={`${fmtMoney(live.bid, "TWD")} / ${fmtMoney(live.ask, "TWD")}`} />
       <Stat
         label="Volume"
-        value={live.volume != null ? live.volume.toLocaleString() : "—"}
+        value={
+          live.volume != null
+            ? `${live.volume.toLocaleString()} 張`
+            : "—"
+        }
+        sub={
+          live.volume != null
+            ? `${(live.volume * 1000).toLocaleString()} shares`
+            : undefined
+        }
       />
     </div>
   );
