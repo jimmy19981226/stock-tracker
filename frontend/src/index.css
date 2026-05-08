@@ -1537,6 +1537,31 @@ main.app {
   background: rgba(99, 132, 255, 0.05);
 }
 
+.stock-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.stock-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.stock-chart-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 720px) {
   .stock-price-row {
     grid-template-columns: 1fr 1fr;

@@ -455,26 +455,12 @@ function PriceChart({
           })}
         </ComposedChart>
       </ResponsiveContainer>
-      <div
-        className="muted"
-        style={{
-          fontSize: 11,
-          marginTop: 6,
-          display: "flex",
-          gap: 16,
-          justifyContent: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        <LegendDot color="#6384ff" /> Price
-        <LegendDot color="#34d399" /> Buy
-        <LegendDot color="#f87171" /> Sell
-        <LegendDot color="#fbbf24" /> Dividend
-        {showTaiex && (
-          <>
-            <LegendDot color="#a78bfa" /> TAIEX (scaled to start)
-          </>
-        )}
+      <div className="stock-chart-legend">
+        <LegendItem color="#6384ff" label="Price" />
+        <LegendItem color="#34d399" label="Buy" />
+        <LegendItem color="#f87171" label="Sell" />
+        <LegendItem color="#fbbf24" label="Dividend" />
+        {showTaiex && <LegendItem color="#a78bfa" label="TAIEX (scaled)" />}
       </div>
     </div>
   );
@@ -537,18 +523,15 @@ function Stat({
   );
 }
 
-function LegendDot({ color }: { color: string }) {
+function LegendItem({ color, label }: { color: string; label: string }) {
   return (
-    <span
-      style={{
-        display: "inline-block",
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        background: color,
-        marginRight: 4,
-        verticalAlign: "middle",
-      }}
-    />
+    <span className="stock-chart-legend-item">
+      <span
+        className="stock-chart-legend-dot"
+        style={{ background: color }}
+        aria-hidden
+      />
+      {label}
+    </span>
   );
 }
