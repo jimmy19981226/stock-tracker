@@ -134,7 +134,7 @@ export default function App() {
                 <circle cx="21" cy="6" r="1.6" fill="white" />
               </svg>
             </span>
-            <span className="brand-text">AI Stock Tracker</span>
+            <span className="brand-text">AI Stock Studio</span>
           </h1>
           <MarketStatus />
           {polling && (

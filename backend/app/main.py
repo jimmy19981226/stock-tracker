@@ -20,7 +20,7 @@ SEED_FILE = (
     Path(__file__).resolve().parent.parent / "data" / "seed" / "portfolio.csv"
 )
 
-app = FastAPI(title="AI Stock Tracker", version="0.1.0")
+app = FastAPI(title="AI Stock Studio", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
