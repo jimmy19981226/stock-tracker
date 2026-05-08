@@ -11,7 +11,11 @@ export function HoldingsTable({ holdings }: Props) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  if (holdings.length === 0) {
+  // Drop anything without a real ticker so a transient render mid-poll
+  // can't paint blank rows.
+  const valid = holdings.filter((h): h is Holding => !!(h && h.ticker));
+
+  if (valid.length === 0) {
     return (
       <div className="panel">
         <h2>Holdings</h2>
@@ -20,7 +24,7 @@ export function HoldingsTable({ holdings }: Props) {
     );
   }
 
-  const byCurrency = holdings.reduce<Record<string, Holding[]>>((acc, h) => {
+  const byCurrency = valid.reduce<Record<string, Holding[]>>((acc, h) => {
     (acc[h.currency] ||= []).push(h);
     return acc;
   }, {});
