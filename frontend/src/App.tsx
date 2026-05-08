@@ -16,6 +16,7 @@ import { HoldingsTable } from "./components/HoldingsTable";
 import { MarketStatus } from "./components/MarketStatus";
 import { PerformanceChart } from "./components/PerformanceChart";
 import { PortfolioSummary } from "./components/PortfolioSummary";
+import { StockDetail } from "./components/StockDetail";
 import { TradeForm } from "./components/TradeForm";
 import { TradeList } from "./components/TradeList";
 import { UnrealizedChart } from "./components/UnrealizedChart";
@@ -32,6 +33,7 @@ export default function App() {
   const [names, setNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState<boolean>(() => {
     try {
       return localStorage.getItem("assistant.open") === "true";
@@ -191,7 +193,7 @@ export default function App() {
           <PerformanceChart history={history} />
           <UnrealizedChart holdings={holdings} names={names} />
           <div className="dual-grid">
-            <HoldingsTable holdings={holdings} />
+            <HoldingsTable holdings={holdings} onSelectTicker={setSelectedTicker} />
             <AllocationChart holdings={holdings} names={names} />
           </div>
         </>
@@ -226,6 +228,12 @@ export default function App() {
       </main>
       {assistantOpen && (
         <AssistantPanel onClose={() => setAssistantOpen(false)} />
+      )}
+      {selectedTicker && (
+        <StockDetail
+          ticker={selectedTicker}
+          onClose={() => setSelectedTicker(null)}
+        />
       )}
     </div>
   );

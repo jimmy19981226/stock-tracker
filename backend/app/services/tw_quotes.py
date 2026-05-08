@@ -195,12 +195,31 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
             except ValueError:
                 pass
 
+        # Capture other live fields from the same MIS payload. They use the
+        # same "0.0000 = placeholder" convention so we filter zeros.
+        day_open = _pos_float(item.get("o") or "")
+        day_high = _pos_float(item.get("h") or "")
+        day_low = _pos_float(item.get("l") or "")
+        bid = _pos_float(_first_token(item.get("b") or ""))
+        ask = _pos_float(_first_token(item.get("a") or ""))
+        volume_raw = (item.get("v") or "").strip()
+        try:
+            volume: int | None = int(float(volume_raw)) if volume_raw and volume_raw != "-" else None
+        except ValueError:
+            volume = None
+
         q = QuoteData(
             symbol=resolve_symbol(bare),
             price=price,
             previous_close=prev,
             currency="TWD",
             name=n or (last.name if last else ""),
+            day_open=day_open or (last.day_open if last else None),
+            day_high=day_high or (last.day_high if last else None),
+            day_low=day_low or (last.day_low if last else None),
+            bid=bid,
+            ask=ask,
+            volume=volume if volume is not None else (last.volume if last else None),
         )
         _last_good[bare] = q
         fresh[bare] = q

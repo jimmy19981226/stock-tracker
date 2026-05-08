@@ -38,6 +38,12 @@ class QuoteData:
     previous_close: float | None
     currency: str
     name: str = ""
+    day_open: float | None = None
+    day_high: float | None = None
+    day_low: float | None = None
+    bid: float | None = None
+    ask: float | None = None
+    volume: int | None = None
 
 
 def get_quote(ticker: str) -> QuoteData | None:

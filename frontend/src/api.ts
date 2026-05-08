@@ -202,6 +202,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ chat_id: chatId, message }),
     }),
+  getStockDetail: (ticker: string, period: HistoryPeriod = "1y") =>
+    request<StockDetail>(
+      `/api/stock/${encodeURIComponent(ticker)}/detail?period=${period}`,
+    ),
 };
 
 export interface ChatMessage {
@@ -229,4 +233,98 @@ export interface ChatReply {
   chat_id: number;
   title: string;
   message: ChatMessage;
+}
+
+export type HistoryPeriod = "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" | "max";
+
+export interface StockDetailLive {
+  price: number | null;
+  previous_close: number | null;
+  today_change: number | null;
+  today_change_pct: number | null;
+  day_open: number | null;
+  day_high: number | null;
+  day_low: number | null;
+  bid: number | null;
+  ask: number | null;
+  volume: number | null;
+}
+
+export interface StockDetailFundamentals {
+  symbol?: string;
+  long_name?: string | null;
+  short_name?: string | null;
+  sector?: string | null;
+  industry?: string | null;
+  market_cap?: number | null;
+  currency?: string | null;
+  pe?: number | null;
+  forward_pe?: number | null;
+  eps?: number | null;
+  dividend_yield?: number | null;
+  dividend_rate?: number | null;
+  payout_ratio?: number | null;
+  fifty_two_week_high?: number | null;
+  fifty_two_week_low?: number | null;
+  fifty_day_avg?: number | null;
+  two_hundred_day_avg?: number | null;
+  beta?: number | null;
+  book_value?: number | null;
+  price_to_book?: number | null;
+  shares_outstanding?: number | null;
+}
+
+export interface StockDetailPosition {
+  shares: number;
+  avg_cost: number | null;
+  cost_basis: number;
+  market_value: number | null;
+  unrealized_pl: number | null;
+  unrealized_pl_pct: number | null;
+  realized_pl: number;
+  dividends_received: number;
+  total_return: number;
+  total_return_pct: number;
+  first_buy_date: string | null;
+  holding_days: number | null;
+  trade_count: number;
+  fees_paid: number;
+}
+
+export interface StockHistoryBar {
+  date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+}
+
+export interface StockTradeMarker {
+  date: string;
+  type: "buy" | "sell";
+  shares: number;
+  price: number;
+  fee: number;
+  notes: string | null;
+}
+
+export interface StockDividendMarker {
+  date: string;
+  amount: number;
+  notes: string | null;
+}
+
+export interface StockDetail {
+  ticker: string;
+  symbol: string;
+  name: string;
+  live: StockDetailLive;
+  fundamentals: StockDetailFundamentals;
+  position: StockDetailPosition | null;
+  history: StockHistoryBar[];
+  taiex_history: StockHistoryBar[];
+  trades: StockTradeMarker[];
+  dividends: StockDividendMarker[];
+  yield_on_cost: number | null;
 }

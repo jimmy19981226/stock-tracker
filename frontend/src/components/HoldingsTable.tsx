@@ -5,9 +5,10 @@ import { Pagination } from "./Pagination";
 
 interface Props {
   holdings: Holding[];
+  onSelectTicker?: (ticker: string) => void;
 }
 
-export function HoldingsTable({ holdings }: Props) {
+export function HoldingsTable({ holdings, onSelectTicker }: Props) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -74,7 +75,11 @@ export function HoldingsTable({ holdings }: Props) {
             </thead>
             <tbody>
               {pageItems.map((h) => (
-                <tr key={h.ticker}>
+                <tr
+                  key={h.ticker}
+                  className={onSelectTicker ? "row-clickable" : undefined}
+                  onClick={onSelectTicker ? () => onSelectTicker(h.ticker) : undefined}
+                >
                   <td>
                     <div style={{ display: "flex", flexDirection: "column" }}>
                       <strong>{h.ticker}</strong>
