@@ -1116,21 +1116,25 @@ main.app {
     -1px 0 0 0 rgba(99, 132, 255, 0.08);
   display: flex;
   flex-direction: column;
-  animation: sidebar-fade-in 200ms ease;
+  /* Slide in from the right so the eye follows the motion — this masks
+     the main content's flex-width snap when the panel mounts. The
+     cubic-bezier is roughly an "ease-out-expo" curve: quick start, gentle
+     settle, no bounce. */
+  animation: sidebar-slide-in 360ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .assistant-sidebar > * {
   width: 100%;
 }
 
-@keyframes sidebar-fade-in {
+@keyframes sidebar-slide-in {
   from {
-    opacity: 0;
-    transform: translateX(12px);
+    transform: translateX(100%);
+    opacity: 0.6;
   }
   to {
-    opacity: 1;
     transform: translateX(0);
+    opacity: 1;
   }
 }
 
@@ -1186,13 +1190,43 @@ main.app {
   flex-direction: column;
   align-items: stretch;
   padding: 8px 4px 16px;
-  animation: assistant-welcome-in 280ms ease;
 }
 
-@keyframes assistant-welcome-in {
+/* Stagger each block of the welcome card so the panel feels assembled,
+   not pasted in. Delays line up roughly with the sidebar's 360ms slide. */
+.assistant-welcome > .assistant-welcome-mark {
+  opacity: 0;
+  animation: welcome-fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 180ms;
+}
+.assistant-welcome > .assistant-welcome-title {
+  opacity: 0;
+  animation: welcome-fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 240ms;
+}
+.assistant-welcome > .assistant-welcome-sub {
+  opacity: 0;
+  animation: welcome-fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 290ms;
+}
+.assistant-welcome > .assistant-suggestions > .suggestion-card {
+  opacity: 0;
+  animation: welcome-fade-up 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.assistant-welcome > .assistant-suggestions > .suggestion-card:nth-child(1) { animation-delay: 340ms; }
+.assistant-welcome > .assistant-suggestions > .suggestion-card:nth-child(2) { animation-delay: 400ms; }
+.assistant-welcome > .assistant-suggestions > .suggestion-card:nth-child(3) { animation-delay: 460ms; }
+.assistant-welcome > .assistant-suggestions > .suggestion-card:nth-child(4) { animation-delay: 520ms; }
+.assistant-welcome > .assistant-shuffle {
+  opacity: 0;
+  animation: welcome-fade-up 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 600ms;
+}
+
+@keyframes welcome-fade-up {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -1339,13 +1373,13 @@ main.app {
   display: flex;
   flex-direction: column;
   margin-bottom: 14px;
-  animation: bubble-in 220ms ease;
+  animation: bubble-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes bubble-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -1574,6 +1608,14 @@ main.app {
   flex-shrink: 0;
 }
 
+.assistant-input-row button {
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+
+.assistant-input-row button:active {
+  transform: scale(0.97);
+}
+
 .assistant-input-row input {
   flex: 1;
   font-size: 13px;
@@ -1609,6 +1651,18 @@ main.app {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  animation: view-fade-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes view-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .assistant-chat-row {
@@ -1727,7 +1781,7 @@ main.app {
   width: min(960px, 100%);
   max-height: calc(100vh - 80px);
   overflow-y: auto;
-  animation: modal-pop-in 220ms ease;
+  animation: modal-pop-in 280ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes modal-pop-in {
