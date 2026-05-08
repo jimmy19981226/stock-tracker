@@ -11,11 +11,14 @@ interface Props {
 }
 
 const SUGGESTIONS = [
+  "How is 2330 (台積電)'s monthly revenue trending?",
+  "Is 2330's gross margin improving over the last 4 quarters?",
+  "Which of my holdings has the strongest YoY revenue growth?",
+  "Compare 2330's current price to its 1-year analyst target.",
+  "Top 3 winners by % return?",
   "Which positions are losing money?",
   "Best dividend month in 2025?",
-  "Compare realized P/L vs dividends.",
   "Summarize my 2024 performance.",
-  "Top 3 winners by % return?",
 ];
 
 const LAST_CHAT_KEY = "assistant.lastChatId";

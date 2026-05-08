@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime
 from typing import Literal
 
@@ -25,7 +26,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..database import Chat, ChatMessage, Dividend, Trade, get_db
-from ..services import portfolio
+from ..services import portfolio, quotes, stock_info
+
+
+_TICKER_PATTERN = re.compile(r"\b(\d{4,6}[A-Za-z]?)\b")
 
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -180,7 +184,11 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
 
     # Build context and recent history (drop assistant's not-yet-saved turn).
     history_msgs = list(chat_obj.messages)[-MAX_HISTORY_TURNS:]
-    portfolio_context = _build_context(db)
+    # Pull tickers mentioned across recent turns so follow-up questions
+    # ("how's its margin trend?") still see the deep data we fetched
+    # last turn. Cap at 3 to keep context lean.
+    focus_tickers = _detect_tickers([m.content for m in history_msgs])[:3]
+    portfolio_context = _build_context(db, focus_tickers=focus_tickers)
     system_prompt = _system_prompt(portfolio_context)
 
     contents = [
@@ -236,11 +244,11 @@ def _derive_title(first_user_msg: str) -> str:
 def _system_prompt(context_json: str) -> str:
     return (
         "You are a portfolio analysis assistant for a Taiwan stock tracker.\n"
-        "Answer the user's questions strictly from the JSON portfolio data in "
-        "the CONTEXT block below.\n\n"
+        "Answer the user's questions strictly from the JSON in the CONTEXT block.\n"
+        "\n"
         "Hard rules:\n"
         "- DO NOT give investment advice, buy/sell recommendations, or predictions.\n"
-        "- DO NOT speculate about future prices or news.\n"
+        "- DO NOT speculate about future prices or news beyond what the data shows.\n"
         "- If the question can't be answered from the provided data, say so plainly.\n"
         "- All amounts are TWD (NT$). When mentioning a ticker, include its Chinese\n"
         "  name in parentheses if available, e.g. `2330 (台積電)`.\n"
@@ -251,16 +259,102 @@ def _system_prompt(context_json: str) -> str:
         "- `realized_pl` is from closed trades; `dividends` is cash payouts received.\n"
         "  `total_earned = realized + dividends` (the cash you've actually pocketed).\n"
         "\n"
+        "What the CONTEXT contains:\n"
+        "- `summary`: per-currency portfolio totals.\n"
+        "- `holdings`: every open position with shares, avg cost, current price,\n"
+        "  unrealized P/L, plus `fundamentals` (sector, industry, P/E, EPS,\n"
+        "  market cap, 52-week range, dividend yield, beta, 1y analyst target,\n"
+        "  next earnings/ex-div dates).\n"
+        "- `trades`: every buy/sell row.\n"
+        "- `dividends`: every payout received.\n"
+        "- `focus`: deeper data for tickers the user is asking about. Each entry\n"
+        "  has `monthly_revenue` (last 24 months in NT$ with YoY%) and\n"
+        "  `quarterly_financials` (last 8 quarters with revenue, EPS, gross /\n"
+        "  operating / net margin). Use this to answer trend / growth questions.\n"
+        "\n"
+        "Analytical questions you should be ready for:\n"
+        "- 'How is 2330's revenue trend?' → cite recent monthly_revenue with YoY%.\n"
+        "- 'Is 台積電's margin improving?' → compare quarterly_financials margins.\n"
+        "- 'How does 2330's P/E compare to its 1y target?' → contrast price vs\n"
+        "  fundamentals.target_mean_price; treat the upside as observation only,\n"
+        "  not a recommendation.\n"
+        "- 'Best month for revenue this year?' → scan the focus monthly_revenue.\n"
+        "- 'Which holding has the strongest YoY revenue growth?' → if focus has\n"
+        "  multiple tickers, compare them; otherwise say which data is missing.\n"
+        "\n"
         f"CONTEXT (read-only data, current as of this request):\n{context_json}"
     )
 
 
-def _build_context(db: Session) -> str:
-    """Compact portfolio snapshot for the LLM. Includes summary, holdings,
-    trades and dividends -- small enough (~5-20 KB) that it fits easily in
-    Gemini's 1M-token window."""
+def _detect_tickers(texts: list[str]) -> list[str]:
+    """Pull TW-style ticker codes (4-6 digits, optional letter suffix) out
+    of recent user/assistant turns. Returns most-recently-mentioned first,
+    deduped. Years like '2024'/'2025' are filtered out so they don't get
+    misread as tickers."""
+    seen: list[str] = []
+    year_like = re.compile(r"^(19|20)\d{2}$")
+    for text in reversed(texts):
+        for m in _TICKER_PATTERN.finditer(text):
+            t = m.group(1).upper()
+            if year_like.match(t):
+                continue
+            if t not in seen:
+                seen.append(t)
+    return seen
+
+
+def _build_context(db: Session, focus_tickers: list[str] | None = None) -> str:
+    """Compact portfolio snapshot for the LLM. Includes summary, holdings
+    (with light fundamentals attached), trades and dividends. For any
+    ``focus_tickers`` (typically the ticker the user is asking about),
+    also includes monthly revenue and quarterly financials so the model
+    can answer trend / growth questions without hallucinating."""
     holdings = portfolio.build_holdings(db)
     summary = portfolio.summarize(holdings, db)
+
+    # Light fundamentals on every holding — small enough to send always.
+    light_keys = (
+        "sector", "industry", "pe", "eps", "market_cap", "dividend_rate",
+        "dividend_yield", "fifty_two_week_high", "fifty_two_week_low",
+        "beta", "target_mean_price", "earnings_date", "ex_dividend_date",
+    )
+    enriched_holdings: list[dict] = []
+    for h in holdings:
+        try:
+            f = stock_info.get_fundamentals(h["ticker"])
+            h_out = dict(h)
+            h_out["fundamentals"] = {k: f.get(k) for k in light_keys if f.get(k) is not None}
+            enriched_holdings.append(h_out)
+        except Exception:
+            enriched_holdings.append(h)
+
+    # Deep data for any tickers the user is currently focused on.
+    focus_payload: list[dict] = []
+    held_tickers = {h["ticker"].upper() for h in holdings}
+    for tkr in (focus_tickers or []):
+        # Skip non-TW gibberish; quotes.resolve_symbol still works for
+        # numeric codes even if not currently held.
+        sym = quotes.resolve_symbol(tkr)
+        try:
+            quote = quotes.get_quote(tkr)
+            f = stock_info.get_fundamentals(tkr)
+            mr = stock_info.get_monthly_revenue(tkr, months=24)
+            qf = stock_info.get_quarterly_financials(tkr, quarters=8)
+        except Exception:
+            quote = None
+            f = {}
+            mr = []
+            qf = []
+        focus_payload.append({
+            "ticker": tkr,
+            "symbol": sym,
+            "name": (quote.name if quote else None) or f.get("short_name") or f.get("long_name"),
+            "is_held": tkr.upper() in held_tickers,
+            "current_price": quote.price if quote else None,
+            "fundamentals": {k: v for k, v in f.items() if v is not None},
+            "monthly_revenue": mr,
+            "quarterly_financials": qf,
+        })
 
     trades = (
         db.query(Trade)
@@ -275,7 +369,8 @@ def _build_context(db: Session) -> str:
 
     payload = {
         "summary": summary,
-        "holdings": holdings,
+        "holdings": enriched_holdings,
+        "focus": focus_payload,
         "trades": [
             {
                 "date": t.trade_date.isoformat(),
