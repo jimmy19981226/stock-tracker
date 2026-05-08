@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { CurrencySummary } from "../api";
 import { fmtMoney, fmtPct, plClass } from "../format";
 
@@ -5,8 +6,38 @@ interface Props {
   summaries: CurrencySummary[];
 }
 
+const STICKY_FIELDS = [
+  "total_value",
+  "total_pl",
+  "total_pl_pct",
+  "today_pl",
+  "today_pl_pct",
+] as const;
+
+type StickyField = (typeof STICKY_FIELDS)[number];
+
 export function PortfolioSummary({ summaries }: Props) {
-  if (summaries.length === 0) {
+  // When a poll briefly returns null for live-data fields (transient MIS
+  // quote failure), keep showing the previous known value instead of "—".
+  // Each currency tracks its own last-known-good values.
+  const lastGood = useRef<Record<string, Partial<Record<StickyField, number>>>>({});
+
+  const merged = summaries.map((s) => {
+    const prev = lastGood.current[s.currency] ?? {};
+    const next: Partial<Record<StickyField, number>> = { ...prev };
+    const out: CurrencySummary = { ...s };
+    for (const f of STICKY_FIELDS) {
+      if (s[f] !== null && s[f] !== undefined) {
+        next[f] = s[f] as number;
+      } else if (prev[f] !== undefined) {
+        out[f] = prev[f]!;
+      }
+    }
+    lastGood.current[s.currency] = next;
+    return out;
+  });
+
+  if (merged.length === 0) {
     return (
       <div className="panel">
         <h2>Portfolio Summary</h2>
@@ -17,7 +48,7 @@ export function PortfolioSummary({ summaries }: Props) {
 
   return (
     <>
-      {summaries.map((s) => (
+      {merged.map((s) => (
         <div className="panel" key={s.currency}>
           <h2>
             {s.currency} Portfolio · {s.holdings_count}{" "}
