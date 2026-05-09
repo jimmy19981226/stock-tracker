@@ -1307,13 +1307,14 @@ main.app {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
+  font-size: 16px;
+  line-height: 1;
   background: var(--grad-brand);
-  color: white;
-  font-size: 12px;
-  box-shadow: 0 2px 8px -2px rgba(99, 132, 255, 0.45);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 0 4px rgba(99, 132, 255, 0.5));
 }
 
 .assistant-close {
@@ -1382,19 +1383,20 @@ main.app {
 
 .assistant-welcome-mark {
   align-self: center;
-  width: 48px;
-  height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
-  background: var(--grad-brand);
-  color: white;
-  font-size: 22px;
+  font-size: 56px;
+  line-height: 1;
   margin-bottom: 14px;
-  box-shadow:
-    0 12px 32px -8px rgba(99, 132, 255, 0.55),
-    0 1px 0 rgba(255, 255, 255, 0.18) inset;
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter:
+    drop-shadow(0 0 10px rgba(99, 132, 255, 0.5))
+    drop-shadow(0 6px 18px rgba(167, 139, 250, 0.35));
 }
 
 .assistant-welcome-title {
@@ -1519,17 +1521,17 @@ main.app {
   display: flex;
   flex-direction: column;
   margin-bottom: 14px;
-  animation: bubble-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: bubble-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @keyframes bubble-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1596,14 +1598,204 @@ main.app {
   box-shadow: 0 2px 8px -3px rgba(99, 132, 255, 0.25);
 }
 
-.bubble-assistant {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.02) 100%
+/* Assistant replies render inline with the message column — no chip
+   background, no border. Matches Claude's chat layout where only user
+   messages get a bubble. */
+.bubble-row-assistant .bubble {
+  max-width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+.assistant-body {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+/* While streaming, the bottom edge of the response fades to transparent so
+   newly-arriving text appears to emerge from a soft mist instead of popping
+   in abruptly. The mask animates back to opaque when streaming ends. */
+.assistant-body.is-streaming {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black calc(100% - 28px),
+    rgba(0, 0, 0, 0.65) calc(100% - 14px),
+    rgba(0, 0, 0, 0.25) calc(100% - 4px),
+    rgba(0, 0, 0, 0) 100%
   );
-  border: 1px solid var(--border-strong);
-  border-bottom-left-radius: 4px;
+  mask-image: linear-gradient(
+    to bottom,
+    black 0,
+    black calc(100% - 28px),
+    rgba(0, 0, 0, 0.65) calc(100% - 14px),
+    rgba(0, 0, 0, 0.25) calc(100% - 4px),
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+/* Fancy AI logo for in-flight states — just the ✦ glyph filled with the
+   brand gradient, with layered drop-shadow glows that pulse. No bounding
+   box, no halo container — the glow is purely additive on top of whatever
+   is behind it. */
+.ai-pulse-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+}
+.ai-pulse-logo-thinking {
+  font-size: 22px;
+}
+.ai-pulse-logo-cursor {
+  font-size: 20px;
+  margin-left: 6px;
+  vertical-align: -4px;
+}
+
+.ai-pulse-logo-glyph {
+  display: inline-block;
+  line-height: 1;
+  font-family: inherit;
+  background: linear-gradient(135deg, #93acff 0%, #a78bfa 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter:
+    drop-shadow(0 0 4px rgba(167, 139, 250, 0.9))
+    drop-shadow(0 0 10px rgba(99, 132, 255, 0.55));
+  animation: ai-logo-twinkle 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes ai-logo-twinkle {
+  0%, 100% { transform: scale(0.85) rotate(-12deg); opacity: 0.8; }
+  50%      { transform: scale(1.15) rotate(12deg); opacity: 1; }
+}
+
+/* "Thinking…" placeholder — logo + label in the assistant column. */
+.ai-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 14px;
+}
+.ai-thinking-text {
+  font-size: 12px;
+  letter-spacing: 0.005em;
+  background: linear-gradient(
+    90deg,
+    var(--text-2) 0%,
+    var(--accent-hi) 50%,
+    var(--text-2) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: thinking-shimmer 2.4s linear infinite;
+}
+@keyframes thinking-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-body.is-streaming {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .ai-pulse-logo-glyph,
+  .ai-thinking-text {
+    animation: none;
+  }
+}
+
+/* Thinking / search strip rendered above each assistant reply. Same gray
+   subdued style Claude uses for "Thought for 2s" / "Searched the web". */
+.message-meta {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 4px 0 6px;
+  margin: 0 0 6px;
+  color: var(--text-2);
+  font-size: 11.5px;
+  letter-spacing: 0.005em;
+  cursor: default;
+  font-family: inherit;
+  animation: meta-slide-in 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes meta-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 240px;
+  }
+}
+.message-meta.expandable {
+  cursor: pointer;
+}
+.message-meta:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.message-meta-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background 140ms ease, color 140ms ease;
+}
+.message-meta.expandable:hover .message-meta-row {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+.message-meta-label {
+  font-weight: 500;
+}
+.message-meta-chevron {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform 200ms ease;
+}
+.message-meta.open .message-meta-chevron {
+  transform: rotate(90deg);
+}
+.message-meta-queries {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid rgba(167, 139, 250, 0.45);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 0 6px 6px 0;
+}
+.message-meta-queries li {
+  font-size: 11.5px;
+  color: var(--text-2);
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.message-meta-q-icon {
+  color: var(--accent-2);
+  font-weight: 700;
 }
 
 /* Markdown rendering inside assistant bubbles */
@@ -1710,7 +1902,8 @@ main.app {
   margin: 10px 0;
 }
 
-/* Stop-generating button (replaces Send while busy) */
+/* Stop-generating button (replaces Send while busy). Gentle outer glow
+   pulse signals "active generation, click to interrupt". */
 .assistant-stop {
   display: inline-flex !important;
   align-items: center;
@@ -1727,6 +1920,16 @@ main.app {
   color: #fca5a5 !important;
   cursor: pointer;
   transition: all 140ms ease;
+  animation: stop-button-pulse 2s ease-in-out infinite;
+}
+@keyframes stop-button-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-stop {
+    animation: none;
+  }
 }
 .assistant-stop:hover {
   background: linear-gradient(
@@ -2323,4 +2526,132 @@ main.app {
 .app > .panel,
 .app > div > .panel {
   animation: panel-fade-in 280ms ease both;
+}
+
+/* In-sidebar confirm modal — replaces the native browser confirm() so the
+   prompt matches the app's dark theme and stays inside the chatbot panel. */
+.assistant-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: confirm-fade-in 160ms ease both;
+}
+.assistant-confirm-modal {
+  width: 100%;
+  max-width: 320px;
+  background: linear-gradient(180deg, #161b29 0%, #11151f 100%);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  padding: 18px 18px 14px;
+  box-shadow:
+    0 24px 64px -16px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(99, 132, 255, 0.08);
+  animation: confirm-pop-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.assistant-confirm-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+  letter-spacing: -0.005em;
+}
+.assistant-confirm-message {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+.assistant-confirm-name {
+  color: var(--text);
+  font-weight: 500;
+}
+.assistant-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.assistant-confirm-actions .secondary,
+.assistant-confirm-danger {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 140ms ease;
+  font-family: inherit;
+}
+.assistant-confirm-danger {
+  background: linear-gradient(
+    135deg,
+    rgba(248, 113, 113, 0.28),
+    rgba(248, 113, 113, 0.14)
+  );
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
+.assistant-confirm-danger:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(248, 113, 113, 0.4),
+    rgba(248, 113, 113, 0.2)
+  );
+  border-color: rgba(248, 113, 113, 0.7);
+  color: #fee2e2;
+}
+.assistant-confirm-danger:focus-visible {
+  outline: 2px solid rgba(248, 113, 113, 0.7);
+  outline-offset: 2px;
+}
+
+@keyframes confirm-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes confirm-pop-in {
+  from { opacity: 0; transform: scale(0.94) translateY(-6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Inline citation chips — pill-shaped link with favicon + domain that
+   replaces `[N]` markers Gemini's grounding metadata maps to source URLs. */
+.citation-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px 1px 5px;
+  margin: 0 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-2);
+  text-decoration: none !important;
+  vertical-align: 1px;
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.citation-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text);
+}
+.citation-chip-favicon {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.1);
+  object-fit: cover;
+}
+.citation-chip-label {
+  font-weight: 500;
+  letter-spacing: 0.005em;
 }

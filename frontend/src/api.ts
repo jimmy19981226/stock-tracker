@@ -138,6 +138,106 @@ async function uploadPortfolioCsv(
   return res.json();
 }
 
+export interface AiStreamCallbacks {
+  onInit: (chatId: number, title: string) => void;
+  onChunk: (delta: string) => void;
+  onDone: (content: string, queries: string[], durationMs: number) => void;
+  onError: (detail: string) => void;
+}
+
+// Consumes the SSE stream from /api/ai/chat. Each chunk delta is emitted via
+// onChunk so the UI can append progressively. The terminal `done` event ships
+// the canonical content (with inline [N] citation markers + Sources block)
+// which the frontend should swap in to replace the streamed text.
+async function aiChatStream(
+  chatId: number | null,
+  message: string,
+  signal: AbortSignal,
+  callbacks: AiStreamCallbacks,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch("/api/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, message }),
+      signal,
+    });
+  } catch (err) {
+    if ((err as DOMException)?.name === "AbortError") return;
+    callbacks.onError(err instanceof Error ? err.message : "Network error");
+    return;
+  }
+
+  if (!res.ok || !res.body) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    callbacks.onError(detail);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const block = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const dataLine = block
+          .split("\n")
+          .find((l) => l.startsWith("data:"));
+        if (!dataLine) continue;
+        const json = dataLine.replace(/^data:\s?/, "");
+        if (!json) continue;
+        let evt: { type: string; [k: string]: unknown };
+        try {
+          evt = JSON.parse(json);
+        } catch {
+          continue;
+        }
+        switch (evt.type) {
+          case "init":
+            callbacks.onInit(evt.chat_id as number, evt.title as string);
+            break;
+          case "chunk":
+            callbacks.onChunk(evt.delta as string);
+            break;
+          case "done":
+            callbacks.onDone(
+              evt.content as string,
+              (evt.queries as string[]) || [],
+              (evt.duration_ms as number) || 0,
+            );
+            break;
+          case "error":
+            callbacks.onError(evt.detail as string);
+            break;
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as DOMException)?.name === "AbortError") return;
+    callbacks.onError(err instanceof Error ? err.message : "Stream error");
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 export const api = {
   listTrades: () => request<Trade[]>("/api/trades"),
   createTrade: (t: TradeCreate) =>
@@ -197,12 +297,7 @@ export const api = {
     }),
   deleteChat: (id: number) =>
     request<void>(`/api/ai/chats/${id}`, { method: "DELETE" }),
-  aiChat: (chatId: number | null, message: string, signal?: AbortSignal) =>
-    request<ChatReply>("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify({ chat_id: chatId, message }),
-      signal,
-    }),
+  aiChatStream,
   getStockDetail: (ticker: string, period: HistoryPeriod = "1y") =>
     request<StockDetail>(
       `/api/stock/${encodeURIComponent(ticker)}/detail?period=${period}`,

@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  cloneElement,
+  Fragment,
+  isValidElement,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -63,6 +72,18 @@ const POOL: Record<string, Suggestion[]> = {
     { icon: "📜", category: "Activity", prompt: "Summarize my trading activity over the last 3 months." },
     { icon: "📜", category: "Activity", prompt: "Which ticker have I traded most this year?" },
     { icon: "📜", category: "Activity", prompt: "Summarize my 2024 performance." },
+  ],
+  "Latest news": [
+    { icon: "📰", category: "Latest news", prompt: "What's the latest news on {ticker}?" },
+    { icon: "📰", category: "Latest news", prompt: "Search for recent news affecting my biggest holding." },
+    { icon: "📰", category: "Latest news", prompt: "Any earnings announcements coming up for my holdings?" },
+    { icon: "📰", category: "Latest news", prompt: "What did {ticker} report in its most recent monthly revenue?" },
+  ],
+  "Market context": [
+    { icon: "🌐", category: "Market context", prompt: "What are analysts saying about {ticker} right now?" },
+    { icon: "🌐", category: "Market context", prompt: "How is the TW semiconductor sector doing this month?" },
+    { icon: "🌐", category: "Market context", prompt: "What macro events could impact {ticker} this quarter?" },
+    { icon: "🌐", category: "Market context", prompt: "Search for {ticker}'s latest filings or announcements." },
   ],
 };
 
@@ -129,6 +150,7 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
   // Bumping this number reshuffles which 4 suggestions render. We do that
   // on mount and every time the user starts a fresh chat.
   const [suggestionSeed, setSuggestionSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; title: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Lets the user cancel an in-flight chat request via the Stop button.
@@ -223,50 +245,77 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
   async function send(text: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
-    const optimistic: ChatMessage[] = [
+
+    // Optimistic: append user message + an empty assistant placeholder that
+    // we'll grow as chunks arrive. Keep a stable ref to the assistant index
+    // (it's always the last item we just pushed).
+    const baseMessages: ChatMessage[] = [
       ...messages,
       { role: "user", content: trimmed },
+      { role: "assistant", content: "" },
     ];
-    setMessages(optimistic);
+    const assistantIdx = baseMessages.length - 1;
+    setMessages(baseMessages);
     setInput("");
     setBusy(true);
     setError(null);
+
     const controller = new AbortController();
     abortRef.current = controller;
-    try {
-      const reply = await api.aiChat(activeChatId, trimmed, controller.signal);
-      setActiveChatId(reply.chat_id);
-      setActiveTitle(reply.title);
-      localStorage.setItem(LAST_CHAT_KEY, String(reply.chat_id));
-      setMessages([...optimistic, reply.message]);
-      refreshChats();
-    } catch (err) {
-      // User-initiated cancel — keep the question in the chat (the
-      // backend may still complete and store the answer; refreshing
-      // the chat will pull it in). Just clear busy state.
-      if (
-        (err instanceof DOMException && err.name === "AbortError") ||
-        (err instanceof Error && err.message.toLowerCase().includes("abort"))
-      ) {
-        // Pull whatever the backend ended up storing so the user can see
-        // a late-arriving answer if one was generated.
-        if (activeChatId != null) {
-          refreshChats();
-          api
-            .getChat(activeChatId)
-            .then((d) => setMessages(d.messages))
-            .catch(() => {
-              /* leave optimistic state */
-            });
-        }
-        setError(null);
-      } else {
-        setMessages(messages);
-        setError(err instanceof Error ? err.message : "Request failed");
-      }
-    } finally {
-      setBusy(false);
-      abortRef.current = null;
+
+    let streamed = "";
+    let finalChatId = activeChatId;
+
+    await api.aiChatStream(activeChatId, trimmed, controller.signal, {
+      onInit: (id, title) => {
+        finalChatId = id;
+        setActiveChatId(id);
+        setActiveTitle(title);
+        localStorage.setItem(LAST_CHAT_KEY, String(id));
+      },
+      onChunk: (delta) => {
+        streamed += delta;
+        // Functional update so we don't capture a stale messages array.
+        setMessages((prev) => {
+          const next = prev.slice();
+          if (next[assistantIdx]?.role === "assistant") {
+            next[assistantIdx] = { role: "assistant", content: streamed };
+          }
+          return next;
+        });
+      },
+      onDone: (content) => {
+        setMessages((prev) => {
+          const next = prev.slice();
+          if (next[assistantIdx]?.role === "assistant") {
+            next[assistantIdx] = { role: "assistant", content };
+          }
+          return next;
+        });
+      },
+      onError: (detail) => {
+        setError(detail);
+        // Remove the empty/partial assistant placeholder if nothing was streamed.
+        setMessages((prev) => {
+          if (!streamed) return prev.slice(0, assistantIdx);
+          return prev;
+        });
+      },
+    });
+
+    setBusy(false);
+    abortRef.current = null;
+    refreshChats();
+
+    // If the user aborted, the backend persists whatever it had — pull it back
+    // so the chat history reflects what was saved (prevents a desynced UI).
+    if (controller.signal.aborted && finalChatId != null) {
+      api
+        .getChat(finalChatId)
+        .then((d) => setMessages(d.messages))
+        .catch(() => {
+          /* leave streamed state visible */
+        });
     }
   }
 
@@ -274,8 +323,15 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
     abortRef.current?.abort();
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm("Delete this conversation?")) return;
+  function handleDelete(id: number) {
+    const chat = chats.find((c) => c.id === id);
+    setConfirmDelete({ id, title: chat?.title ?? "this conversation" });
+  }
+
+  async function performDelete() {
+    if (!confirmDelete) return;
+    const { id } = confirmDelete;
+    setConfirmDelete(null);
     try {
       await api.deleteChat(id);
       if (id === activeChatId) newChat();
@@ -284,6 +340,16 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
       setError(err instanceof Error ? err.message : "Delete failed");
     }
   }
+
+  // Escape closes the confirm modal without deleting.
+  useEffect(() => {
+    if (!confirmDelete) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setConfirmDelete(null);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmDelete]);
 
   async function handleRename(id: number, title: string) {
     const trimmed = title.trim();
@@ -366,11 +432,12 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
                   ✦
                 </div>
                 <div className="assistant-welcome-title">
-                  Ask anything about your portfolio
+                  Ask anything about your portfolio or the market
                 </div>
                 <div className="assistant-welcome-sub muted">
-                  I can analyze trends, compare positions, and surface insights
-                  from your live data. Try one of these:
+                  I can analyze your holdings, search the web for fresh news
+                  and filings, and pull together the answer with sources.
+                  Try one of these:
                 </div>
                 <div className="assistant-suggestions">
                   {suggestions.map((s) => (
@@ -400,18 +467,17 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
                 </button>
               </div>
             ) : (
-              messages.map((m, i) => <Bubble key={i} message={m} />)
-            )}
-            {busy && (
-              <div
-                className="muted"
-                style={{ fontSize: 12, padding: "6px 4px" }}
-              >
-                <span className="thinking-dots">
-                  <span /> <span /> <span />
-                </span>{" "}
-                Thinking…
-              </div>
+              messages.map((m, i) => (
+                <Bubble
+                  key={i}
+                  message={m}
+                  isStreaming={
+                    busy &&
+                    i === messages.length - 1 &&
+                    m.role === "assistant"
+                  }
+                />
+              ))
             )}
           </div>
 
@@ -452,6 +518,45 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
             )}
           </form>
         </>
+      )}
+
+      {confirmDelete && (
+        <div
+          className="assistant-confirm-backdrop"
+          onClick={() => setConfirmDelete(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="assistant-confirm-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="assistant-confirm-title">Delete conversation?</div>
+            <div className="assistant-confirm-message">
+              <span className="assistant-confirm-name">
+                "{confirmDelete.title}"
+              </span>{" "}
+              will be permanently removed. This can't be undone.
+            </div>
+            <div className="assistant-confirm-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setConfirmDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="assistant-confirm-danger"
+                onClick={performDelete}
+                autoFocus
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </aside>
   );
@@ -612,33 +717,251 @@ function SetupHelp() {
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
-  const isUser = message.role === "user";
+interface Citation {
+  title: string;
+  uri: string;
+  hostname: string;
+}
+
+interface MessageMeta {
+  queries: string[];
+  durationMs?: number;
+  interrupted?: boolean;
+}
+
+// Pull the leading `<!--meta:{...}-->` JSON header (if present) off the
+// content. The backend prepends one to every assistant reply so the UI can
+// render a "Searched the web for…" or "Thought for Xs" strip above the body.
+function splitMeta(content: string): { meta: MessageMeta | null; rest: string } {
+  const m = content.match(/^<!--meta:(\{[\s\S]*?\})-->\n?/);
+  if (!m) return { meta: null, rest: content };
+  try {
+    const raw = JSON.parse(m[1]) as {
+      queries?: string[];
+      duration_ms?: number;
+      interrupted?: boolean;
+    };
+    return {
+      meta: {
+        queries: raw.queries || [],
+        durationMs: raw.duration_ms,
+        interrupted: raw.interrupted,
+      },
+      rest: content.slice(m[0].length),
+    };
+  } catch {
+    return { meta: null, rest: content };
+  }
+}
+
+// Parse the trailing "**Sources:**\n1. [title](url)\n..." block the backend
+// appends after a grounded response. Returns the body without that block plus
+// the parsed citations indexed by source number (1-based, so [0] is unused).
+function splitSources(content: string): {
+  body: string;
+  citations: Citation[];
+} {
+  const marker = /\n\n\*\*Sources:\*\*\n((?:\d+\.\s*\[[^\]]+\]\([^)]+\)\s*\n?)+)\s*$/;
+  const m = content.match(marker);
+  if (!m) return { body: content, citations: [] };
+  const lines = m[1]
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const citations: Citation[] = [];
+  for (const line of lines) {
+    const lm = line.match(/^\d+\.\s*\[([^\]]+)\]\(([^)]+)\)\s*$/);
+    if (!lm) continue;
+    const title = lm[1];
+    const uri = lm[2];
+    citations.push({ title, uri, hostname: prettyHost(title, uri) });
+  }
+  return { body: content.slice(0, m.index!), citations };
+}
+
+function prettyHost(title: string, uri: string): string {
+  // Gemini fills `title` with the source domain (e.g. "investing.com"),
+  // which is exactly what we want for the chip label.
+  if (title && /^[\w.-]+\.[a-z]{2,}$/i.test(title.trim())) {
+    return title.trim().replace(/^www\./, "");
+  }
+  try {
+    const u = new URL(uri);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return title || "source";
+  }
+}
+
+function CitationChip({ n, citation }: { n: number; citation: Citation }) {
+  const favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+    citation.hostname,
+  )}&sz=64`;
   return (
-    <div className={`bubble-row ${isUser ? "bubble-row-user" : "bubble-row-assistant"}`}>
-      <div className="bubble-role">
-        {!isUser && <span className="bubble-role-mark" aria-hidden>✦</span>}
-        {isUser ? "You" : "Assistant"}
+    <a
+      href={citation.uri}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="citation-chip"
+      title={`[${n}] ${citation.hostname}`}
+    >
+      <img className="citation-chip-favicon" src={favicon} alt="" loading="lazy" />
+      <span className="citation-chip-label">{citation.hostname}</span>
+    </a>
+  );
+}
+
+// Walk a ReactMarkdown subtree and replace `[N]` text occurrences with chip
+// elements. Skips inside <a>/<code>/<pre> so we don't break links or fenced
+// code that happens to contain bracketed numerals.
+function injectChips(node: ReactNode, citations: Citation[]): ReactNode {
+  if (typeof node === "string") {
+    if (!/\[\d+\]/.test(node)) return node;
+    const parts = node.split(/(\[\d+\])/g);
+    return parts.map((part, idx) => {
+      const m = part.match(/^\[(\d+)\]$/);
+      if (!m) return <Fragment key={idx}>{part}</Fragment>;
+      const n = parseInt(m[1], 10);
+      const c = citations[n - 1];
+      if (!c) return <Fragment key={idx}>{part}</Fragment>;
+      return <CitationChip key={idx} n={n} citation={c} />;
+    });
+  }
+  if (Array.isArray(node)) {
+    return node.map((c, i) => (
+      <Fragment key={i}>{injectChips(c, citations)}</Fragment>
+    ));
+  }
+  if (isValidElement(node)) {
+    const tag = typeof node.type === "string" ? node.type : "";
+    if (tag === "a" || tag === "code" || tag === "pre") return node;
+    const children = (node.props as { children?: ReactNode }).children;
+    return cloneElement(
+      node,
+      undefined,
+      injectChips(children, citations),
+    );
+  }
+  return node;
+}
+
+function Bubble({
+  message,
+  isStreaming = false,
+}: {
+  message: ChatMessage;
+  isStreaming?: boolean;
+}) {
+  const isUser = message.role === "user";
+
+  const { meta, body, citations } = useMemo(() => {
+    if (isUser) {
+      return { meta: null, body: message.content, citations: [] };
+    }
+    const { meta, rest } = splitMeta(message.content);
+    const split = splitSources(rest);
+    return { meta, body: split.body, citations: split.citations };
+  }, [isUser, message.content]);
+
+  const wrapWithChips = (children: ReactNode) =>
+    citations.length > 0 ? injectChips(children, citations) : children;
+
+  if (isUser) {
+    return (
+      <div className="bubble-row bubble-row-user">
+        <div className="bubble bubble-user">{message.content}</div>
       </div>
-      <div className={`bubble ${isUser ? "bubble-user" : "bubble-assistant"}`}>
-        {isUser ? (
-          message.content
-        ) : (
-          <div className="md-content">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              // Keep links safe — open in new tab, no referrer.
-              components={{
-                a: (props) => (
-                  <a {...props} target="_blank" rel="noopener noreferrer" />
-                ),
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
-          </div>
-        )}
+    );
+  }
+
+  return (
+    <div className="bubble-row bubble-row-assistant">
+      {meta && <MessageMetaStrip meta={meta} sourceCount={citations.length} />}
+      <div
+        className={`assistant-body md-content${isStreaming ? " is-streaming" : ""}`}
+      >
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            a: (props) => (
+              <a {...props} target="_blank" rel="noopener noreferrer" />
+            ),
+            p: ({ children }) => <p>{wrapWithChips(children)}</p>,
+            li: ({ children }) => <li>{wrapWithChips(children)}</li>,
+            td: ({ children }) => <td>{wrapWithChips(children)}</td>,
+            th: ({ children }) => <th>{wrapWithChips(children)}</th>,
+            strong: ({ children }) => (
+              <strong>{wrapWithChips(children)}</strong>
+            ),
+            em: ({ children }) => <em>{wrapWithChips(children)}</em>,
+          }}
+        >
+          {body}
+        </ReactMarkdown>
+        {isStreaming && <AiPulseLogo size="cursor" />}
       </div>
     </div>
   );
 }
+
+// Fancy AI logo for in-flight states. The ✦ glyph itself pulses + rotates
+// with a brand gradient text-fill, layered with a halo that breathes and a
+// sonar ring that radiates outward. Two sizes: "thinking" (placeholder while
+// waiting for the first chunk) and "cursor" (smaller, trails streamed text).
+function AiPulseLogo({ size = "thinking" }: { size?: "thinking" | "cursor" }) {
+  return (
+    <span className={`ai-pulse-logo ai-pulse-logo-${size}`} aria-hidden>
+      <span className="ai-pulse-logo-glyph">✦</span>
+    </span>
+  );
+}
+
+function MessageMetaStrip({
+  meta,
+  sourceCount,
+}: {
+  meta: MessageMeta;
+  sourceCount: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const seconds = meta.durationMs ? (meta.durationMs / 1000).toFixed(1) : null;
+  const hasQueries = meta.queries.length > 0;
+
+  let label: string;
+  if (meta.interrupted) {
+    label = "Stopped" + (seconds ? ` after ${seconds}s` : "");
+  } else if (hasQueries) {
+    const sourcesPart = sourceCount > 0 ? ` · ${sourceCount} source${sourceCount === 1 ? "" : "s"}` : "";
+    const timePart = seconds ? ` · ${seconds}s` : "";
+    label = `Searched the web${sourcesPart}${timePart}`;
+  } else {
+    label = `Thought for ${seconds ?? "0"}s`;
+  }
+
+  const expandable = hasQueries;
+
+  return (
+    <button
+      type="button"
+      className={`message-meta${open ? " open" : ""}${expandable ? " expandable" : ""}`}
+      onClick={() => expandable && setOpen((o) => !o)}
+      disabled={!expandable}
+      aria-expanded={expandable ? open : undefined}
+    >
+      <span className="message-meta-row">
+        <span className="message-meta-label">{label}</span>
+        {expandable && <span className="message-meta-chevron" aria-hidden>›</span>}
+      </span>
+      {open && hasQueries && (
+        <ul className="message-meta-queries">
+          {meta.queries.map((q, i) => (
+            <li key={i}>
+              <span className="message-meta-q-icon" aria-hidden>⌕</span> {q}
+            </li>
+          ))}
+        </ul>
+      )}
+    </button>
+  );
+}
+

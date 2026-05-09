@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A self-hosted **Taiwan equities workbench** — live MIS prices, broker-matching P/L, per-stock fundamentals, monthly revenue, quarterly financials, and an AI assistant that actually analyzes your data.
+A self-hosted **Taiwan equities workbench** — live MIS prices, broker-matching P/L, per-stock fundamentals, monthly revenue, quarterly financials, and a streaming AI assistant that **searches the web for fresh news, cites every claim, and analyzes your portfolio** alongside it.
 
 </div>
 
@@ -37,11 +37,14 @@ All live numbers update every 5 seconds while the Dashboard tab is visible — p
 
 ### ✦ AI assistant
 - Slide-in sidebar with persistent chat history (rename, delete, switch threads)
-- Sees your **live portfolio + per-stock fundamentals on every holding**
-- Auto-detects ticker mentions in your question → enriches context with that ticker's monthly revenue + quarterly margins so it can answer trend / valuation / margin questions citing real numbers
+- **Live Google Search grounding** — asks for "the latest news on 2330" and pulls fresh sources, with inline `[N]` citation chips that link directly to each domain (favicon + hostname)
+- **Real-time SSE streaming** — text flows in word-by-word with a glowing pulse cursor, fading mask gradient on the tail edge so new tokens emerge from soft mist
+- **"Searched the web · N sources · Xs"** thought-strip above each grounded reply; click to expand and see the actual queries Gemini ran
+- Sees your **live portfolio + per-stock fundamentals on every holding**, and auto-detects ticker mentions to enrich context with monthly revenue + quarterly margins
 - Markdown rendering: tables, bold, italics, lists, code blocks
-- **Stop button** mid-generation
-- Personalized, reshuffleable suggestion cards based on your top holdings
+- **Stop button** mid-generation; partial response is persisted with an "interrupted" tag
+- **In-app modal** confirmations (no native browser alerts)
+- Personalized, reshuffleable suggestion cards covering portfolio, news, and market context — based on your top holdings
 
 ### 🛠 Trade & dividend management
 - **One unified CSV** for trades and dividends with `kind` column
@@ -86,12 +89,29 @@ Last 8 quarters of revenue, net income, EPS, and margins. Activity timeline show
 
 Divergent horizontal bars sorted by P/L, color-coded green/red. Re-paints every 5 s while the dashboard is visible.
 
-### AI assistant — analytical, with markdown
+### AI assistant — welcome screen
 
-![AI Assistant — chat list](docs/screenshots/assistant-list.png)
-![AI Assistant — conversation](docs/screenshots/assistant-messages.png)
+![AI Assistant — welcome](docs/screenshots/assistant-welcome.png)
 
-Ask *"is 2330's gross margin improving?"* and get a real markdown table with citations from your own data. Persistent chats; stop button while generating.
+Reshuffleable suggestion cards across **portfolio · news · market context**. Top picks are personalized to the tickers you actually own.
+
+### AI assistant — grounded search with inline citations
+
+![AI Assistant — grounded reply with citations](docs/screenshots/assistant-citations.png)
+
+Asks Gemini → Gemini calls Google Search → response streams in word-by-word with `[N]` markers replaced by purple pill chips (favicon + domain) that link straight to the source. The header strip ("Searched the web · 6 sources · 6.7s") is clickable.
+
+### AI assistant — see exactly what Gemini searched
+
+![AI Assistant — search queries expanded](docs/screenshots/assistant-meta-expanded.png)
+
+Tap the meta strip to expand the actual search queries the model ran, so you can audit where every claim came from.
+
+### AI assistant — in-app delete confirmation
+
+![AI Assistant — delete confirm modal](docs/screenshots/assistant-delete-modal.png)
+
+No native browser alerts — destructive actions use a themed in-app modal that overlays the sidebar with backdrop blur, ESC-to-cancel, and Enter-to-confirm.
 
 ### Trades — filter, paginate, edit inline
 
@@ -147,14 +167,15 @@ flowchart LR
   TWSE[("TWSE MIS<br/>~5s")]
   YF[("yfinance<br/>history · fundamentals")]
   FM[("FinMind<br/>monthly revenue")]
-  Gemini[("Google Gemini<br/>opt-in")]
+  Gemini[("Google Gemini 2.5 Flash<br/>SSE streaming · opt-in")]
+  GSearch[("Google Search<br/>via Gemini grounding")]
 
   UI -- "fetch /api/*" --> Trades
   UI --> Dividends
   UI --> Portfolio
   UI --> Stock
   UI --> Data
-  UI --> AI
+  UI -- "SSE stream" --> AI
   Trades --> DB
   Dividends --> DB
   Data --> DB
@@ -165,6 +186,7 @@ flowchart LR
   AI --> DB
   AI --> SInfo
   AI --> Gemini
+  Gemini -- "google_search tool" --> GSearch
   Quotes --> TWSE
   SInfo --> YF
   SInfo --> FM
@@ -327,7 +349,7 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | GET    | /api/portfolio/quote/{ticker}       | live spot quote (price + name)              |
 | GET    | /api/stock/{ticker}/detail?period=  | live + fundamentals + history + financials  |
 | GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
-| POST   | /api/ai/chat                        | send a message; persists to SQLite          |
+| POST   | /api/ai/chat                        | SSE stream: `init` → `chunk` × N → `done` (or `error`); persists final reply with `[N]` citation markers |
 | GET    | /api/ai/chats                       | list saved conversations, newest first      |
 | GET    | /api/ai/chats/{id}                  | fetch one conversation with all messages    |
 | PATCH  | /api/ai/chats/{id}                  | rename a conversation                       |
@@ -344,8 +366,16 @@ The **✦ Assistant** button in the header opens a slide-in sidebar with natural
 - Every open position with **light fundamentals** (sector, P/E, EPS, market cap, 52-week range, dividend yield, beta, 1-year analyst target, earnings / ex-div dates).
 - Every trade and dividend you've recorded.
 - For tickers you mention in the question (or in recent turns): **24 months of monthly revenue with YoY %** and **8 quarters of revenue / EPS / margins**.
+- **Anything live on the web** via Gemini's built-in Google Search tool — recent news, regulatory filings, analyst commentary, macro events, conference call summaries.
 
-This means questions like *"is 2330's gross margin improving?"* or *"compare 2330's price to its 1-year analyst target"* return tables with real numbers from your data — not generic boilerplate.
+This means questions like *"is 2330's gross margin improving?"* or *"compare 2330's price to its 1-year analyst target"* return tables with real numbers from your data — not generic boilerplate. Ask *"what's the latest news on 2330?"* and Gemini searches the web, writes a summary, and **inline citation chips** link each claim back to its source.
+
+### Streaming + citations
+
+- Backend uses `client.models.generate_content_stream` and emits Server-Sent Events: `init` → `chunk` (per token) → `done` (canonical content with `[N]` markers + Sources block).
+- Frontend consumes the SSE via `fetch` + `ReadableStream`, appends deltas to a placeholder message in real time, and swaps in the canonical version when the stream ends — so citations always settle on stable byte offsets from `grounding_supports`.
+- A trailing pulse-logo cursor follows the streamed text; a soft fade-mask gradient on the bottom edge of the response makes new tokens emerge from soft transparency rather than popping in.
+- The "Searched the web · N sources · X.Xs" header is parsed from a hidden `<!--meta:...-->` JSON prefix the backend embeds at persist time; expandable to reveal the exact `web_search_queries` Gemini issued.
 
 ### Persistent chat history
 
@@ -357,12 +387,14 @@ This means questions like *"is 2330's gross margin improving?"* or *"compare 233
 
 ### What it can / can't do
 
-- ✅ Answer questions strictly from your local data + the fundamentals pulled in for the tickers you mention.
-- ❌ Won't give buy/sell recommendations, predictions, or news. The system prompt forbids those answers.
+- ✅ Answer questions from your local data + per-ticker fundamentals + live web search results.
+- ✅ Cite every web-sourced claim with a clickable inline pill chip and a domain label.
+- ✅ Stream responses token-by-token over SSE; **Stop** to interrupt (partial reply is saved).
+- ❌ Won't give buy/sell recommendations or price predictions, even when relaying analyst opinions found via search — those are framed as observations, never advice.
 
 ### Privacy tradeoff
 
-When you ask a question, your portfolio JSON + ticker fundamentals are sent to Google's API for inference. TWSE MIS quotes still happen locally. If you don't want any data going to Google, leave `GOOGLE_AI_API_KEY` unset and the assistant stays disabled — the rest of the app continues working.
+When you ask a question, your portfolio JSON + ticker fundamentals are sent to Google's API for inference, and Gemini may issue Google Search queries on your behalf. TWSE MIS quotes still happen locally. If you don't want any data going to Google, leave `GOOGLE_AI_API_KEY` unset and the assistant stays disabled — the rest of the app continues working.
 
 > **Free tier note:** Google may use your prompts to improve their models on the free Gemini API tier. Switch to billing-enabled Vertex AI / Cloud if that's a dealbreaker.
 
@@ -377,4 +409,5 @@ When you ask a question, your portfolio JSON + ticker fundamentals are sent to G
   - **yfinance / Yahoo Finance** — daily history + fundamentals (no auth, public).
   - **FinMind** (`https://api.finmindtrade.com`) — TW monthly revenue (no auth on the free tier).
   - **Google AI** (`https://generativelanguage.googleapis.com`) — only when you've set `GOOGLE_AI_API_KEY` and ask a question in the Assistant.
+  - **Google Search** — invoked indirectly by Gemini's `google_search` tool when grounding a reply. URLs returned are Vertex AI redirect URLs that proxy to the actual source on click.
 - No analytics, no telemetry, no third-party storage.
