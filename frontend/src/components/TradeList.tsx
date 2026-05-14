@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Trade } from "../api";
 import { type DatePreset, fmtNumber, presetRange } from "../format";
+import { ConfirmModal } from "./ConfirmModal";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -25,6 +26,7 @@ export function TradeList({ trades, names, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [pendingDelete, setPendingDelete] = useState<Trade | null>(null);
 
   function applyPreset(p: DatePreset) {
     setPreset(p);
@@ -35,8 +37,14 @@ export function TradeList({ trades, names, onChanged }: Props) {
     }
   }
 
-  async function remove(id: number) {
-    if (!confirm("Delete this trade?")) return;
+  function askRemove(t: Trade) {
+    setPendingDelete(t);
+  }
+
+  async function confirmRemove() {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    setPendingDelete(null);
     await api.deleteTrade(id);
     onChanged();
   }
@@ -403,7 +411,7 @@ export function TradeList({ trades, names, onChanged }: Props) {
                       </button>{" "}
                       <button
                         className="danger"
-                        onClick={() => remove(t.id)}
+                        onClick={() => askRemove(t)}
                       >
                         Delete
                       </button>
@@ -425,6 +433,28 @@ export function TradeList({ trades, names, onChanged }: Props) {
           setPageSize(s);
           setPage(1);
         }}
+      />
+
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title="Delete this trade?"
+        message={
+          pendingDelete && (
+            <>
+              <strong>
+                {pendingDelete.type.toUpperCase()} {pendingDelete.shares} ×{" "}
+                {pendingDelete.ticker} @ NT$
+                {pendingDelete.price.toFixed(2)}
+              </strong>
+              {" — "}
+              {pendingDelete.trade_date}. This can't be undone.
+            </>
+          )
+        }
+        confirmLabel="Delete"
+        danger
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );

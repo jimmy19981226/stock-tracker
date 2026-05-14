@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Dividend } from "../api";
 import { type DatePreset, fmtMoney, presetRange } from "../format";
+import { ConfirmModal } from "./ConfirmModal";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -20,6 +21,7 @@ export function DividendList({ dividends, names, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [pendingDelete, setPendingDelete] = useState<Dividend | null>(null);
 
   function applyPreset(p: DatePreset) {
     setPreset(p);
@@ -30,8 +32,14 @@ export function DividendList({ dividends, names, onChanged }: Props) {
     }
   }
 
-  async function remove(id: number) {
-    if (!confirm("Delete this dividend record?")) return;
+  function askRemove(d: Dividend) {
+    setPendingDelete(d);
+  }
+
+  async function confirmRemove() {
+    if (!pendingDelete) return;
+    const id = pendingDelete.id;
+    setPendingDelete(null);
     await api.deleteDividend(id);
     onChanged();
   }
@@ -316,7 +324,7 @@ export function DividendList({ dividends, names, onChanged }: Props) {
                       </button>{" "}
                       <button
                         className="danger"
-                        onClick={() => remove(d.id)}
+                        onClick={() => askRemove(d)}
                       >
                         Delete
                       </button>
@@ -338,6 +346,26 @@ export function DividendList({ dividends, names, onChanged }: Props) {
           setPageSize(s);
           setPage(1);
         }}
+      />
+
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title="Delete this dividend?"
+        message={
+          pendingDelete && (
+            <>
+              <strong>
+                {pendingDelete.ticker} · NT${pendingDelete.amount.toFixed(2)}
+              </strong>
+              {" — paid "}
+              {pendingDelete.pay_date}. This can't be undone.
+            </>
+          )
+        }
+        confirmLabel="Delete"
+        danger
+        onConfirm={confirmRemove}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );

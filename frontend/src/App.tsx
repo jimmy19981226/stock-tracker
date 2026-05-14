@@ -249,6 +249,8 @@ export default function App() {
         {assistantOpen && (
           <AssistantPanel
             holdings={holdings}
+            trades={trades}
+            dividends={dividends}
             onClose={() => setAssistantOpen(false)}
             onPortfolioChanged={refresh}
           />

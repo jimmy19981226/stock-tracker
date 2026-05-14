@@ -414,15 +414,12 @@ _PARSE_PROMPT = (
 )
 
 
-@router.post("/parse-records")
-async def parse_records(file: UploadFile = File(...)):
-    """Parse a brokerage screenshot/PDF into structured trade + dividend rows.
+async def run_parse_pipeline(file: UploadFile) -> dict:
+    """Validate the upload, call Gemini, return the parsed dict.
 
-    The frontend renders the result in a preview card so the user can review
-    and edit before committing. Nothing is written to the DB here — this
-    endpoint is read-only on the server side; the frontend calls the existing
-    POST /api/trades and POST /api/dividends to persist the confirmed rows.
-    """
+    Raises HTTPException on any failure — caller can choose to bubble it
+    (interactive request) or capture it for a session store (background
+    request from the mobile QR upload page)."""
     api_key = os.environ.get("GOOGLE_AI_API_KEY")
     if not api_key:
         raise HTTPException(
@@ -507,6 +504,23 @@ async def parse_records(file: UploadFile = File(...)):
         "dividends": parsed.get("dividends") or [],
         "notes": parsed.get("notes") or "",
     }
+
+
+@router.post("/parse-records")
+async def parse_records(file: UploadFile = File(...)):
+    """Parse a brokerage screenshot/PDF into structured trade + dividend rows.
+
+    The frontend renders the result in a preview card so the user can review
+    and edit before committing. Nothing is written to the DB here — this
+    endpoint is read-only on the server side; the frontend calls the existing
+    POST /api/trades and POST /api/dividends to persist the confirmed rows.
+    """
+    return await run_parse_pipeline(file)
+
+
+# (cross-device QR upload lives in routers/mobile.py; it imports
+# `run_parse_pipeline` from this module to share the validation +
+# Gemini call.)
 
 
 def _derive_title(first_user_msg: str) -> str:

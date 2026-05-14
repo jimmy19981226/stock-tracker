@@ -13,7 +13,7 @@ except ImportError:
     pass
 
 from .database import Dividend, SessionLocal, Trade, init_db
-from .routers import ai, data, dividends, portfolio, stock, trades
+from .routers import ai, data, dividends, mobile, portfolio, stock, trades
 from .services import csv_io
 
 SEED_FILE = (
@@ -78,3 +78,5 @@ app.include_router(portfolio.router)
 app.include_router(data.router)
 app.include_router(ai.router)
 app.include_router(stock.router)
+app.include_router(mobile.router)
+app.include_router(mobile.page_router)

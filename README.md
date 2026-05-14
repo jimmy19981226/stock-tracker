@@ -35,15 +35,19 @@ All live numbers update every 5 seconds while the Dashboard tab is visible — p
 - **Quarterly earnings (季報)** — last 8 quarters of revenue, net income, diluted EPS, plus gross / operating / net margin
 - **Activity timeline** of every trade and dividend on this ticker
 
-### ✦ AI assistant
+### ✦ Agentic AI assistant
 - Slide-in sidebar with persistent chat history (rename, delete, switch threads)
+- **📎 Import trades from a screenshot or PDF** — drop a brokerage screenshot, Gemini extracts every trade and dividend (Taiwan-aware: 民國 dates → Gregorian, 張 → shares × 1000, 買進/賣出 → buy/sell). You review in an editable preview card with per-row checkboxes, then commit. Nothing writes to the DB until you confirm — and the dashboard auto-refreshes the moment you do.
+- **📱 Send from your phone via QR** — opens a modal with a QR pointing to a session URL on your LAN. Scan with your phone's camera, take a photo of the statement, the desktop picks it up automatically and drops you into the same review-and-confirm preview. No AirDrop, no email, no cable.
+- **Duplicate detection** — re-uploading a screenshot you already imported flags matching rows with an amber "Already imported" badge and unchecks them by default, so a careless click can't pollute your records.
 - **Live Google Search grounding** — asks for "the latest news on 2330" and pulls fresh sources, with inline `[N]` citation chips that link directly to each domain (favicon + hostname)
 - **Real-time SSE streaming** — text flows in word-by-word with a glowing pulse cursor, fading mask gradient on the tail edge so new tokens emerge from soft mist
 - **"Searched the web · N sources · Xs"** thought-strip above each grounded reply; click to expand and see the actual queries Gemini ran
 - Sees your **live portfolio + per-stock fundamentals on every holding**, and auto-detects ticker mentions to enrich context with monthly revenue + quarterly margins
 - Markdown rendering: tables, bold, italics, lists, code blocks
 - **Stop button** mid-generation; partial response is persisted with an "interrupted" tag
-- **In-app modal** confirmations (no native browser alerts)
+- **In-app modal** confirmations everywhere — chat delete, trade delete, dividend delete, CSV replace-all (no native browser dialogs)
+- **Rotating capability tagline** on the welcome screen — cycles through what the AI can actually do (analyze, search, import, scan from phone), personalized to your biggest holding
 - Personalized, reshuffleable suggestion cards covering portfolio, news, and market context — based on your top holdings
 
 ### 🛠 Trade & dividend management
@@ -111,7 +115,25 @@ Tap the meta strip to expand the actual search queries the model ran, so you can
 
 ![AI Assistant — delete confirm modal](docs/screenshots/assistant-delete-modal.png)
 
-No native browser alerts — destructive actions use a themed in-app modal that overlays the sidebar with backdrop blur, ESC-to-cancel, and Enter-to-confirm.
+No native browser alerts — destructive actions use a themed in-app modal that overlays the sidebar with backdrop blur, ESC-to-cancel, and Enter-to-confirm. The same component handles trade deletes, dividend deletes, and CSV replace-all confirmations.
+
+### Agentic import — review parsed records before committing
+
+![Import preview](docs/screenshots/import-preview.png)
+
+Drop a brokerage screenshot or PDF on the 📎 button. Gemini extracts every trade and dividend into an editable preview card — each row has a checkbox, type pill, and inline-editable shares / price / date / fee. Re-uploading something you've already imported flags the matching rows with an amber **"Already imported"** badge and unchecks them by default.
+
+### Send from your phone via QR
+
+![QR upload modal](docs/screenshots/qr-upload-modal.png)
+
+Click 📱, scan the QR with your phone's camera, take a photo, and the desktop picks it up automatically. The status badge cycles **Waiting for phone… → File received → AI is reading → Ready** and the modal closes itself, dropping you into the same review-and-confirm card.
+
+### Mobile upload page
+
+![Mobile upload](docs/screenshots/mobile-upload.png)
+
+The phone-facing upload page is a self-contained, no-framework HTML page served by the backend at `/m/upload/{token}` — works over the LAN with no external assets. Tap to choose a photo or PDF (or take a fresh one), then upload — the laptop sees it within a second.
 
 ### Trades — filter, paginate, edit inline
 
@@ -153,6 +175,9 @@ flowchart LR
   subgraph Browser
     UI[React + Vite UI<br/>polls every 5s]
   end
+  subgraph Phone["Phone (same Wi-Fi)"]
+    PhonePage[Mobile upload page<br/>scans QR, picks photo]
+  end
   subgraph Backend["FastAPI :8000"]
     Trades["/api/trades"]
     Dividends["/api/dividends"]
@@ -160,6 +185,7 @@ flowchart LR
     Stock["/api/stock/:ticker/detail"]
     Data["/api/data/*"]
     AI["/api/ai/*"]
+    Mobile["/api/mobile/sessions/*<br/>/m/upload/:token"]
     Quotes["tw_quotes.py — 5s in-mem cache"]
     SInfo["stock_info.py — 1h fundamentals · 6h financials"]
     DB[("SQLite trades.db<br/>chats · chat_messages")]
@@ -167,7 +193,7 @@ flowchart LR
   TWSE[("TWSE MIS<br/>~5s")]
   YF[("yfinance<br/>history · fundamentals")]
   FM[("FinMind<br/>monthly revenue")]
-  Gemini[("Google Gemini 2.5 Flash<br/>SSE streaming · opt-in")]
+  Gemini[("Google Gemini 2.5 Flash<br/>SSE streaming · vision · opt-in")]
   GSearch[("Google Search<br/>via Gemini grounding")]
 
   UI -- "fetch /api/*" --> Trades
@@ -176,6 +202,9 @@ flowchart LR
   UI --> Stock
   UI --> Data
   UI -- "SSE stream" --> AI
+  UI -- "create + poll" --> Mobile
+  PhonePage -- "GET upload page" --> Mobile
+  PhonePage -- "POST file" --> Mobile
   Trades --> DB
   Dividends --> DB
   Data --> DB
@@ -185,7 +214,8 @@ flowchart LR
   Stock --> SInfo
   AI --> DB
   AI --> SInfo
-  AI --> Gemini
+  AI -- "chat + vision parse" --> Gemini
+  Mobile -- "vision parse" --> Gemini
   Gemini -- "google_search tool" --> GSearch
   Quotes --> TWSE
   SInfo --> YF
@@ -255,6 +285,13 @@ python -m uvicorn app.main:app --reload --port 8000
 ```
 
 API docs: <http://127.0.0.1:8000/docs>
+
+> **Want to use the QR phone-upload feature?** Start uvicorn with
+> `--host 0.0.0.0` instead, and allow inbound port 8000 through Windows
+> Firewall — your phone needs to reach the backend over your Wi-Fi:
+> ```powershell
+> python -m uvicorn app.main:app --reload --port 8000 --host 0.0.0.0
+> ```
 
 ### Frontend
 
@@ -350,10 +387,16 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | GET    | /api/stock/{ticker}/detail?period=  | live + fundamentals + history + financials  |
 | GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
 | POST   | /api/ai/chat                        | SSE stream: `init` → `chunk` × N → `done` (or `error`); persists final reply with `[N]` citation markers |
+| POST   | /api/ai/parse-records               | upload an image/PDF, get `{trades, dividends, notes}` back — read-only, nothing written to DB |
 | GET    | /api/ai/chats                       | list saved conversations, newest first      |
 | GET    | /api/ai/chats/{id}                  | fetch one conversation with all messages    |
 | PATCH  | /api/ai/chats/{id}                  | rename a conversation                       |
 | DELETE | /api/ai/chats/{id}                  | delete a conversation (cascades messages)   |
+| POST   | /api/mobile/sessions                | mint a QR upload session, returns `{token, url, expires_in, lan_ip}` |
+| GET    | /api/mobile/sessions/{token}        | desktop polls this; status transitions `pending → received → parsing → ready` |
+| DELETE | /api/mobile/sessions/{token}        | release session bytes when modal closes     |
+| POST   | /api/mobile/sessions/{token}/file   | phone uploads here from the mobile page     |
+| GET    | /m/upload/{token}                   | mobile-friendly upload HTML page (rendered by phone after QR scan) |
 
 ---
 

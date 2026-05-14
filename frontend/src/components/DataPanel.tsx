@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type Dividend, type Trade } from "../api";
 import { fmtRelativeTime } from "../format";
+import { ConfirmModal } from "./ConfirmModal";
 
 interface Props {
   trades: Trade[];
@@ -26,6 +27,7 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
   const replaceRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [lastExport, setLastExport] = useState<string | null>(null);
+  const [pendingReplace, setPendingReplace] = useState<File | null>(null);
 
   async function refreshLastExport() {
     try {
@@ -74,17 +76,22 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
     await runImport(file, "append");
   }
 
-  async function handleReplace(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleReplace(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const ok = window.confirm(
-      `Replace mode will delete all existing data (${trades.length} trades + ${dividends.length} dividends) and import this CSV in its place.\n\nThis cannot be undone. Make sure the CSV is what you want.\n\nProceed?`,
-    );
-    if (!ok) {
-      if (replaceRef.current) replaceRef.current.value = "";
-      return;
-    }
+    setPendingReplace(file);
+  }
+
+  async function confirmReplace() {
+    const file = pendingReplace;
+    setPendingReplace(null);
+    if (!file) return;
     await runImport(file, "replace");
+  }
+
+  function cancelReplace() {
+    setPendingReplace(null);
+    if (replaceRef.current) replaceRef.current.value = "";
   }
 
   const latestTrade = trades[0];
@@ -249,6 +256,25 @@ dividend,,2330,,,2024-08-15,,500,Q2 cash dividend`}</pre>
         the seed file is ignored so nothing entered through the UI ever gets
         overwritten.
       </div>
+
+      <ConfirmModal
+        open={pendingReplace !== null}
+        title="Replace all data?"
+        message={
+          <>
+            This will <strong>delete</strong> your{" "}
+            <strong>{trades.length} trades</strong> and{" "}
+            <strong>{dividends.length} dividends</strong>, then import{" "}
+            <code>{pendingReplace?.name}</code> in their place. This can't be
+            undone — make sure the CSV is what you want.
+          </>
+        }
+        confirmLabel="Replace all"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={confirmReplace}
+        onCancel={cancelReplace}
+      />
     </div>
   );
 }

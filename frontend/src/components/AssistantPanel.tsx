@@ -2,6 +2,7 @@ import {
   cloneElement,
   Fragment,
   isValidElement,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -15,30 +16,40 @@ import {
   type ChatDetail,
   type ChatMessage,
   type ChatSummary,
+  type Dividend,
   type Holding,
   type ParsedDividendRow,
   type ParsedRecords,
   type ParsedTradeRow,
+  type Trade,
 } from "../api";
+import { MobileUploadModal } from "./MobileUploadModal";
 
 interface Props {
   onClose: () => void;
   holdings?: Holding[];
+  /** Existing trades + dividends — used to flag duplicate parsed rows when
+   *  the user re-uploads a screenshot they already imported. */
+  trades?: Trade[];
+  dividends?: Dividend[];
   /** Called after the user confirms imported trades/dividends so the parent
    *  dashboard can refresh. */
   onPortfolioChanged?: () => void;
 }
 
-// Local editable copies of the parsed rows. We tag each with `include` so the
-// user can uncheck rows they don't want, and a stable id for React keys.
+// Local editable copies of the parsed rows. `include` lets the user uncheck
+// rows they don't want; `duplicate` flags rows that match something already
+// in the portfolio so we can warn and default them to off.
 interface PreviewTradeRow extends ParsedTradeRow {
   id: string;
   include: boolean;
+  duplicate: boolean;
   fee: number;
 }
 interface PreviewDividendRow extends ParsedDividendRow {
   id: string;
   include: boolean;
+  duplicate: boolean;
 }
 interface PreviewState {
   fileName: string;
@@ -160,7 +171,13 @@ const LAST_CHAT_KEY = "assistant.lastChatId";
 
 type View = "messages" | "list";
 
-export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: Props) {
+export function AssistantPanel({
+  onClose,
+  holdings = [],
+  trades: existingTrades = [],
+  dividends: existingDividends = [],
+  onPortfolioChanged,
+}: Props) {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [model, setModel] = useState<string>("");
   const [view, setView] = useState<View>("messages");
@@ -180,6 +197,19 @@ export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: P
   const [parseError, setParseError] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  // Auto-dismiss the import success toast — it's an acknowledgment, not a
+  // permanent status, so 5s feels right before fading it out so the welcome
+  // / chat area returns to a clean state.
+  useEffect(() => {
+    if (!importStatus) return;
+    const id = window.setTimeout(() => setImportStatus(null), 5000);
+    return () => clearTimeout(id);
+  }, [importStatus]);
+
+  // QR-code phone-upload flow: opens a modal that mints a session, displays
+  // a QR for the LAN URL, polls until the phone has uploaded + parsed.
+  const [mobileOpen, setMobileOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -363,37 +393,79 @@ export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: P
     setImportStatus(null);
     try {
       const result: ParsedRecords = await api.parseRecords(f);
-      const trades: PreviewTradeRow[] = result.trades.map((r, i) => ({
-        ...r,
-        id: `t-${i}`,
-        include: true,
-        ticker: (r.ticker || "").toUpperCase().trim(),
-        fee: r.fee ?? 0,
-      }));
-      const dividends: PreviewDividendRow[] = result.dividends.map((r, i) => ({
-        ...r,
-        id: `d-${i}`,
-        include: true,
-        ticker: (r.ticker || "").toUpperCase().trim(),
-      }));
-      if (trades.length === 0 && dividends.length === 0) {
-        setParseError(
-          result.notes ||
-            "No trades or dividends were detected in that file. Try a clearer screenshot.",
-        );
-        return;
-      }
-      setPreview({
-        fileName: f.name,
-        trades,
-        dividends,
-        notes: result.notes || "",
-      });
+      openPreviewFromParsed(result, f.name);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : "Parse failed");
     } finally {
       setParsing(false);
     }
+  }
+
+  function openPreviewFromParsed(result: ParsedRecords, fileName: string) {
+    // Detect duplicates against the live portfolio. Match keys are loose enough
+    // to forgive minor LLM transcription noise (fee/notes can vary) but tight
+    // enough to catch a re-uploaded screenshot. Duplicates are unchecked by
+    // default — user has to deliberately opt them back in.
+    const isDupTrade = (r: ParsedTradeRow) => {
+      const ticker = (r.ticker || "").toUpperCase().trim();
+      const shares = Number(r.shares);
+      const price = Number(r.price);
+      return existingTrades.some(
+        (t) =>
+          t.type === r.type &&
+          t.ticker === ticker &&
+          t.trade_date === r.date &&
+          Math.abs(t.shares - shares) < 1e-6 &&
+          Math.abs(t.price - price) < 0.01,
+      );
+    };
+    const isDupDividend = (r: ParsedDividendRow) => {
+      const ticker = (r.ticker || "").toUpperCase().trim();
+      const amount = Number(r.amount);
+      return existingDividends.some(
+        (d) =>
+          d.ticker === ticker &&
+          d.pay_date === r.date &&
+          Math.abs(d.amount - amount) < 0.01,
+      );
+    };
+
+    const trades: PreviewTradeRow[] = result.trades.map((r, i) => {
+      const dup = isDupTrade(r);
+      return {
+        ...r,
+        id: `t-${i}`,
+        include: !dup,
+        duplicate: dup,
+        ticker: (r.ticker || "").toUpperCase().trim(),
+        fee: r.fee ?? 0,
+      };
+    });
+    const dividends: PreviewDividendRow[] = result.dividends.map((r, i) => {
+      const dup = isDupDividend(r);
+      return {
+        ...r,
+        id: `d-${i}`,
+        include: !dup,
+        duplicate: dup,
+        ticker: (r.ticker || "").toUpperCase().trim(),
+      };
+    });
+    if (trades.length === 0 && dividends.length === 0) {
+      setParseError(
+        result.notes ||
+          "No trades or dividends were detected in that file. Try a clearer screenshot.",
+      );
+      return;
+    }
+    setParseError(null);
+    setImportStatus(null);
+    setPreview({
+      fileName,
+      trades,
+      dividends,
+      notes: result.notes || "",
+    });
   }
 
   async function commitPreview() {
@@ -481,6 +553,19 @@ export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: P
     setPreview(null);
     setParseError(null);
   }
+
+  // Stable callbacks for MobileUploadModal — its polling effect lists these
+  // in its dep array, so passing inline arrows would cause the effect to
+  // tear down on every re-render and miss the "ready" response from the
+  // Gemini call (the in-flight tick bails on `if (stopped) return`).
+  const handleMobileParsed = useCallback(
+    (records: ParsedRecords, fileName: string) => {
+      setMobileOpen(false);
+      openPreviewFromParsed(records, fileName);
+    },
+    [],
+  );
+  const handleMobileClose = useCallback(() => setMobileOpen(false), []);
 
   function handleDelete(id: number) {
     const chat = chats.find((c) => c.id === id);
@@ -594,9 +679,7 @@ export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: P
                   Your portfolio copilot
                 </div>
                 <div className="assistant-welcome-sub muted">
-                  Drop a brokerage screenshot or PDF and I'll extract trades
-                  and dividends — you review, then I add them. Or ask me
-                  anything about your holdings.
+                  I can <RotatingCapabilities topTickers={topTickers} />
                 </div>
 
                 <button
@@ -662,17 +745,19 @@ export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: P
                 />
               ))
             )}
+            {/* Render the import success toast inside the scrollable area
+                so it lives with the conversation/welcome content rather
+                than floating in the gap between messages and the input. */}
+            {importStatus && !preview && (
+              <div className="assistant-import-toast" role="status">
+                ✓ {importStatus}
+              </div>
+            )}
           </div>
 
           {error && (
             <div className="error" style={{ fontSize: 12 }}>
               {error}
-            </div>
-          )}
-
-          {importStatus && !preview && (
-            <div className="assistant-import-toast" role="status">
-              ✓ {importStatus}
             </div>
           )}
 
@@ -715,7 +800,17 @@ export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: P
               title="Upload a brokerage screenshot or PDF — AI will extract trades and dividends"
               aria-label="Attach file"
             >
-              {parsing ? "…" : "📎"}
+              {parsing ? <SpinnerIcon /> : <PaperclipIcon />}
+            </button>
+            <button
+              type="button"
+              className="secondary assistant-attach-btn assistant-phone-btn"
+              onClick={() => setMobileOpen(true)}
+              disabled={busy || parsing || mobileOpen}
+              title="Scan a QR code with your phone and upload from there"
+              aria-label="Send from phone"
+            >
+              <PhoneScanIcon />
             </button>
             <input
               ref={inputRef}
@@ -782,6 +877,13 @@ export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: P
             </div>
           </div>
         </div>
+      )}
+
+      {mobileOpen && (
+        <MobileUploadModal
+          onParsed={handleMobileParsed}
+          onClose={handleMobileClose}
+        />
       )}
     </aside>
   );
@@ -1129,6 +1231,46 @@ function Bubble({
   );
 }
 
+// Rotating capability tagline shown on the empty-chat welcome screen. Cycles
+// through what the assistant can actually do, with a subtle fade between
+// lines so the user discovers features without us listing all eight at once.
+// Personalised: lines that take a ticker fill in the user's biggest holding.
+const ROTATING_CAPS: ReadonlyArray<(t: string) => string> = [
+  () => "extract trades and dividends from a brokerage screenshot.",
+  () => "import records straight from your phone with a QR scan.",
+  (t) => `analyze ${t}'s monthly revenue trend and margins.`,
+  (t) => `search the web for the latest news on ${t}.`,
+  (t) => `compare ${t}'s price to its 1-year analyst target.`,
+  () => "tell you which holdings are winning and which are losing.",
+  () => "show your dividend history and yield-on-cost.",
+  () => "flag if you're overconcentrated in any one ticker.",
+];
+
+function RotatingCapabilities({ topTickers }: { topTickers: string[] }) {
+  const focus = topTickers[0] || "2330";
+  const lines = useMemo(
+    () => ROTATING_CAPS.map((fn) => fn(focus)),
+    [focus],
+  );
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(
+      () => setI((n) => (n + 1) % lines.length),
+      3500,
+    );
+    return () => clearInterval(id);
+  }, [lines.length]);
+  return (
+    <span className="rot-cap-wrap">
+      {/* keyed so React re-mounts the inner span on each tick — that's
+          what re-fires the CSS fade-in animation. */}
+      <span key={i} className="rot-cap">
+        {lines[i]}
+      </span>
+    </span>
+  );
+}
+
 // Fancy AI logo for in-flight states. The ✦ glyph itself pulses + rotates
 // with a brand gradient text-fill, layered with a halo that breathes and a
 // sonar ring that radiates outward. Two sizes: "thinking" (placeholder while
@@ -1138,6 +1280,18 @@ function AiPulseLogo({ size = "thinking" }: { size?: "thinking" | "cursor" }) {
     <span className={`ai-pulse-logo ai-pulse-logo-${size}`} aria-hidden>
       <span className="ai-pulse-logo-glyph">✦</span>
     </span>
+  );
+}
+
+// Tiny labelled field wrapper used inside each parsed-record card. Keeps
+// the column markup compact and makes the field purpose obvious without
+// relying on placeholder text (which disappears once the input has a value).
+function RecField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="rec-field">
+      <span className="rec-field-label">{label}</span>
+      {children}
+    </label>
   );
 }
 
@@ -1161,6 +1315,9 @@ function RecordsPreview({
   const includedTrades = state.trades.filter((r) => r.include).length;
   const includedDivs = state.dividends.filter((r) => r.include).length;
   const totalSelected = includedTrades + includedDivs;
+  const duplicateCount =
+    state.trades.filter((r) => r.duplicate).length +
+    state.dividends.filter((r) => r.duplicate).length;
 
   function updateTrade(id: string, patch: Partial<PreviewTradeRow>) {
     onChange({
@@ -1195,6 +1352,14 @@ function RecordsPreview({
           </div>
           <div className="records-preview-sub muted">
             from {state.fileName} — review, edit, then confirm
+            {duplicateCount > 0 && (
+              <>
+                {" · "}
+                <span className="records-preview-dup-note">
+                  ⚠ {duplicateCount} already in your portfolio (unchecked)
+                </span>
+              </>
+            )}
           </div>
         </div>
         <button
@@ -1215,90 +1380,127 @@ function RecordsPreview({
 
       {state.trades.length > 0 && (
         <div className="records-preview-section">
-          <div className="records-preview-section-title">Trades</div>
+          <div className="records-preview-section-title">
+            Trades
+            <span className="records-section-count">{state.trades.length}</span>
+          </div>
           <div className="records-preview-rows">
             {state.trades.map((r) => (
               <div
                 key={r.id}
-                className={`records-preview-row${r.include ? "" : " excluded"}`}
+                className={`rec-card${r.include ? "" : " excluded"}${r.duplicate ? " duplicate" : ""}`}
               >
-                <input
-                  type="checkbox"
-                  checked={r.include}
-                  onChange={(e) => updateTrade(r.id, { include: e.target.checked })}
-                  disabled={busy}
-                  aria-label="Include this trade"
-                />
-                <select
-                  value={r.type}
-                  onChange={(e) =>
-                    updateTrade(r.id, { type: e.target.value as "buy" | "sell" })
-                  }
-                  disabled={busy}
-                  className={`records-pill records-pill-${r.type}`}
-                >
-                  <option value="buy">Buy</option>
-                  <option value="sell">Sell</option>
-                </select>
-                <input
-                  className="records-input records-input-ticker"
-                  value={r.ticker}
-                  onChange={(e) =>
-                    updateTrade(r.id, { ticker: e.target.value.toUpperCase() })
-                  }
-                  disabled={busy}
-                  placeholder="2330"
-                />
-                <input
-                  className="records-input records-input-num"
-                  type="number"
-                  value={r.shares}
-                  onChange={(e) =>
-                    updateTrade(r.id, { shares: parseFloat(e.target.value) || 0 })
-                  }
-                  disabled={busy}
-                  placeholder="shares"
-                  min={0}
-                />
-                <input
-                  className="records-input records-input-num"
-                  type="number"
-                  value={r.price}
-                  onChange={(e) =>
-                    updateTrade(r.id, { price: parseFloat(e.target.value) || 0 })
-                  }
-                  disabled={busy}
-                  step="0.01"
-                  placeholder="price"
-                />
-                <input
-                  className="records-input records-input-date"
-                  type="date"
-                  value={r.date}
-                  onChange={(e) => updateTrade(r.id, { date: e.target.value })}
-                  disabled={busy}
-                />
-                <input
-                  className="records-input records-input-num"
-                  type="number"
-                  value={r.fee}
-                  onChange={(e) =>
-                    updateTrade(r.id, { fee: parseFloat(e.target.value) || 0 })
-                  }
-                  disabled={busy}
-                  placeholder="fee"
-                  min={0}
-                />
-                <button
-                  type="button"
-                  className="records-row-remove"
-                  onClick={() => removeTrade(r.id)}
-                  disabled={busy}
-                  title="Remove this row"
-                  aria-label="Remove row"
-                >
-                  ×
-                </button>
+                <div className="rec-card-head">
+                  <input
+                    type="checkbox"
+                    className="rec-check"
+                    checked={r.include}
+                    onChange={(e) =>
+                      updateTrade(r.id, { include: e.target.checked })
+                    }
+                    disabled={busy}
+                    aria-label="Include this trade"
+                  />
+                  <select
+                    value={r.type}
+                    onChange={(e) =>
+                      updateTrade(r.id, { type: e.target.value as "buy" | "sell" })
+                    }
+                    disabled={busy}
+                    className={`records-pill records-pill-${r.type}`}
+                    aria-label="Trade type"
+                  >
+                    <option value="buy">Buy</option>
+                    <option value="sell">Sell</option>
+                  </select>
+                  <input
+                    className="rec-ticker"
+                    value={r.ticker}
+                    onChange={(e) =>
+                      updateTrade(r.id, { ticker: e.target.value.toUpperCase() })
+                    }
+                    disabled={busy}
+                    placeholder="Ticker"
+                    aria-label="Ticker"
+                  />
+                  {r.duplicate && (
+                    <span
+                      className="rec-dup-badge"
+                      title="A matching trade already exists in your portfolio"
+                    >
+                      Already imported
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="rec-remove"
+                    onClick={() => removeTrade(r.id)}
+                    disabled={busy}
+                    title="Remove this row"
+                    aria-label="Remove row"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="rec-card-grid rec-card-grid-trade">
+                  <RecField label="Shares">
+                    <input
+                      className="rec-input"
+                      type="number"
+                      value={r.shares}
+                      onChange={(e) =>
+                        updateTrade(r.id, {
+                          shares: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      disabled={busy}
+                      min={0}
+                      aria-label="Shares"
+                    />
+                  </RecField>
+                  <RecField label="Price (NT$)">
+                    <input
+                      className="rec-input"
+                      type="number"
+                      value={r.price}
+                      onChange={(e) =>
+                        updateTrade(r.id, {
+                          price: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      disabled={busy}
+                      step="0.01"
+                      aria-label="Price"
+                    />
+                  </RecField>
+                  <RecField label="Date">
+                    <input
+                      className="rec-input"
+                      type="date"
+                      value={r.date}
+                      onChange={(e) =>
+                        updateTrade(r.id, { date: e.target.value })
+                      }
+                      disabled={busy}
+                      aria-label="Date"
+                    />
+                  </RecField>
+                  <RecField label="Fee (NT$)">
+                    <input
+                      className="rec-input"
+                      type="number"
+                      value={r.fee}
+                      onChange={(e) =>
+                        updateTrade(r.id, {
+                          fee: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      disabled={busy}
+                      min={0}
+                      aria-label="Fee"
+                    />
+                  </RecField>
+                </div>
               </div>
             ))}
           </div>
@@ -1307,62 +1509,88 @@ function RecordsPreview({
 
       {state.dividends.length > 0 && (
         <div className="records-preview-section">
-          <div className="records-preview-section-title">Dividends</div>
+          <div className="records-preview-section-title">
+            Dividends
+            <span className="records-section-count">{state.dividends.length}</span>
+          </div>
           <div className="records-preview-rows">
             {state.dividends.map((r) => (
               <div
                 key={r.id}
-                className={`records-preview-row${r.include ? "" : " excluded"}`}
+                className={`rec-card${r.include ? "" : " excluded"}${r.duplicate ? " duplicate" : ""}`}
               >
-                <input
-                  type="checkbox"
-                  checked={r.include}
-                  onChange={(e) =>
-                    updateDividend(r.id, { include: e.target.checked })
-                  }
-                  disabled={busy}
-                  aria-label="Include this dividend"
-                />
-                <span className="records-pill records-pill-div">Div</span>
-                <input
-                  className="records-input records-input-ticker"
-                  value={r.ticker}
-                  onChange={(e) =>
-                    updateDividend(r.id, { ticker: e.target.value.toUpperCase() })
-                  }
-                  disabled={busy}
-                  placeholder="2330"
-                />
-                <input
-                  className="records-input records-input-num"
-                  type="number"
-                  value={r.amount}
-                  onChange={(e) =>
-                    updateDividend(r.id, {
-                      amount: parseFloat(e.target.value) || 0,
-                    })
-                  }
-                  disabled={busy}
-                  step="0.01"
-                  placeholder="amount"
-                />
-                <input
-                  className="records-input records-input-date"
-                  type="date"
-                  value={r.date}
-                  onChange={(e) => updateDividend(r.id, { date: e.target.value })}
-                  disabled={busy}
-                />
-                <button
-                  type="button"
-                  className="records-row-remove"
-                  onClick={() => removeDividend(r.id)}
-                  disabled={busy}
-                  title="Remove this row"
-                  aria-label="Remove row"
-                >
-                  ×
-                </button>
+                <div className="rec-card-head">
+                  <input
+                    type="checkbox"
+                    className="rec-check"
+                    checked={r.include}
+                    onChange={(e) =>
+                      updateDividend(r.id, { include: e.target.checked })
+                    }
+                    disabled={busy}
+                    aria-label="Include this dividend"
+                  />
+                  <span className="records-pill records-pill-div">Dividend</span>
+                  <input
+                    className="rec-ticker"
+                    value={r.ticker}
+                    onChange={(e) =>
+                      updateDividend(r.id, {
+                        ticker: e.target.value.toUpperCase(),
+                      })
+                    }
+                    disabled={busy}
+                    placeholder="Ticker"
+                    aria-label="Ticker"
+                  />
+                  {r.duplicate && (
+                    <span
+                      className="rec-dup-badge"
+                      title="A matching dividend already exists in your portfolio"
+                    >
+                      Already imported
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="rec-remove"
+                    onClick={() => removeDividend(r.id)}
+                    disabled={busy}
+                    title="Remove this row"
+                    aria-label="Remove row"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="rec-card-grid rec-card-grid-div">
+                  <RecField label="Amount (NT$)">
+                    <input
+                      className="rec-input"
+                      type="number"
+                      value={r.amount}
+                      onChange={(e) =>
+                        updateDividend(r.id, {
+                          amount: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      disabled={busy}
+                      step="0.01"
+                      aria-label="Amount"
+                    />
+                  </RecField>
+                  <RecField label="Pay date">
+                    <input
+                      className="rec-input"
+                      type="date"
+                      value={r.date}
+                      onChange={(e) =>
+                        updateDividend(r.id, { date: e.target.value })
+                      }
+                      disabled={busy}
+                      aria-label="Pay date"
+                    />
+                  </RecField>
+                </div>
               </div>
             ))}
           </div>
@@ -1441,6 +1669,71 @@ function MessageMetaStrip({
         </ul>
       )}
     </button>
+  );
+}
+
+// Lucide-style 16px line icons used in the input row. `currentColor` lets
+// the existing button hover state recolor them (neutral → accent blue).
+
+function PaperclipIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
+function PhoneScanIcon() {
+  // Phone outline + a 2x2 QR-style block inside, hinting at "scan a QR with
+  // your phone". The four square dots line up with how the QR position
+  // markers look at thumbnail size.
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="6" y="2" width="12" height="20" rx="2.6" />
+      <line x1="10.5" y1="5" x2="13.5" y2="5" />
+      <rect x="8.6" y="9" width="2.6" height="2.6" rx="0.4" fill="currentColor" stroke="none" />
+      <rect x="12.8" y="9" width="2.6" height="2.6" rx="0.4" fill="currentColor" stroke="none" />
+      <rect x="8.6" y="13.2" width="2.6" height="2.6" rx="0.4" fill="currentColor" stroke="none" />
+      <rect x="12.8" y="13.2" width="2.6" height="2.6" rx="0.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function SpinnerIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      className="assistant-spin"
+      aria-hidden
+    >
+      <path d="M12 3a9 9 0 1 0 9 9" />
+    </svg>
   );
 }
 

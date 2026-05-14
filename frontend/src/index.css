@@ -1705,6 +1705,131 @@ main.app {
   to   { background-position: -200% 0; }
 }
 
+/* QR-code modal that lets the user upload from their phone. The phone hits
+   the backend on the LAN and the desktop polls until the parse is ready. */
+.mobile-modal {
+  width: min(420px, 92vw);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mobile-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.mobile-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: var(--text, #e8ecf2);
+}
+.mobile-modal-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 320px;
+}
+.mobile-qr-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  border-radius: 14px;
+  padding: 14px;
+  align-self: center;
+  width: 268px;
+  height: 268px;
+}
+.mobile-qr-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0e16;
+  border-radius: 8px;
+  color: var(--text, #e8ecf2);
+}
+.mobile-url-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.mobile-url-input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.10));
+  border-radius: 8px;
+  color: var(--text, #e8ecf2);
+  min-width: 0;
+}
+.mobile-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.mobile-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2, #6b7589);
+}
+.mobile-status-badge.pending { color: #93a3bd; }
+.mobile-status-badge.working {
+  color: #6384ff;
+  border-color: rgba(99, 132, 255, 0.4);
+  background: rgba(99, 132, 255, 0.10);
+}
+.mobile-status-badge.ok {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.10);
+}
+.mobile-status-badge.err {
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.10);
+}
+.mobile-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: mobile-status-pulse 1.4s ease-in-out infinite;
+}
+.mobile-status-badge.ok .mobile-status-dot,
+.mobile-status-badge.err .mobile-status-dot { animation: none; }
+@keyframes mobile-status-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+.mobile-modal-help {
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.mobile-modal-help code {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+}
+
 /* Hero "Import trades from a screenshot or PDF" CTA on the assistant
    welcome screen. Bigger than the regular suggestion cards, gradient-tinted
    to read as the primary action. Clicking it opens the same file picker
@@ -1797,32 +1922,136 @@ main.app {
   padding: 0;
   font-size: 15px;
   line-height: 1;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--border);
   color: var(--text-2);
   cursor: pointer;
+  transition: color 160ms ease, background 160ms ease,
+              border-color 160ms ease, box-shadow 160ms ease,
+              transform 90ms ease;
+}
+.assistant-input-row .assistant-attach-btn svg {
+  display: block;
 }
 .assistant-input-row .assistant-attach-btn:hover:not(:disabled) {
-  background: rgba(99, 132, 255, 0.12);
-  border-color: rgba(99, 132, 255, 0.4);
+  background: linear-gradient(
+    135deg,
+    rgba(99, 132, 255, 0.18),
+    rgba(167, 139, 250, 0.14)
+  );
+  border-color: rgba(99, 132, 255, 0.5);
   color: var(--accent, #6384ff);
+  box-shadow: 0 4px 14px -6px rgba(99, 132, 255, 0.55);
+}
+.assistant-input-row .assistant-attach-btn:active:not(:disabled) {
+  transform: scale(0.94);
 }
 .assistant-input-row .assistant-attach-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
+/* Spinner shown inside the icon buttons while a parse is in flight. */
+.assistant-spin {
+  animation: assistant-spin 0.85s linear infinite;
+  transform-origin: center;
+}
+@keyframes assistant-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-spin { animation: none; }
+}
+
+/* "Send from phone" variant — same shape as the paperclip but tinted with
+   the brand gradient so it reads as the secondary, agentic option. The
+   inline SVG (PhoneScanIcon) inherits the gradient via currentColor. */
+/* Phone button shares the paperclip's resting style — same neutral surface,
+   same border. The SVG inherits the accent color via currentColor so the
+   icon itself reads as "the agentic option" without the button background
+   shouting for attention at rest. Hover treatment is inherited from
+   .assistant-attach-btn (same brand-gradient lift). */
+.assistant-input-row .assistant-phone-btn {
+  color: var(--accent, #6384ff);
+}
+.assistant-input-row .assistant-phone-btn:hover:not(:disabled) {
+  /* Slightly brighter icon color than the paperclip on hover so the two
+     buttons feel related but distinct. */
+  color: #a8baff;
+}
+.assistant-input-row .assistant-phone-btn svg {
+  display: block;
+}
+
+/* Rotating capability tagline on the welcome screen. The wrapper reserves
+   a stable height so the panel doesn't jitter as longer/shorter lines
+   swap in. Each line fades + rises into place with a brand-gradient text
+   fill so it reads as something the AI is "saying" rather than static copy. */
+.rot-cap-wrap {
+  display: inline-block;
+  min-height: 1.6em;
+}
+.rot-cap {
+  display: inline-block;
+  background: linear-gradient(
+    100deg,
+    var(--accent, #6384ff) 0%,
+    var(--accent-2, #a78bfa) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 500;
+  animation: rot-cap-in 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes rot-cap-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rot-cap { animation: none; }
+}
+
 /* Lightweight success toast that appears in the assistant body after a
    successful image/PDF import. Auto-dismisses when a new preview opens. */
 .assistant-import-toast {
-  margin: 8px 12px 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(52, 211, 153, 0.10);
+  /* Now lives inside .assistant-messages as the last child — render as a
+     centered pill so it reads as a system message about the conversation
+     rather than a separate banner crammed against the input row. */
+  align-self: center;
+  margin: 12px auto 4px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.12);
   border: 1px solid rgba(52, 211, 153, 0.35);
   color: #34d399;
   font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  max-width: 90%;
+  text-align: center;
+  animation: import-toast-in 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes import-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-import-toast { animation: none; }
 }
 
 /* Inline preview card the user reviews before committing AI-parsed records. */
@@ -1862,37 +2091,192 @@ main.app {
   line-height: 1.5;
 }
 .records-preview-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--text-2, #6b7589);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+.records-section-count {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(99, 132, 255, 0.14);
+  color: var(--accent, #6384ff);
+  letter-spacing: 0;
+  text-transform: none;
 }
 .records-preview-rows {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
-.records-preview-row {
-  display: flex;
+
+/* Per-record mini-card — clearer hierarchy than a single wrapped row.
+   Top strip identifies the trade (checkbox, type pill, ticker, remove);
+   2x2 grid below carries the editable numeric/date fields, each with its
+   own micro-label so users don't have to guess what column is what. */
+.rec-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 10px 8px;
+  transition: opacity 120ms ease, border-color 140ms ease, background 140ms ease;
+}
+.rec-card:hover:not(.excluded) {
+  border-color: rgba(99, 132, 255, 0.35);
+}
+.rec-card.excluded {
+  opacity: 0.42;
+  filter: saturate(0.6);
+}
+/* Amber-tinted card + badge for rows that already exist in the portfolio.
+   Defaults to unchecked (excluded) so the user has to opt-in to re-import.
+   Re-checking a duplicate keeps the amber border so the warning persists. */
+.rec-card.duplicate {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.04);
+}
+.rec-card.duplicate:hover:not(.excluded) {
+  border-color: rgba(251, 191, 36, 0.7);
+}
+.rec-dup-badge {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 4px;
-  border-radius: 6px;
-  transition: opacity 120ms;
-}
-.records-preview-row.excluded {
-  opacity: 0.4;
-}
-.records-preview-row > input[type="checkbox"] {
-  flex-shrink: 0;
-  margin: 0;
-}
-.records-pill {
+  gap: 4px;
+  padding: 2px 8px;
   font-size: 10px;
   font-weight: 600;
-  padding: 3px 8px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 999px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.records-preview-dup-note {
+  color: #fbbf24;
+}
+
+.rec-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rec-check {
+  flex-shrink: 0;
+  margin: 0;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent, #6384ff);
+  cursor: pointer;
+}
+.rec-ticker {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  color: var(--text, #e8ecf2);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 4px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-family: inherit;
+}
+.rec-ticker:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+.rec-ticker:focus {
+  outline: none;
+  background: rgba(99, 132, 255, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(99, 132, 255, 0.45);
+}
+.rec-remove {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-2, #6b7589);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 140ms, color 140ms;
+}
+.rec-remove:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.rec-card-grid {
+  display: grid;
+  gap: 8px 10px;
+}
+.rec-card-grid-trade {
+  /* 2x2 — Shares · Price on top, Date · Fee below. Date column gets a
+     bit more room since dates are wider than numbers. */
+  grid-template-columns: 1fr 1fr;
+}
+.rec-card-grid-div {
+  /* Amount + Pay date side by side. */
+  grid-template-columns: 1fr 1.2fr;
+}
+
+.rec-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.rec-field-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-2, #6b7589);
+  padding-left: 2px;
+}
+.rec-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: var(--text, #e8ecf2);
+  font-size: 12px;
+  font-family: inherit;
+  min-width: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.rec-input:focus {
+  outline: none;
+  border-color: rgba(99, 132, 255, 0.55);
+  background: rgba(0, 0, 0, 0.40);
+  box-shadow: 0 0 0 2px rgba(99, 132, 255, 0.16);
+}
+/* Numeric inputs read better right-aligned. The browser-native date input
+   has its own internal layout, so leave its alignment alone. */
+.rec-input[type="number"] { text-align: right; }
+
+/* Type/Dividend pills */
+.records-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.06);
@@ -1900,48 +2284,41 @@ main.app {
   cursor: pointer;
   appearance: none;
   flex-shrink: 0;
-}
-.records-pill-buy { background: rgba(52, 211, 153, 0.15); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
-.records-pill-sell { background: rgba(248, 113, 113, 0.15); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
-.records-pill-div { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); display: inline-block; line-height: 1.4; }
-.records-input {
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 5px;
-  padding: 4px 6px;
-  color: var(--text, #e8ecf2);
-  font-size: 11px;
   font-family: inherit;
-  min-width: 0;
 }
-.records-input:focus {
-  outline: none;
-  border-color: var(--accent, #6384ff);
-}
-.records-input-ticker { width: 64px; text-transform: uppercase; }
-.records-input-num { width: 70px; text-align: right; }
-.records-input-date { width: 130px; }
-.records-row-remove {
-  background: transparent;
-  border: none;
-  color: var(--text-2, #6b7589);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: auto;
-}
-.records-row-remove:hover:not(:disabled) {
-  background: rgba(248, 113, 113, 0.15);
-  color: #f87171;
-}
+.records-pill-buy  { background: rgba(52, 211, 153, 0.16); color: #34d399; border-color: rgba(52, 211, 153, 0.32); }
+.records-pill-sell { background: rgba(248, 113, 113, 0.16); color: #f87171; border-color: rgba(248, 113, 113, 0.32); }
+.records-pill-div  { background: rgba(251, 191, 36, 0.16); color: #fbbf24; border-color: rgba(251, 191, 36, 0.32); cursor: default; }
+
+/* Action bar at the bottom of the preview card. */
 .records-preview-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding-top: 4px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  align-items: center;
+  gap: 10px;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.records-preview-actions button {
+  font-size: 13px;
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+.records-preview-actions button:not(.secondary):not(:disabled) {
+  background: linear-gradient(135deg, var(--accent, #6384ff), var(--accent-2, #a78bfa));
+  color: white;
+  border: none;
+  font-weight: 600;
+  box-shadow: 0 4px 14px -6px rgba(99, 132, 255, 0.6);
+}
+.records-preview-actions button:not(.secondary):not(:disabled):hover {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 18px -6px rgba(99, 132, 255, 0.75);
+}
+.records-preview-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Skeleton placeholders for the StockDetail modal so it can pop in
@@ -2218,7 +2595,8 @@ main.app {
 
 .assistant-input-row {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   padding: 12px 14px;
   border-top: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.018);
@@ -2226,21 +2604,73 @@ main.app {
 }
 
 .assistant-input-row button {
-  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 120ms ease;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
 }
 
 .assistant-input-row button:active {
   transform: scale(0.97);
 }
 
+.assistant-input-row button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(99, 132, 255, 0.35),
+    0 0 0 4px rgba(99, 132, 255, 0.12);
+}
+
 .assistant-input-row input {
   flex: 1;
   font-size: 13px;
+  height: 36px;
+  padding: 0 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
 }
 
-.assistant-input-row button {
-  padding: 9px 14px;
-  font-size: 12px;
+.assistant-input-row input::placeholder {
+  color: var(--text-2);
+}
+
+.assistant-input-row input:focus {
+  outline: none;
+  border-color: rgba(99, 132, 255, 0.55);
+  background: rgba(0, 0, 0, 0.36);
+  box-shadow: 0 0 0 3px rgba(99, 132, 255, 0.14);
+}
+
+.assistant-input-row input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.assistant-input-row button[type="submit"] {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent, #6384ff), var(--accent-2, #a78bfa));
+  color: white;
+  border: none;
+  box-shadow: 0 4px 14px -6px rgba(99, 132, 255, 0.6);
+}
+.assistant-input-row button[type="submit"]:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 18px -6px rgba(99, 132, 255, 0.75);
+}
+.assistant-input-row button[type="submit"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: grayscale(0.4);
 }
 
 /* Icon buttons in the assistant header (☰, +, ✕) and per-row actions. */
@@ -2794,6 +3224,60 @@ main.app {
 .app > .panel,
 .app > div > .panel {
   animation: panel-fade-in 280ms ease both;
+}
+
+/* Global in-app confirm dialog (used by TradeList / DividendList / DataPanel
+   for destructive actions). Shares the .modal-backdrop's blur & overlay but
+   centers a small dialog and renders compact text + two buttons. */
+.confirm-modal-backdrop {
+  align-items: center;
+}
+.confirm-modal {
+  width: min(440px, 100%);
+  padding: 22px 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.confirm-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.confirm-modal-message {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+.confirm-modal-message strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.confirm-modal-message code {
+  background: rgba(99, 132, 255, 0.14);
+  color: var(--accent, #6384ff);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.confirm-modal-danger {
+  background: linear-gradient(135deg, #f87171, #dc2626) !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 600;
+}
+.confirm-modal-danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 18px -6px rgba(248, 113, 113, 0.6);
 }
 
 /* In-sidebar confirm modal — replaces the native browser confirm() so the

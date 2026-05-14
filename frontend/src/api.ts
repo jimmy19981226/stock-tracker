@@ -158,6 +158,27 @@ async function parseRecords(file: File): Promise<ParsedRecords> {
   return res.json();
 }
 
+export interface MobileSession {
+  token: string;
+  url: string;
+  expires_in: number;
+  lan_ip: string;
+}
+
+export type MobileSessionStatus =
+  | "pending"
+  | "received"
+  | "parsing"
+  | "ready"
+  | "error";
+
+export interface MobileSessionPoll {
+  status: MobileSessionStatus;
+  file_name: string | null;
+  parsed: ParsedRecords | null;
+  error: string | null;
+}
+
 async function uploadPortfolioCsv(
   file: File,
   mode: "append" | "replace" = "append",
@@ -342,6 +363,14 @@ export const api = {
     request<void>(`/api/ai/chats/${id}`, { method: "DELETE" }),
   aiChatStream,
   parseRecords,
+  createMobileSession: () =>
+    request<MobileSession>("/api/mobile/sessions", { method: "POST" }),
+  pollMobileSession: (token: string) =>
+    request<MobileSessionPoll>(`/api/mobile/sessions/${encodeURIComponent(token)}`),
+  closeMobileSession: (token: string) =>
+    request<void>(`/api/mobile/sessions/${encodeURIComponent(token)}`, {
+      method: "DELETE",
+    }),
   getStockDetail: (ticker: string, period: HistoryPeriod = "1y") =>
     request<StockDetail>(
       `/api/stock/${encodeURIComponent(ticker)}/detail?period=${period}`,
