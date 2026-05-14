@@ -115,6 +115,49 @@ export interface ImportResult {
   deleted_dividends: number;
 }
 
+export interface ParsedTradeRow {
+  type: TradeType;
+  ticker: string;
+  shares: number;
+  price: number;
+  date: string;
+  fee?: number;
+  notes?: string;
+}
+
+export interface ParsedDividendRow {
+  ticker: string;
+  amount: number;
+  date: string;
+  notes?: string;
+}
+
+export interface ParsedRecords {
+  trades: ParsedTradeRow[];
+  dividends: ParsedDividendRow[];
+  notes: string;
+}
+
+async function parseRecords(file: File): Promise<ParsedRecords> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/ai/parse-records", {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = body.detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 async function uploadPortfolioCsv(
   file: File,
   mode: "append" | "replace" = "append",
@@ -298,6 +341,7 @@ export const api = {
   deleteChat: (id: number) =>
     request<void>(`/api/ai/chats/${id}`, { method: "DELETE" }),
   aiChatStream,
+  parseRecords,
   getStockDetail: (ticker: string, period: HistoryPeriod = "1y") =>
     request<StockDetail>(
       `/api/stock/${encodeURIComponent(ticker)}/detail?period=${period}`,

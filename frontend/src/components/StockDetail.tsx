@@ -114,7 +114,7 @@ export function StockDetail({ ticker, onClose }: Props) {
           </button>
         </header>
 
-        {initialLoading && <div className="empty" style={{ padding: 32 }}>Loading…</div>}
+        {initialLoading && <StockDetailSkeleton />}
         {error && <div className="error">{error}</div>}
 
         {data && (
@@ -778,5 +778,33 @@ function LegendItem({ color, label }: { color: string; label: string }) {
       />
       {label}
     </span>
+  );
+}
+
+function StockDetailSkeleton() {
+  return (
+    <div className="stock-modal-body" aria-busy="true" aria-label="Loading stock detail">
+      <div className="stock-price-hero">
+        <div className="sk-line sk-line-sm" style={{ width: 70 }} />
+        <div className="sk-line sk-line-xl" style={{ width: 180, marginTop: 8 }} />
+        <div className="sk-line sk-line-md" style={{ width: 110, marginTop: 6 }} />
+      </div>
+      <div className="stock-keystats">
+        {[0, 1, 2, 3].map((c) => (
+          <div className="stock-keystats-col" key={c}>
+            {[0, 1, 2, 3].map((r) => (
+              <div className="stock-kv" key={r}>
+                <span className="sk-line sk-line-sm" style={{ width: "55%" }} />
+                <span className="sk-line sk-line-md" style={{ width: "75%", marginTop: 4 }} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="stock-section">
+        <div className="sk-line sk-line-md" style={{ width: 140 }} />
+        <div className="sk-block" style={{ height: 360, marginTop: 12 }} />
+      </div>
+    </div>
   );
 }

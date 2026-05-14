@@ -1705,6 +1705,274 @@ main.app {
   to   { background-position: -200% 0; }
 }
 
+/* Hero "Import trades from a screenshot or PDF" CTA on the assistant
+   welcome screen. Bigger than the regular suggestion cards, gradient-tinted
+   to read as the primary action. Clicking it opens the same file picker
+   the paperclip in the input row uses. */
+.assistant-upload-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: linear-gradient(
+    135deg,
+    rgba(99, 132, 255, 0.18) 0%,
+    rgba(167, 139, 250, 0.14) 100%
+  );
+  border: 1px solid rgba(99, 132, 255, 0.35);
+  border-radius: 14px;
+  color: var(--text, #e8ecf2);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  font-family: inherit;
+}
+.assistant-upload-cta:hover:not(:disabled) {
+  border-color: rgba(99, 132, 255, 0.6);
+  box-shadow: 0 6px 24px -10px rgba(99, 132, 255, 0.5);
+  transform: translateY(-1px);
+}
+.assistant-upload-cta:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.assistant-upload-cta-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(99, 132, 255, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.assistant-upload-cta-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.assistant-upload-cta-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #e8ecf2);
+}
+.assistant-upload-cta-sub {
+  font-size: 11px;
+  color: var(--text-2, #6b7589);
+  letter-spacing: 0.01em;
+}
+.assistant-upload-cta-chevron {
+  font-size: 20px;
+  color: rgba(99, 132, 255, 0.7);
+  font-weight: 300;
+  flex-shrink: 0;
+}
+
+/* Section label that separates the upload CTA from the analytical
+   suggestion cards beneath it. */
+.assistant-suggestions-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 18px 0 8px;
+  text-align: center;
+}
+
+/* Paperclip attach button in the assistant input row. Square icon button
+   that visually matches the input height and the Send button's weight.
+   `.assistant-input-row button` declares padding too, so we use the row
+   selector here to win on specificity without !important. */
+.assistant-input-row .assistant-attach-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.assistant-input-row .assistant-attach-btn:hover:not(:disabled) {
+  background: rgba(99, 132, 255, 0.12);
+  border-color: rgba(99, 132, 255, 0.4);
+  color: var(--accent, #6384ff);
+}
+.assistant-input-row .assistant-attach-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Lightweight success toast that appears in the assistant body after a
+   successful image/PDF import. Auto-dismisses when a new preview opens. */
+.assistant-import-toast {
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(52, 211, 153, 0.10);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: #34d399;
+  font-size: 12px;
+}
+
+/* Inline preview card the user reviews before committing AI-parsed records. */
+.records-preview {
+  margin: 8px 12px 0;
+  padding: 12px;
+  background: var(--bg-2, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.10));
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.records-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.records-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #e8ecf2);
+}
+.records-preview-sub {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.records-preview-notes {
+  font-size: 11px;
+  font-style: italic;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  line-height: 1.5;
+}
+.records-preview-section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-2, #6b7589);
+  margin-bottom: 6px;
+}
+.records-preview-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.records-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px;
+  border-radius: 6px;
+  transition: opacity 120ms;
+}
+.records-preview-row.excluded {
+  opacity: 0.4;
+}
+.records-preview-row > input[type="checkbox"] {
+  flex-shrink: 0;
+  margin: 0;
+}
+.records-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text, #e8ecf2);
+  cursor: pointer;
+  appearance: none;
+  flex-shrink: 0;
+}
+.records-pill-buy { background: rgba(52, 211, 153, 0.15); color: #34d399; border-color: rgba(52, 211, 153, 0.3); }
+.records-pill-sell { background: rgba(248, 113, 113, 0.15); color: #f87171; border-color: rgba(248, 113, 113, 0.3); }
+.records-pill-div { background: rgba(251, 191, 36, 0.15); color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); display: inline-block; line-height: 1.4; }
+.records-input {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  padding: 4px 6px;
+  color: var(--text, #e8ecf2);
+  font-size: 11px;
+  font-family: inherit;
+  min-width: 0;
+}
+.records-input:focus {
+  outline: none;
+  border-color: var(--accent, #6384ff);
+}
+.records-input-ticker { width: 64px; text-transform: uppercase; }
+.records-input-num { width: 70px; text-align: right; }
+.records-input-date { width: 130px; }
+.records-row-remove {
+  background: transparent;
+  border: none;
+  color: var(--text-2, #6b7589);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+.records-row-remove:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+.records-preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Skeleton placeholders for the StockDetail modal so it can pop in
+   immediately while the /api/stock/{ticker}/detail call is in flight. */
+.sk-line,
+.sk-block {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.6s linear infinite;
+}
+.sk-line { height: 12px; }
+.sk-line-sm { height: 9px; }
+.sk-line-md { height: 14px; }
+.sk-line-xl { height: 28px; border-radius: 8px; }
+.sk-block { width: 100%; }
+@keyframes sk-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-line,
+  .sk-block { animation: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assistant-body.is-streaming {
     -webkit-mask-image: none;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   api,
   type CurrencySummary,
@@ -8,7 +8,6 @@ import {
   type Trade,
 } from "./api";
 import { AllocationChart } from "./components/AllocationChart";
-import { AssistantPanel } from "./components/AssistantPanel";
 import { DataPanel } from "./components/DataPanel";
 import { DividendForm } from "./components/DividendForm";
 import { DividendList } from "./components/DividendList";
@@ -16,10 +15,17 @@ import { HoldingsTable } from "./components/HoldingsTable";
 import { MarketStatus } from "./components/MarketStatus";
 import { PerformanceChart } from "./components/PerformanceChart";
 import { PortfolioSummary } from "./components/PortfolioSummary";
-import { StockDetail } from "./components/StockDetail";
 import { TradeForm } from "./components/TradeForm";
 import { TradeList } from "./components/TradeList";
 import { UnrealizedChart } from "./components/UnrealizedChart";
+import { isTwMarketOpen } from "./format";
+
+const AssistantPanel = lazy(() =>
+  import("./components/AssistantPanel").then((m) => ({ default: m.AssistantPanel })),
+);
+const StockDetail = lazy(() =>
+  import("./components/StockDetail").then((m) => ({ default: m.StockDetail })),
+);
 
 type View = "dashboard" | "trades" | "dividends" | "data";
 
@@ -78,21 +84,30 @@ export default function App() {
     refresh();
   }, [refresh]);
 
-  // Auto-refresh every 5s while the Dashboard is the active view AND the
-  // browser tab is visible. Pauses on tab switch, minimize, or when
-  // navigating to a different view; resumes with an immediate refresh.
+  // Auto-refresh while the Dashboard is the active view AND the browser tab
+  // is visible. Cadence: 5s during TW market hours, 60s outside (prices can't
+  // change but trade/dividend edits from another tab still need to sync).
+  // Pauses on tab switch, minimize, or view change; resumes with an immediate
+  // refresh.
   const [polling, setPolling] = useState(false);
+  const [marketOpen, setMarketOpen] = useState(() => isTwMarketOpen());
+  useEffect(() => {
+    const tick = window.setInterval(() => setMarketOpen(isTwMarketOpen()), 60_000);
+    return () => clearInterval(tick);
+  }, []);
+
   useEffect(() => {
     if (view !== "dashboard") {
       setPolling(false);
       return;
     }
 
+    const cadence = marketOpen ? 5000 : 60_000;
     let interval: number | undefined;
     function start() {
       setPolling(true);
       refresh();
-      interval = window.setInterval(refresh, 5000);
+      interval = window.setInterval(refresh, cadence);
     }
     function stop() {
       setPolling(false);
@@ -114,7 +129,7 @@ export default function App() {
       stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [view, refresh]);
+  }, [view, refresh, marketOpen]);
 
   return (
     <div className="layout">
@@ -140,7 +155,11 @@ export default function App() {
           {polling && (
             <span
               className="live-indicator"
-              title="Auto-refreshing every 5 seconds"
+              title={
+                marketOpen
+                  ? "Auto-refreshing every 5 seconds"
+                  : "Market closed — refreshing every 60 seconds"
+              }
             >
               Live
             </span>
@@ -226,18 +245,21 @@ export default function App() {
       )}
 
       </main>
-      {assistantOpen && (
-        <AssistantPanel
-          holdings={holdings}
-          onClose={() => setAssistantOpen(false)}
-        />
-      )}
-      {selectedTicker && (
-        <StockDetail
-          ticker={selectedTicker}
-          onClose={() => setSelectedTicker(null)}
-        />
-      )}
+      <Suspense fallback={null}>
+        {assistantOpen && (
+          <AssistantPanel
+            holdings={holdings}
+            onClose={() => setAssistantOpen(false)}
+            onPortfolioChanged={refresh}
+          />
+        )}
+        {selectedTicker && (
+          <StockDetail
+            ticker={selectedTicker}
+            onClose={() => setSelectedTicker(null)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

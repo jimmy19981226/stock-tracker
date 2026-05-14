@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -335,6 +335,178 @@ def chat(req: ChatRequest):
             "X-Accel-Buffering": "no",  # disable proxy buffering
         },
     )
+
+
+PARSE_MAX_BYTES = 8 * 1024 * 1024  # 8 MB cap on uploads to keep latency sane
+PARSE_ALLOWED_MIMES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "application/pdf",
+}
+
+# JSON schema Gemini is forced to return. Keeping it strict here means the
+# frontend never has to defend against shape drift.
+_PARSE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "trades": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["buy", "sell"]},
+                    "ticker": {"type": "string"},
+                    "shares": {"type": "number"},
+                    "price": {"type": "number"},
+                    "date": {"type": "string"},
+                    "fee": {"type": "number"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["type", "ticker", "shares", "price", "date"],
+            },
+        },
+        "dividends": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string"},
+                    "amount": {"type": "number"},
+                    "date": {"type": "string"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["ticker", "amount", "date"],
+            },
+        },
+        "notes": {"type": "string"},
+    },
+    "required": ["trades", "dividends"],
+}
+
+_PARSE_PROMPT = (
+    "You are extracting structured data from a Taiwan brokerage record "
+    "(image or PDF) for a personal stock investor. Pull every trade "
+    "(買進/賣出) and every cash dividend (現金股利/股息) you can see, and "
+    "return JSON matching the schema.\n\n"
+    "Field rules:\n"
+    "- ticker: the bare 4–6 digit Taiwan code, e.g. \"2330\", \"00919\". "
+    "  Strip any \".TW\" suffix and any company name prefix.\n"
+    "- type: \"buy\" for 買進/Buy, \"sell\" for 賣出/Sell.\n"
+    "- shares: number of SHARES. If the document shows 張 (lots), multiply "
+    "  by 1000 — 1 張 = 1000 shares.\n"
+    "- price: per-share price in NT$.\n"
+    "- date: ISO YYYY-MM-DD. If the document uses ROC (民國) years like "
+    "  113/01/15, convert to Gregorian by adding 1911 → 2024-01-15.\n"
+    "- fee (trades): handling fee + transaction tax in NT$ if visible, "
+    "  otherwise omit.\n"
+    "- amount (dividends): cash dividend in NT$. If the figure shown is "
+    "  per-share, leave it as-is and add a note. If it's the total amount "
+    "  received, that's also fine — note which.\n"
+    "- notes: short context for anything unusual, including which interpretation "
+    "  you used for ambiguous fields.\n\n"
+    "If a row is unreadable or you're not confident, OMIT it rather than guess. "
+    "If the document doesn't appear to contain any trades or dividends, return "
+    "empty arrays and explain in the top-level `notes`."
+)
+
+
+@router.post("/parse-records")
+async def parse_records(file: UploadFile = File(...)):
+    """Parse a brokerage screenshot/PDF into structured trade + dividend rows.
+
+    The frontend renders the result in a preview card so the user can review
+    and edit before committing. Nothing is written to the DB here — this
+    endpoint is read-only on the server side; the frontend calls the existing
+    POST /api/trades and POST /api/dividends to persist the confirmed rows.
+    """
+    api_key = os.environ.get("GOOGLE_AI_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "GOOGLE_AI_API_KEY environment variable is not set. "
+                "Get a free key at https://aistudio.google.com/apikey "
+                "and start the backend with the variable set."
+            ),
+        )
+
+    mime = (file.content_type or "").lower().strip()
+    if mime not in PARSE_ALLOWED_MIMES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported file type: {mime or 'unknown'}. "
+                "Allowed: PNG, JPG, WEBP, HEIC, or PDF."
+            ),
+        )
+
+    raw = await file.read()
+    if len(raw) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(raw) > PARSE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File too large ({len(raw) / 1e6:.1f} MB). "
+                f"Max {PARSE_MAX_BYTES // (1024 * 1024)} MB."
+            ),
+        )
+
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="google-genai not installed. Run `pip install -r requirements.txt`.",
+        )
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=DEFAULT_MODEL,
+            config=types.GenerateContentConfig(
+                temperature=0.1,
+                response_mime_type="application/json",
+                response_schema=_PARSE_SCHEMA,
+            ),
+            contents=[
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(text=_PARSE_PROMPT),
+                        types.Part.from_bytes(data=raw, mime_type=mime),
+                    ],
+                ),
+            ],
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini call failed: {type(exc).__name__}: {exc}",
+        )
+
+    text = (getattr(response, "text", None) or "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Model returned no content")
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Could not parse model JSON: {exc}",
+        )
+
+    return {
+        "trades": parsed.get("trades") or [],
+        "dividends": parsed.get("dividends") or [],
+        "notes": parsed.get("notes") or "",
+    }
 
 
 def _derive_title(first_user_msg: str) -> str:

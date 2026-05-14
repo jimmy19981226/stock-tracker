@@ -16,11 +16,35 @@ import {
   type ChatMessage,
   type ChatSummary,
   type Holding,
+  type ParsedDividendRow,
+  type ParsedRecords,
+  type ParsedTradeRow,
 } from "../api";
 
 interface Props {
   onClose: () => void;
   holdings?: Holding[];
+  /** Called after the user confirms imported trades/dividends so the parent
+   *  dashboard can refresh. */
+  onPortfolioChanged?: () => void;
+}
+
+// Local editable copies of the parsed rows. We tag each with `include` so the
+// user can uncheck rows they don't want, and a stable id for React keys.
+interface PreviewTradeRow extends ParsedTradeRow {
+  id: string;
+  include: boolean;
+  fee: number;
+}
+interface PreviewDividendRow extends ParsedDividendRow {
+  id: string;
+  include: boolean;
+}
+interface PreviewState {
+  fileName: string;
+  trades: PreviewTradeRow[];
+  dividends: PreviewDividendRow[];
+  notes: string;
 }
 
 interface Suggestion {
@@ -136,7 +160,7 @@ const LAST_CHAT_KEY = "assistant.lastChatId";
 
 type View = "messages" | "list";
 
-export function AssistantPanel({ onClose, holdings = [] }: Props) {
+export function AssistantPanel({ onClose, holdings = [], onPortfolioChanged }: Props) {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [model, setModel] = useState<string>("");
   const [view, setView] = useState<View>("messages");
@@ -151,6 +175,12 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
   // on mount and every time the user starts a fresh chat.
   const [suggestionSeed, setSuggestionSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; title: string } | null>(null);
+  // Image / PDF upload → Gemini parse → preview-and-confirm flow.
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Lets the user cancel an in-flight chat request via the Stop button.
@@ -167,7 +197,7 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
   }, [holdings]);
 
   const suggestions = useMemo(
-    () => pickSuggestions(topTickers, 4, suggestionSeed),
+    () => pickSuggestions(topTickers, 3, suggestionSeed),
     [topTickers, suggestionSeed],
   );
 
@@ -323,6 +353,135 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
     abortRef.current?.abort();
   }
 
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    // Reset the input so the same file can be re-uploaded later.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!f) return;
+    setParsing(true);
+    setParseError(null);
+    setImportStatus(null);
+    try {
+      const result: ParsedRecords = await api.parseRecords(f);
+      const trades: PreviewTradeRow[] = result.trades.map((r, i) => ({
+        ...r,
+        id: `t-${i}`,
+        include: true,
+        ticker: (r.ticker || "").toUpperCase().trim(),
+        fee: r.fee ?? 0,
+      }));
+      const dividends: PreviewDividendRow[] = result.dividends.map((r, i) => ({
+        ...r,
+        id: `d-${i}`,
+        include: true,
+        ticker: (r.ticker || "").toUpperCase().trim(),
+      }));
+      if (trades.length === 0 && dividends.length === 0) {
+        setParseError(
+          result.notes ||
+            "No trades or dividends were detected in that file. Try a clearer screenshot.",
+        );
+        return;
+      }
+      setPreview({
+        fileName: f.name,
+        trades,
+        dividends,
+        notes: result.notes || "",
+      });
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : "Parse failed");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  async function commitPreview() {
+    if (!preview) return;
+    const tradesToAdd = preview.trades.filter((r) => r.include);
+    const dividendsToAdd = preview.dividends.filter((r) => r.include);
+    if (tradesToAdd.length === 0 && dividendsToAdd.length === 0) {
+      setParseError("Nothing selected to import.");
+      return;
+    }
+    setParsing(true);
+    setParseError(null);
+    let createdTrades = 0;
+    let createdDividends = 0;
+    const failures: string[] = [];
+
+    for (const r of tradesToAdd) {
+      try {
+        await api.createTrade({
+          type: r.type,
+          ticker: r.ticker,
+          shares: Number(r.shares),
+          price: Number(r.price),
+          trade_date: r.date,
+          fee: Number(r.fee || 0),
+          notes: r.notes || null,
+        });
+        createdTrades += 1;
+      } catch (err) {
+        failures.push(
+          `Trade ${r.ticker} ${r.date}: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
+    }
+    for (const r of dividendsToAdd) {
+      try {
+        await api.createDividend({
+          ticker: r.ticker,
+          amount: Number(r.amount),
+          pay_date: r.date,
+          notes: r.notes || null,
+        });
+        createdDividends += 1;
+      } catch (err) {
+        failures.push(
+          `Dividend ${r.ticker} ${r.date}: ${err instanceof Error ? err.message : "failed"}`,
+        );
+      }
+    }
+
+    setParsing(false);
+    if (createdTrades > 0 || createdDividends > 0) {
+      onPortfolioChanged?.();
+      const parts: string[] = [];
+      if (createdTrades > 0) parts.push(`${createdTrades} trade${createdTrades === 1 ? "" : "s"}`);
+      if (createdDividends > 0) parts.push(`${createdDividends} dividend${createdDividends === 1 ? "" : "s"}`);
+      setImportStatus(`Imported ${parts.join(" + ")} from ${preview.fileName}.`);
+    }
+    if (failures.length > 0) {
+      setParseError(`${failures.length} row(s) failed: ${failures[0]}`);
+      // Keep the preview open with only failed rows so the user can fix them.
+      const failedTradeIds = new Set<string>();
+      const failedDivIds = new Set<string>();
+      for (const r of tradesToAdd) {
+        if (failures.some((f) => f.includes(`Trade ${r.ticker} ${r.date}`))) {
+          failedTradeIds.add(r.id);
+        }
+      }
+      for (const r of dividendsToAdd) {
+        if (failures.some((f) => f.includes(`Dividend ${r.ticker} ${r.date}`))) {
+          failedDivIds.add(r.id);
+        }
+      }
+      setPreview({
+        ...preview,
+        trades: preview.trades.filter((r) => failedTradeIds.has(r.id)),
+        dividends: preview.dividends.filter((r) => failedDivIds.has(r.id)),
+      });
+    } else {
+      setPreview(null);
+    }
+  }
+
+  function cancelPreview() {
+    setPreview(null);
+    setParseError(null);
+  }
+
   function handleDelete(id: number) {
     const chat = chats.find((c) => c.id === id);
     setConfirmDelete({ id, title: chat?.title ?? "this conversation" });
@@ -432,12 +591,36 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
                   ✦
                 </div>
                 <div className="assistant-welcome-title">
-                  Ask anything about your portfolio or the market
+                  Your portfolio copilot
                 </div>
                 <div className="assistant-welcome-sub muted">
-                  I can analyze your holdings, search the web for fresh news
-                  and filings, and pull together the answer with sources.
-                  Try one of these:
+                  Drop a brokerage screenshot or PDF and I'll extract trades
+                  and dividends — you review, then I add them. Or ask me
+                  anything about your holdings.
+                </div>
+
+                <button
+                  type="button"
+                  className="assistant-upload-cta"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={parsing}
+                >
+                  <span className="assistant-upload-cta-icon" aria-hidden>
+                    📎
+                  </span>
+                  <span className="assistant-upload-cta-body">
+                    <span className="assistant-upload-cta-title">
+                      {parsing ? "Parsing your file…" : "Import trades from a screenshot or PDF"}
+                    </span>
+                    <span className="assistant-upload-cta-sub">
+                      PNG · JPG · PDF · up to 8 MB · preview before saving
+                    </span>
+                  </span>
+                  <span className="assistant-upload-cta-chevron" aria-hidden>›</span>
+                </button>
+
+                <div className="assistant-suggestions-label muted">
+                  Or ask me anything
                 </div>
                 <div className="assistant-suggestions">
                   {suggestions.map((s) => (
@@ -487,6 +670,29 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
             </div>
           )}
 
+          {importStatus && !preview && (
+            <div className="assistant-import-toast" role="status">
+              ✓ {importStatus}
+            </div>
+          )}
+
+          {preview && (
+            <RecordsPreview
+              state={preview}
+              busy={parsing}
+              error={parseError}
+              onChange={setPreview}
+              onConfirm={commitPreview}
+              onCancel={cancelPreview}
+            />
+          )}
+
+          {!preview && parseError && (
+            <div className="error" style={{ fontSize: 12 }}>
+              {parseError}
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -495,11 +701,30 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
             className="assistant-input-row"
           >
             <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf"
+              onChange={handleFileSelected}
+              style={{ display: "none" }}
+            />
+            <button
+              type="button"
+              className="secondary assistant-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy || parsing}
+              title="Upload a brokerage screenshot or PDF — AI will extract trades and dividends"
+              aria-label="Attach file"
+            >
+              {parsing ? "…" : "📎"}
+            </button>
+            <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about your portfolio…"
-              disabled={busy}
+              placeholder={
+                parsing ? "Parsing your file…" : "Ask about your portfolio…"
+              }
+              disabled={busy || parsing}
             />
             {busy ? (
               <button
@@ -512,7 +737,7 @@ export function AssistantPanel({ onClose, holdings = [] }: Props) {
                 Stop
               </button>
             ) : (
-              <button type="submit" disabled={!input.trim()}>
+              <button type="submit" disabled={!input.trim() || parsing}>
                 Send
               </button>
             )}
@@ -913,6 +1138,260 @@ function AiPulseLogo({ size = "thinking" }: { size?: "thinking" | "cursor" }) {
     <span className={`ai-pulse-logo ai-pulse-logo-${size}`} aria-hidden>
       <span className="ai-pulse-logo-glyph">✦</span>
     </span>
+  );
+}
+
+interface RecordsPreviewProps {
+  state: PreviewState;
+  busy: boolean;
+  error: string | null;
+  onChange: (next: PreviewState) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function RecordsPreview({
+  state,
+  busy,
+  error,
+  onChange,
+  onConfirm,
+  onCancel,
+}: RecordsPreviewProps) {
+  const includedTrades = state.trades.filter((r) => r.include).length;
+  const includedDivs = state.dividends.filter((r) => r.include).length;
+  const totalSelected = includedTrades + includedDivs;
+
+  function updateTrade(id: string, patch: Partial<PreviewTradeRow>) {
+    onChange({
+      ...state,
+      trades: state.trades.map((r) => (r.id === id ? { ...r, ...patch } : r)),
+    });
+  }
+  function updateDividend(id: string, patch: Partial<PreviewDividendRow>) {
+    onChange({
+      ...state,
+      dividends: state.dividends.map((r) =>
+        r.id === id ? { ...r, ...patch } : r,
+      ),
+    });
+  }
+  function removeTrade(id: string) {
+    onChange({ ...state, trades: state.trades.filter((r) => r.id !== id) });
+  }
+  function removeDividend(id: string) {
+    onChange({ ...state, dividends: state.dividends.filter((r) => r.id !== id) });
+  }
+
+  return (
+    <div className="records-preview" role="region" aria-label="Parsed records preview">
+      <div className="records-preview-header">
+        <div>
+          <div className="records-preview-title">
+            ✦ Found {state.trades.length} trade{state.trades.length === 1 ? "" : "s"}
+            {" + "}
+            {state.dividends.length} dividend
+            {state.dividends.length === 1 ? "" : "s"}
+          </div>
+          <div className="records-preview-sub muted">
+            from {state.fileName} — review, edit, then confirm
+          </div>
+        </div>
+        <button
+          type="button"
+          className="secondary assistant-icon-btn"
+          onClick={onCancel}
+          disabled={busy}
+          title="Discard"
+          aria-label="Discard"
+        >
+          ✕
+        </button>
+      </div>
+
+      {state.notes && (
+        <div className="records-preview-notes muted">{state.notes}</div>
+      )}
+
+      {state.trades.length > 0 && (
+        <div className="records-preview-section">
+          <div className="records-preview-section-title">Trades</div>
+          <div className="records-preview-rows">
+            {state.trades.map((r) => (
+              <div
+                key={r.id}
+                className={`records-preview-row${r.include ? "" : " excluded"}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={r.include}
+                  onChange={(e) => updateTrade(r.id, { include: e.target.checked })}
+                  disabled={busy}
+                  aria-label="Include this trade"
+                />
+                <select
+                  value={r.type}
+                  onChange={(e) =>
+                    updateTrade(r.id, { type: e.target.value as "buy" | "sell" })
+                  }
+                  disabled={busy}
+                  className={`records-pill records-pill-${r.type}`}
+                >
+                  <option value="buy">Buy</option>
+                  <option value="sell">Sell</option>
+                </select>
+                <input
+                  className="records-input records-input-ticker"
+                  value={r.ticker}
+                  onChange={(e) =>
+                    updateTrade(r.id, { ticker: e.target.value.toUpperCase() })
+                  }
+                  disabled={busy}
+                  placeholder="2330"
+                />
+                <input
+                  className="records-input records-input-num"
+                  type="number"
+                  value={r.shares}
+                  onChange={(e) =>
+                    updateTrade(r.id, { shares: parseFloat(e.target.value) || 0 })
+                  }
+                  disabled={busy}
+                  placeholder="shares"
+                  min={0}
+                />
+                <input
+                  className="records-input records-input-num"
+                  type="number"
+                  value={r.price}
+                  onChange={(e) =>
+                    updateTrade(r.id, { price: parseFloat(e.target.value) || 0 })
+                  }
+                  disabled={busy}
+                  step="0.01"
+                  placeholder="price"
+                />
+                <input
+                  className="records-input records-input-date"
+                  type="date"
+                  value={r.date}
+                  onChange={(e) => updateTrade(r.id, { date: e.target.value })}
+                  disabled={busy}
+                />
+                <input
+                  className="records-input records-input-num"
+                  type="number"
+                  value={r.fee}
+                  onChange={(e) =>
+                    updateTrade(r.id, { fee: parseFloat(e.target.value) || 0 })
+                  }
+                  disabled={busy}
+                  placeholder="fee"
+                  min={0}
+                />
+                <button
+                  type="button"
+                  className="records-row-remove"
+                  onClick={() => removeTrade(r.id)}
+                  disabled={busy}
+                  title="Remove this row"
+                  aria-label="Remove row"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {state.dividends.length > 0 && (
+        <div className="records-preview-section">
+          <div className="records-preview-section-title">Dividends</div>
+          <div className="records-preview-rows">
+            {state.dividends.map((r) => (
+              <div
+                key={r.id}
+                className={`records-preview-row${r.include ? "" : " excluded"}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={r.include}
+                  onChange={(e) =>
+                    updateDividend(r.id, { include: e.target.checked })
+                  }
+                  disabled={busy}
+                  aria-label="Include this dividend"
+                />
+                <span className="records-pill records-pill-div">Div</span>
+                <input
+                  className="records-input records-input-ticker"
+                  value={r.ticker}
+                  onChange={(e) =>
+                    updateDividend(r.id, { ticker: e.target.value.toUpperCase() })
+                  }
+                  disabled={busy}
+                  placeholder="2330"
+                />
+                <input
+                  className="records-input records-input-num"
+                  type="number"
+                  value={r.amount}
+                  onChange={(e) =>
+                    updateDividend(r.id, {
+                      amount: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  disabled={busy}
+                  step="0.01"
+                  placeholder="amount"
+                />
+                <input
+                  className="records-input records-input-date"
+                  type="date"
+                  value={r.date}
+                  onChange={(e) => updateDividend(r.id, { date: e.target.value })}
+                  disabled={busy}
+                />
+                <button
+                  type="button"
+                  className="records-row-remove"
+                  onClick={() => removeDividend(r.id)}
+                  disabled={busy}
+                  title="Remove this row"
+                  aria-label="Remove row"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {error && <div className="error" style={{ fontSize: 12 }}>{error}</div>}
+
+      <div className="records-preview-actions">
+        <button
+          type="button"
+          className="secondary"
+          onClick={onCancel}
+          disabled={busy}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy || totalSelected === 0}
+          title="Save selected rows to your portfolio"
+        >
+          {busy
+            ? "Saving…"
+            : `Add ${totalSelected} to portfolio`}
+        </button>
+      </div>
+    </div>
   );
 }
 
