@@ -6,11 +6,14 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from ..database import Dividend, Metadata, Trade, get_db
-from ..services import csv_io
+from ..services import xlsx_io
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
 LAST_EXPORT_KEY = "last_export"
+XLSX_MEDIA_TYPE = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
 
 
 def _record_last_export(db: Session) -> None:
@@ -35,12 +38,12 @@ def export_portfolio(db: Session = Depends(get_db)):
         .order_by(Dividend.pay_date.desc(), Dividend.id.desc())
         .all()
     )
-    csv_text = csv_io.portfolio_to_csv(trades, dividends)
+    xlsx_bytes = xlsx_io.portfolio_to_xlsx(trades, dividends)
     _record_last_export(db)
     return Response(
-        content=csv_text,
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="portfolio.csv"'},
+        content=xlsx_bytes,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": 'attachment; filename="portfolio.xlsx"'},
     )
 
 
@@ -50,7 +53,7 @@ async def import_portfolio(
     mode: Literal["append", "replace"] = Query("append"),
     db: Session = Depends(get_db),
 ):
-    """Import a unified portfolio CSV.
+    """Import a portfolio Excel workbook.
 
     - ``mode=append`` (default): adds rows to existing data
     - ``mode=replace``: deletes all existing trades + dividends FIRST,
@@ -59,11 +62,7 @@ async def import_portfolio(
     """
     raw = await file.read()
     try:
-        text = raw.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded")
-    try:
-        trades, dividends = csv_io.parse_portfolio_csv(text)
+        trades, dividends = xlsx_io.parse_portfolio_xlsx(raw)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

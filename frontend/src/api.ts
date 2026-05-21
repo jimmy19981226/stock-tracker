@@ -179,7 +179,7 @@ export interface MobileSessionPoll {
   error: string | null;
 }
 
-async function uploadPortfolioCsv(
+async function uploadPortfolioXlsx(
   file: File,
   mode: "append" | "replace" = "append",
 ): Promise<ImportResult> {
@@ -329,7 +329,7 @@ export const api = {
     }),
   deleteDividend: (id: number) =>
     request<void>(`/api/dividends/${id}`, { method: "DELETE" }),
-  importPortfolioCsv: uploadPortfolioCsv,
+  importPortfolioXlsx: uploadPortfolioXlsx,
   exportPortfolioUrl: "/api/data/export",
   getLastExport: () =>
     request<{ last_export: string | null }>("/api/data/last-export"),

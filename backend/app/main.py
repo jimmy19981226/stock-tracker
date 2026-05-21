@@ -14,10 +14,10 @@ except ImportError:
 
 from .database import Dividend, SessionLocal, Trade, init_db
 from .routers import ai, data, dividends, mobile, portfolio, stock, trades
-from .services import csv_io
+from .services import xlsx_io
 
 SEED_FILE = (
-    Path(__file__).resolve().parent.parent / "data" / "seed" / "portfolio.csv"
+    Path(__file__).resolve().parent.parent / "data" / "seed" / "portfolio.xlsx"
 )
 
 app = FastAPI(title="AI Stock Studio", version="0.1.0")
@@ -41,9 +41,9 @@ def _startup() -> None:
 
 
 def _seed_from_disk() -> None:
-    """Load the unified portfolio CSV on startup if both tables are empty.
+    """Load the portfolio Excel workbook on startup if both tables are empty.
 
-    Looks for ``backend/data/seed/portfolio.csv``. Skipped entirely once the
+    Looks for ``backend/data/seed/portfolio.xlsx``. Skipped entirely once the
     user has any trades or dividends, so UI-entered data is never overwritten.
     """
     if not SEED_FILE.exists():
@@ -53,10 +53,10 @@ def _seed_from_disk() -> None:
         if db.query(Trade).count() > 0 or db.query(Dividend).count() > 0:
             return
         try:
-            text = SEED_FILE.read_text(encoding="utf-8-sig")
-            trades, dividends = csv_io.parse_portfolio_csv(text)
-            csv_io.insert_trades(db, trades)
-            csv_io.insert_dividends(db, dividends)
+            data_bytes = SEED_FILE.read_bytes()
+            trades, dividends = xlsx_io.parse_portfolio_xlsx(data_bytes)
+            xlsx_io.insert_trades(db, trades)
+            xlsx_io.insert_dividends(db, dividends)
             print(
                 f"[seed] loaded {len(trades)} trades + "
                 f"{len(dividends)} dividends from {SEED_FILE.name}"

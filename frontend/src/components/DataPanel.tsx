@@ -49,7 +49,7 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
   async function runImport(file: File, mode: "append" | "replace") {
     setStatus({ kind: "uploading", mode });
     try {
-      const r = await api.importPortfolioCsv(file, mode);
+      const r = await api.importPortfolioXlsx(file, mode);
       setStatus({
         kind: "success",
         mode,
@@ -111,17 +111,17 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
       >
         <a
           href={api.exportPortfolioUrl}
-          download="portfolio.csv"
+          download="portfolio.xlsx"
           onClick={onExportClicked}
         >
-          <button type="button">⤓ Export portfolio.csv</button>
+          <button type="button">⤓ Export portfolio.xlsx</button>
         </a>
         <button
           className="secondary"
           type="button"
           onClick={() => appendRef.current?.click()}
           disabled={status.kind === "uploading"}
-          title="Append rows from CSV to existing data"
+          title="Append rows from an Excel workbook to existing data"
         >
           {status.kind === "uploading" && status.mode === "append"
             ? "Uploading…"
@@ -132,7 +132,7 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
           type="button"
           onClick={() => replaceRef.current?.click()}
           disabled={status.kind === "uploading"}
-          title="Wipe existing data and replace with the CSV — destructive"
+          title="Wipe existing data and replace with the Excel workbook — destructive"
           style={{
             color: "var(--red)",
             boxShadow:
@@ -146,14 +146,14 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
         <input
           ref={appendRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           style={{ display: "none" }}
           onChange={handleAppend}
         />
         <input
           ref={replaceRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           style={{ display: "none" }}
           onChange={handleReplace}
         />
@@ -215,46 +215,40 @@ export function DataPanel({ trades, dividends, onImported }: Props) {
         </div>
       </div>
 
-      <h2 style={{ marginTop: 18 }}>CSV format</h2>
-      <pre
-        style={{
-          background: "var(--panel-2)",
-          padding: 12,
-          borderRadius: 6,
-          fontSize: 12,
-          overflowX: "auto",
-          margin: "8px 0",
-        }}
-      >{`kind,type,ticker,shares,price,date,fee,amount,notes
-trade,buy,2330,100,950,2024-01-15,28,,initial buy
-trade,sell,2330,100,1100,2024-06-01,30,,closed
-dividend,,2330,,,2024-08-15,,500,Q2 cash dividend`}</pre>
+      <h2 style={{ marginTop: 18 }}>Excel format</h2>
+      <div className="muted" style={{ fontSize: 13, lineHeight: 1.7 }}>
+        The workbook has two sheets — everything the app displays (P/L,
+        holdings, charts) is recomputed from these on import:
+      </div>
       <ul className="muted" style={{ fontSize: 12, lineHeight: 1.7, paddingLeft: 18 }}>
         <li>
-          <strong>kind=trade</strong>: fill <code>type</code>, <code>shares</code>,
-          <code> price</code>, <code>date</code>, <code>fee</code>. Leave <code>amount</code> blank.
+          <strong>Trades</strong> sheet — columns <code>type</code>,{" "}
+          <code>ticker</code>, <code>shares</code>, <code>price</code>,{" "}
+          <code>date</code>, <code>fee</code>, <code>notes</code>.{" "}
+          <code>type</code> is <code>buy</code> or <code>sell</code>.
         </li>
         <li>
-          <strong>kind=dividend</strong>: fill <code>amount</code>, <code>date</code>.
-          Leave the trade-only columns blank.
+          <strong>Dividends</strong> sheet — columns <code>ticker</code>,{" "}
+          <code>amount</code>, <code>date</code>, <code>notes</code>.
         </li>
         <li>
-          Dates accept <code>YYYY-MM-DD</code>, <code>YYYY/MM/DD</code>, or
-          <code> MM/DD/YYYY</code>.
+          Dates accept a real Excel date cell, or text{" "}
+          <code>YYYY-MM-DD</code>, <code>YYYY/MM/DD</code>, or{" "}
+          <code>MM/DD/YYYY</code>.
         </li>
         <li>
-          Import always <strong>appends</strong> — to wipe data, delete from the
-          Trades / Dividends tabs first.
+          Export once to get a correctly-shaped workbook, then edit it in
+          Excel and re-import.
         </li>
       </ul>
 
       <h2 style={{ marginTop: 18 }}>Auto-load on first boot</h2>
       <div className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-        Drop your CSV at{" "}
-        <code>backend/data/seed/portfolio.csv</code> — the backend imports it on
-        startup, but only when both tables are empty. Once you have any data,
-        the seed file is ignored so nothing entered through the UI ever gets
-        overwritten.
+        Drop your workbook at{" "}
+        <code>backend/data/seed/portfolio.xlsx</code> — the backend imports it
+        on startup, but only when both tables are empty. Once you have any
+        data, the seed file is ignored so nothing entered through the UI ever
+        gets overwritten.
       </div>
 
       <ConfirmModal
@@ -266,7 +260,7 @@ dividend,,2330,,,2024-08-15,,500,Q2 cash dividend`}</pre>
             <strong>{trades.length} trades</strong> and{" "}
             <strong>{dividends.length} dividends</strong>, then import{" "}
             <code>{pendingReplace?.name}</code> in their place. This can't be
-            undone — make sure the CSV is what you want.
+            undone — make sure the workbook is what you want.
           </>
         }
         confirmLabel="Replace all"
