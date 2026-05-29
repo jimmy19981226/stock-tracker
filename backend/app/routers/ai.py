@@ -36,7 +36,7 @@ _TICKER_PATTERN = re.compile(r"\b(\d{4,6}[A-Za-z]?)\b")
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
-DEFAULT_MODEL = os.environ.get("GOOGLE_AI_MODEL", "gemini-2.5-flash")
+DEFAULT_MODEL = os.environ.get("GOOGLE_AI_MODEL", "gemini-3.5-flash")
 MAX_HISTORY_TURNS = 20  # cap conversation length sent to the model
 MAX_TITLE_LEN = 60
 
