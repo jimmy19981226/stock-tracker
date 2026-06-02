@@ -947,12 +947,28 @@ tr:last-child td {
   }
   .brand-block {
     flex-wrap: wrap;
+    gap: 8px;
     row-gap: 8px;
   }
+  /* Brand takes its own row; the two status pills group together on the next
+     row — a deliberate two-line header rather than one pill wrapping alone. */
   header.app-header h1 {
-    font-size: 16px;
+    font-size: 17px;
     white-space: nowrap;
-    flex-shrink: 0;
+    flex: 1 1 100%;
+  }
+  /* Compact the status pills so they sit neatly together on one line. */
+  .market-pill,
+  .live-indicator {
+    font-size: 10px;
+    padding: 4px 8px;
+    letter-spacing: 0.06em;
+    gap: 5px;
+  }
+  .market-pill .market-dot,
+  .live-indicator::before {
+    width: 6px;
+    height: 6px;
   }
   /* Tab bar = a clean full-width segmented control on one row: the three
      view tabs share the space equally, with the Assistant (collapsed to its
