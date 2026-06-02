@@ -619,7 +619,9 @@ main.app > .dual-grid { animation-delay: 200ms; }
 /* Summary grid */
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  /* Min 264px so cards are always wide enough for a 7-digit NT$ value to
+     show in full (no mid-number ellipsis). */
+  grid-template-columns: repeat(auto-fit, minmax(264px, 1fr));
   gap: 14px;
 }
 
