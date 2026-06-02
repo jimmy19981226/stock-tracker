@@ -48,7 +48,12 @@ export function PortfolioSummary({ summaries }: Props) {
 
   return (
     <>
-      {merged.map((s) => (
+      {merged.map((s) => {
+        // All-in profit: locked-in earnings plus open-position unrealized P/L.
+        // Null only while live quotes are briefly unavailable (so is total_pl).
+        const totalReturn =
+          s.total_pl == null ? null : s.realized_pl + s.dividends + s.total_pl;
+        return (
         <div className="panel" key={s.currency}>
           <h2>
             {s.currency} Portfolio · {s.holdings_count}{" "}
@@ -64,6 +69,13 @@ export function PortfolioSummary({ summaries }: Props) {
                 Realized {fmtMoney(s.realized_pl, s.currency)} ·
                 Dividends {fmtMoney(s.dividends, s.currency)}
               </div>
+            </div>
+            <div className="summary-card">
+              <div className="label">Total Return</div>
+              <div className={`value ${plClass(totalReturn)}`}>
+                {fmtMoney(totalReturn, s.currency)}
+              </div>
+              <div className="sub muted">Realized + dividends + unrealized</div>
             </div>
             <div className="summary-card">
               <div className="label">Market Value</div>
@@ -82,15 +94,6 @@ export function PortfolioSummary({ summaries }: Props) {
               </div>
             </div>
             <div className="summary-card">
-              <div className="label">Today</div>
-              <div className={`value ${plClass(s.today_pl)}`}>
-                {fmtMoney(s.today_pl, s.currency)}
-              </div>
-              <div className={`sub ${plClass(s.today_pl_pct)}`}>
-                {fmtPct(s.today_pl_pct)}
-              </div>
-            </div>
-            <div className="summary-card">
               <div className="label">Realized P/L</div>
               <div className={`value ${plClass(s.realized_pl)}`}>
                 {fmtMoney(s.realized_pl, s.currency)}
@@ -104,9 +107,19 @@ export function PortfolioSummary({ summaries }: Props) {
               </div>
               <div className="sub muted">Cash payouts received</div>
             </div>
+            <div className="summary-card">
+              <div className="label">Today</div>
+              <div className="value" style={{ color: "var(--accent)" }}>
+                {fmtMoney(s.today_pl, s.currency)}
+              </div>
+              <div className="sub" style={{ color: "var(--accent)" }}>
+                {fmtPct(s.today_pl_pct)}
+              </div>
+            </div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </>
   );
 }
