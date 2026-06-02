@@ -46,12 +46,36 @@ class QuoteData:
     volume: int | None = None
 
 
+def _bare(ticker: str) -> str:
+    t = ticker.strip().upper()
+    return t.split(".", 1)[0] if "." in t else t
+
+
 def get_quote(ticker: str) -> QuoteData | None:
-    # Lazy import to avoid a circular dependency at module load time.
-    from . import tw_quotes
-    return tw_quotes.get_quote(ticker)
+    return get_quotes([ticker]).get(ticker)
 
 
 def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
-    from . import tw_quotes
-    return tw_quotes.get_quotes(tickers)
+    # Lazy imports avoid a circular dependency at module load time.
+    from . import tw_quotes, yahoo_quotes
+
+    tickers = list(tickers)
+    out = tw_quotes.get_quotes(tickers)  # primary: real-time TWSE MIS
+
+    # Fill anything MIS couldn't return (e.g. when hosted on an IP MIS blocks)
+    # from Yahoo, keyed by bare code so "2330" and "2330.TW" share one fetch.
+    missing: dict[str, list[str]] = {}
+    for t in tickers:
+        if t not in out:
+            b = _bare(t)
+            if _TW_NUMERIC.match(b):
+                missing.setdefault(b, []).append(t)
+    if missing:
+        yq = yahoo_quotes.get_quotes(missing.keys())
+        for bare, originals in missing.items():
+            q = yq.get(bare)
+            if q is not None:
+                for original in originals:
+                    out[original] = q
+
+    return out
