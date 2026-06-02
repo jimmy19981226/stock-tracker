@@ -262,9 +262,9 @@ button:focus-visible,
 /* Buttons */
 button {
   font: inherit;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  background: var(--accent);
+  background: var(--grad-brand);
   color: white;
   border: none;
   padding: 9px 16px;
@@ -3240,11 +3240,12 @@ main.app {
 
 .row-clickable {
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background 140ms ease, box-shadow 140ms ease;
 }
 
 .row-clickable:hover {
-  background: rgba(99, 132, 255, 0.05);
+  background: rgba(99, 132, 255, 0.08);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .stock-chart-legend {
