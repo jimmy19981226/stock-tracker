@@ -863,6 +863,66 @@ tr:last-child td {
   }
 }
 
+/* Wide data tables scroll sideways inside their panel instead of forcing
+   the whole page to overflow on narrow screens. */
+.table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Phones */
+@media (max-width: 640px) {
+  .app {
+    padding: 14px 12px 64px;
+  }
+  header.app-header {
+    padding: 12px 14px;
+    margin-bottom: 20px;
+    top: 8px;
+    border-radius: 14px;
+  }
+  header.app-header h1 {
+    font-size: 17px;
+  }
+  /* Tab bar takes the full width and wraps to a second row rather than
+     overflowing off the side of the screen. */
+  header.app-header nav {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  header.app-header nav button {
+    padding: 8px 12px;
+  }
+
+  .panel {
+    padding: 16px 14px;
+  }
+  .summary-card {
+    padding: 16px 16px;
+  }
+
+  /* Keep table cells on one line; the .table-wrap scrolls horizontally so
+     columns stay aligned and readable instead of wrapping into mush. */
+  .table-wrap th,
+  .table-wrap td {
+    white-space: nowrap;
+  }
+  th,
+  td {
+    padding: 10px 11px;
+  }
+
+  /* Modal fills more of a small screen. */
+  .modal-backdrop {
+    padding: 12px 10px;
+  }
+  .modal {
+    max-height: calc(100vh - 24px);
+    border-radius: 14px;
+  }
+}
+
 .muted {
   color: var(--muted);
 }

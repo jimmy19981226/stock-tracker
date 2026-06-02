@@ -226,6 +226,7 @@ export function TradeList({ trades, names, onChanged }: Props) {
 
       {error && <div className="error">{error}</div>}
 
+      <div className="table-wrap">
       <table>
         <thead>
           <tr>
@@ -423,6 +424,7 @@ export function TradeList({ trades, names, onChanged }: Props) {
           })}
         </tbody>
       </table>
+      </div>
 
       <Pagination
         page={page}

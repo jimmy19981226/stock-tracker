@@ -60,6 +60,7 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
           >
             {currency} · {items.length}
           </div>
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -110,6 +111,7 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
               ))}
             </tbody>
           </table>
+          </div>
           <Pagination
             page={page}
             pageSize={pageSize}

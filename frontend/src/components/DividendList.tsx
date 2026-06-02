@@ -202,6 +202,7 @@ export function DividendList({ dividends, names, onChanged }: Props) {
 
       {error && <div className="error">{error}</div>}
 
+      <div className="table-wrap">
       <table>
         <thead>
           <tr>
@@ -336,6 +337,7 @@ export function DividendList({ dividends, names, onChanged }: Props) {
           })}
         </tbody>
       </table>
+      </div>
 
       <Pagination
         page={page}
