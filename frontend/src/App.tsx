@@ -8,7 +8,6 @@ import {
   type Trade,
 } from "./api";
 import { AllocationChart } from "./components/AllocationChart";
-import { DataPanel } from "./components/DataPanel";
 import { DividendForm } from "./components/DividendForm";
 import { DividendList } from "./components/DividendList";
 import { HoldingsTable } from "./components/HoldingsTable";
@@ -27,7 +26,7 @@ const StockDetail = lazy(() =>
   import("./components/StockDetail").then((m) => ({ default: m.StockDetail })),
 );
 
-type View = "dashboard" | "trades" | "dividends" | "data";
+type View = "dashboard" | "trades" | "dividends";
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
@@ -185,12 +184,6 @@ export default function App() {
             Dividends
           </button>
           <button
-            className={view === "data" ? "active" : ""}
-            onClick={() => setView("data")}
-          >
-            Data
-          </button>
-          <button
             className={assistantOpen ? "active assistant-toggle" : "assistant-toggle"}
             onClick={() => setAssistantOpen((o) => !o)}
             title="Toggle AI assistant sidebar"
@@ -234,14 +227,6 @@ export default function App() {
             onChanged={refresh}
           />
         </>
-      )}
-
-      {view === "data" && !loading && (
-        <DataPanel
-          trades={trades}
-          dividends={dividends}
-          onImported={refresh}
-        />
       )}
 
       </main>
