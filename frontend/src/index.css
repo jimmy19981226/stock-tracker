@@ -393,9 +393,9 @@ label > textarea {
 
 /* App shell */
 .app {
-  max-width: 1320px;
+  max-width: 1680px;
   margin: 0 auto;
-  padding: 28px 36px 80px;
+  padding: 28px 40px 80px;
 }
 
 header.app-header {
