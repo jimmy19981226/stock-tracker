@@ -143,12 +143,6 @@ The phone-facing upload page is a self-contained, no-framework HTML page served 
 
 Filter bar combining ticker search, trade type, status, and date range. Stock names show under each ticker. Pagination at the bottom; inline edit on every row.
 
-### Data tab — CSV in / out
-
-![Data tab](docs/screenshots/data-tab.png)
-
-Unified `portfolio.csv` for trades and dividends. Import in append OR replace mode; "Last export" card shows when you last backed up.
-
 ---
 
 ## Tech stack
