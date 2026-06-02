@@ -90,8 +90,14 @@ export interface EarningsPoint {
 
 export type EarningsByCurrency = Record<string, EarningsPoint[]>;
 
+// In production the frontend (Vercel) and backend (Render) live on different
+// domains, so API calls need the backend's absolute URL. Set VITE_API_BASE at
+// build time, e.g. https://stock-tracker-api.onrender.com. Left empty in dev,
+// where Vite's proxy forwards /api to the local backend on :8001.
+export const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(API_BASE + path, {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
@@ -143,7 +149,7 @@ export interface ParsedRecords {
 async function parseRecords(file: File): Promise<ParsedRecords> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch("/api/ai/parse-records", {
+  const res = await fetch(`${API_BASE}/api/ai/parse-records`, {
     method: "POST",
     body: form,
   });
@@ -187,7 +193,7 @@ async function uploadPortfolioXlsx(
 ): Promise<ImportResult> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`/api/data/import?mode=${mode}`, {
+  const res = await fetch(`${API_BASE}/api/data/import?mode=${mode}`, {
     method: "POST",
     body: form,
   });
@@ -223,7 +229,7 @@ async function aiChatStream(
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch("/api/ai/chat", {
+    res = await fetch(`${API_BASE}/api/ai/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, message }),
@@ -332,7 +338,7 @@ export const api = {
   deleteDividend: (id: number) =>
     request<void>(`/api/dividends/${id}`, { method: "DELETE" }),
   importPortfolioXlsx: uploadPortfolioXlsx,
-  exportPortfolioUrl: "/api/data/export",
+  exportPortfolioUrl: API_BASE + "/api/data/export",
   getLastExport: () =>
     request<{ last_export: string | null }>("/api/data/last-export"),
   getHoldings: () => request<Holding[]>("/api/portfolio/holdings"),

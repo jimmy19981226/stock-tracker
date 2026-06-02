@@ -1,0 +1,24 @@
+# Render blueprint for the FastAPI backend.
+# (The React frontend is deployed separately on Vercel.)
+#
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo.
+# Then set the three env vars below in the dashboard (they're marked sync:false
+# so they are NOT stored in git):
+#   DATABASE_URL       your Neon connection string
+#   GOOGLE_AI_API_KEY  your Gemini key (optional; enables the AI assistant)
+#   FRONTEND_ORIGINS   your deployed frontend URL, e.g. https://your-app.vercel.app
+services:
+  - type: web
+    name: stock-tracker-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_AI_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGINS
+        sync: false

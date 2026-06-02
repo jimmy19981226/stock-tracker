@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -22,12 +23,16 @@ SEED_FILE = (
 
 app = FastAPI(title="AI Stock Studio", version="0.1.0")
 
+# Local dev origins plus any extra origins from FRONTEND_ORIGINS (comma-
+# separated), e.g. the deployed frontend's URL: "https://stock-tracker.vercel.app".
+_default_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_extra_origins = [
+    o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_default_origins + _extra_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
