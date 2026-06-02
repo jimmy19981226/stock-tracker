@@ -190,9 +190,6 @@ export default function App() {
           >
             ✦ <span className="nav-label">Assistant</span>
           </button>
-          <button className="secondary" onClick={refresh} title="Refresh prices">
-            ↻
-          </button>
         </nav>
       </header>
 
