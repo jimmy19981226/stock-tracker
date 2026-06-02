@@ -849,6 +849,13 @@ tr:last-child td {
   gap: 16px;
 }
 
+/* Grid items default to min-width:auto, which lets a wide table stretch its
+   panel past the track instead of scrolling inside it. Pin to 0 so the panel
+   stays at track width and its .table-wrap scrolls internally. */
+.dual-grid > * {
+  min-width: 0;
+}
+
 /* Stack the holdings table + allocation donut once the side-by-side columns
    get too narrow — otherwise the donut's column is squeezed and clips. */
 @media (max-width: 1024px) {
@@ -877,8 +884,16 @@ tr:last-child td {
 
 /* Phones */
 @media (max-width: 640px) {
+  /* Behave like a native app: lock the page horizontally so swiping a wide
+     table scrolls only that table (its .table-wrap), never the whole page. */
+  html,
+  body {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
   .app {
     padding: 12px 12px 56px;
+    overflow-x: clip;
   }
 
   /* Header: scroll with the page (not sticky) so it never overlaps content,
