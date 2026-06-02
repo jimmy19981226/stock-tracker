@@ -109,8 +109,15 @@ def mint_mobile_token() -> str:
         return json.load(r)["token"]
 
 
+# The header is position:sticky; in a stitched full_page capture that repaints
+# it as a duplicate band at the scroll offset. Neutralise stickiness (it still
+# sits at the top in normal flow) so full-page shots show it exactly once.
+UNSTICK_HEADER = "header.app-header{position:static !important;top:auto !important;}"
+
+
 def capture_dashboard_shots(page: Page) -> None:
     page.goto(f"{FRONTEND}/", wait_until="networkidle")
+    page.add_style_tag(content=UNSTICK_HEADER)  # persists across SPA nav
     page.wait_for_timeout(1500)  # let the panel-cascade settle + charts draw
 
     shot("dashboard", lambda: page.screenshot(
