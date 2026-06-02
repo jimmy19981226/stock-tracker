@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from ..database import Dividend, Trade, get_db
 from ..services import quotes, stock_info
-from ..services.portfolio import compute_states
+from ..services.portfolio import compute_states, estimate_exit_cost
 
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
@@ -92,7 +92,13 @@ def stock_detail(
             realized_pl = 0.0
 
         market_value = (quote.price * shares) if (quote and shares > 0) else None
-        unrealized_pl = (market_value - cost_basis) if market_value is not None else None
+        # Net of estimated exit costs (commission + tax), matching 損益試算.
+        exit_cost = (
+            estimate_exit_cost(ticker, market_value) if market_value is not None else None
+        )
+        unrealized_pl = (
+            market_value - cost_basis - exit_cost if market_value is not None else None
+        )
         unrealized_pl_pct = (
             unrealized_pl / cost_basis * 100
             if unrealized_pl is not None and cost_basis > 0
@@ -116,6 +122,7 @@ def stock_detail(
             "avg_cost": avg_cost,
             "cost_basis": cost_basis,
             "market_value": market_value,
+            "exit_cost": exit_cost,
             "unrealized_pl": unrealized_pl,
             "unrealized_pl_pct": unrealized_pl_pct,
             "realized_pl": realized_pl,

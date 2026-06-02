@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -9,6 +10,37 @@ from sqlalchemy.orm import Session
 
 from ..database import Dividend, Trade
 from . import quotes
+
+
+# --- TW exit-cost estimate ----------------------------------------------
+# TW broker apps don't show the *gross* unrealized gain (市值 − 成本); their
+# 損益試算 column shows what you'd actually pocket after paying to liquidate:
+# the sell-side commission plus the securities transaction tax. Subtracting
+# this is what makes our Unrealized P/L line up with the broker to the dollar.
+SELL_FEE_RATE = 0.001425  # brokerage commission, full published rate
+
+
+def _sell_tax_rate(ticker: str) -> float:
+    """Securities transaction tax rate on the sell side.
+
+    Ordinary listed shares pay 0.3%. ETFs (codes starting ``00``) pay 0.1%,
+    except bond ETFs (trailing ``B``) which are tax-exempt.
+    """
+    t = ticker.strip().upper()
+    if t.startswith("00"):
+        return 0.0 if t.endswith("B") else 0.001
+    return 0.003
+
+
+def estimate_exit_cost(ticker: str, market_value: float) -> float:
+    """Estimated commission + transaction tax to sell a position at
+    ``market_value``. Each component is floored to the dollar, mirroring how
+    TW brokers print 損益試算."""
+    if market_value <= 0:
+        return 0.0
+    fee = math.floor(market_value * SELL_FEE_RATE)
+    tax = math.floor(market_value * _sell_tax_rate(ticker))
+    return float(fee + tax)
 
 
 @dataclass
@@ -67,11 +99,18 @@ def build_holdings(db: Session) -> list[dict]:
         )
         current_price = quote.price if quote else None
         prev_close = quote.previous_close if quote else None
-        # Gross market value (price × shares), matching what TW broker apps
-        # display as 總現值 / 損益試算 — no sell-side fee deduction.
+        # Gross market value (price × shares) — matches the broker's 資產市值.
         market_value = current_price * st.shares if current_price is not None else None
+        # Estimated cost to liquidate, so unrealized P/L matches 損益試算.
+        exit_cost = (
+            estimate_exit_cost(ticker, market_value)
+            if market_value is not None
+            else None
+        )
         unrealized = (
-            market_value - st.cost_basis if market_value is not None else None
+            market_value - st.cost_basis - exit_cost
+            if market_value is not None
+            else None
         )
         unrealized_pct = (
             unrealized / st.cost_basis * 100
@@ -98,6 +137,7 @@ def build_holdings(db: Session) -> list[dict]:
                 "current_price": current_price,
                 "market_value": market_value,
                 "cost_basis": st.cost_basis,
+                "exit_cost": exit_cost,
                 "unrealized_pl": unrealized,
                 "unrealized_pl_pct": unrealized_pct,
                 "today_change": today_change,
@@ -151,7 +191,9 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
             today_pl_pct: float | None = None
         else:
             total_value = sum((h["market_value"] or 0.0) for h in items)
-            total_pl = total_value - total_cost
+            # Net of estimated exit costs, so it equals the sum of each
+            # position's 損益試算 (not the gross 市值 − 成本).
+            total_pl = sum((h["unrealized_pl"] or 0.0) for h in items)
             total_pl_pct = (total_pl / total_cost * 100) if total_cost > 0 else 0.0
             today_pl = sum((h["today_change"] or 0.0) for h in items)
             prev_value = total_value - today_pl

@@ -34,6 +34,8 @@ export interface Holding {
   current_price: number | null;
   market_value: number | null;
   cost_basis: number;
+  // estimated commission + tax to liquidate; unrealized_pl is already net of it
+  exit_cost: number | null;
   unrealized_pl: number | null;
   unrealized_pl_pct: number | null;
   today_change: number | null;
@@ -460,6 +462,8 @@ export interface StockDetailPosition {
   avg_cost: number | null;
   cost_basis: number;
   market_value: number | null;
+  // estimated commission + tax to liquidate; unrealized_pl is already net of it
+  exit_cost: number | null;
   unrealized_pl: number | null;
   unrealized_pl_pct: number | null;
   realized_pl: number;

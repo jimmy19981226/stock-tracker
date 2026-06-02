@@ -320,7 +320,8 @@ Restart the backend. The ✦ Assistant button now opens a chat panel instead of 
 - **Ticker resolution** — bare 4-6 digit codes (`2330`, `00919`, `00937B`) auto-suffix to `xxxx.TW` against TWSE MIS.
 - **Live quotes** — TW tickers go to TWSE MIS, batched into a single HTTP call per refresh. We probe both `tse_` (上市) and `otc_` (上櫃) prefixes per ticker so callers don't need to know which exchange.
 - **Cost basis** — weighted-average. Sells reduce open cost basis proportionally and realize the difference vs. average price (minus fees).
-- **Market value** — `current_price × shares`, gross. Matches 總現值 / 損益試算 in most TW broker apps.
+- **Market value** — `current_price × shares`, gross. Matches 資產市值 / 總現值 in most TW broker apps.
+- **Unrealized P/L** — market value − cost basis − estimated exit cost (sell commission 0.1425% + securities transaction tax: 0.3% shares / 0.1% equity ETFs / 0% bond ETFs, each floored). This nets out the cost of liquidating, so it lines up with the broker's 損益試算 / 獲利率 columns rather than the gross gain.
 - **Open vs closed status** — FIFO-matched per ticker: buys queue up; sells consume buy lots front-first; any buy lot with leftover shares is `open`, fully-consumed buys and all sells are `closed`.
 - **Per-stock detail** — `/api/stock/{ticker}/detail` aggregates live MIS quote + yfinance fundamentals (1 h cache) + yfinance daily history + FinMind monthly revenue + yfinance quarterly_income_stmt (6 h cache) + your local trades / dividends — all in one call.
 - **AI context** — every chat sends your full portfolio JSON + light fundamentals on every holding. If your question mentions a ticker, deep monthly revenue + quarterly margins for that ticker also get attached so the model can answer trend questions with citations.
