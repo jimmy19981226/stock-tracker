@@ -1,15 +1,46 @@
+import os
 from datetime import datetime, date
 from sqlalchemy import create_engine, String, Float, Date, DateTime, Integer, Text, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session, relationship
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "trades.db"
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Load backend/.env here too (not just in main.py) so DATABASE_URL is picked up
+# even when the app is imported from a script rather than started via uvicorn.
+try:
+    from dotenv import load_dotenv
 
-engine = create_engine(
-    f"sqlite:///{DB_PATH}",
-    connect_args={"check_same_thread": False},
-)
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
+
+
+def _make_engine():
+    """Use the cloud DATABASE_URL when set; otherwise the local SQLite file.
+
+    Set DATABASE_URL in backend/.env to point at Neon (or any Postgres). Leaving
+    it unset keeps the original on-disk SQLite behaviour, so local dev is
+    unchanged and you can switch back any time.
+    """
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if url:
+        # Neon hands out bare 'postgresql://' (or legacy 'postgres://') URLs;
+        # route them through the psycopg 3 driver SQLAlchemy expects.
+        if url.startswith("postgres://"):
+            url = "postgresql+psycopg://" + url[len("postgres://"):]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url[len("postgresql://"):]
+        # pool_pre_ping revives connections Neon drops when it scales to zero.
+        return create_engine(url, pool_pre_ping=True)
+
+    db_path = Path(__file__).resolve().parent.parent / "data" / "trades.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return create_engine(
+        f"sqlite:///{db_path}",
+        connect_args={"check_same_thread": False},
+    )
+
+
+engine = _make_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
