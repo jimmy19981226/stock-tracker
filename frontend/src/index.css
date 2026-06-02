@@ -849,10 +849,15 @@ tr:last-child td {
   gap: 16px;
 }
 
-@media (max-width: 900px) {
+/* Stack the holdings table + allocation donut once the side-by-side columns
+   get too narrow — otherwise the donut's column is squeezed and clips. */
+@media (max-width: 1024px) {
   .dual-grid {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 900px) {
   .summary-card.hero {
     grid-column: span 1;
   }
