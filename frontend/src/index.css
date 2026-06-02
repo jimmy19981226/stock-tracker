@@ -845,7 +845,9 @@ tr:last-child td {
 
 .dual-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  /* Allocation gets a roomier ~40% column so the donut + legend aren't cramped
+     (the holdings table absorbs the difference — it scrolls horizontally). */
+  grid-template-columns: 1.5fr 1fr;
   gap: 16px;
 }
 
@@ -858,7 +860,7 @@ tr:last-child td {
 
 /* Stack the holdings table + allocation donut once the side-by-side columns
    get too narrow — otherwise the donut's column is squeezed and clips. */
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .dual-grid {
     grid-template-columns: 1fr;
   }
