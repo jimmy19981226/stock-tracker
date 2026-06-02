@@ -602,6 +602,20 @@ main.app > .dual-grid { animation-delay: 200ms; }
   letter-spacing: 0.12em;
 }
 
+/* Small gradient tick before each section title — an editorial accent that
+   makes sections feel intentional and on-brand. */
+.panel h2::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 11px;
+  margin-right: 9px;
+  border-radius: 2px;
+  background: var(--grad-brand);
+  vertical-align: -1px;
+  box-shadow: 0 0 8px rgba(99, 132, 255, 0.45);
+}
+
 /* Summary grid */
 .summary-grid {
   display: grid;
