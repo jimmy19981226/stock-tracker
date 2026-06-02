@@ -873,16 +873,26 @@ tr:last-child td {
 /* Phones */
 @media (max-width: 640px) {
   .app {
-    padding: 14px 12px 64px;
+    padding: 12px 12px 56px;
   }
+
+  /* Header: scroll with the page (not sticky) so it never overlaps content,
+     and keep the brand on one line with the status pills wrapping beside it. */
   header.app-header {
+    position: static;
     padding: 12px 14px;
-    margin-bottom: 20px;
-    top: 8px;
+    margin-bottom: 16px;
     border-radius: 14px;
+    gap: 10px;
+  }
+  .brand-block {
+    flex-wrap: wrap;
+    row-gap: 8px;
   }
   header.app-header h1 {
-    font-size: 17px;
+    font-size: 16px;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   /* Tab bar takes the full width and wraps to a second row rather than
      overflowing off the side of the screen. */
@@ -898,8 +908,23 @@ tr:last-child td {
   .panel {
     padding: 16px 14px;
   }
+
+  /* Summary cards: shrink the big numbers so long values (esp. the hero)
+     aren't clipped on a narrow screen. */
+  .summary-grid {
+    gap: 10px;
+  }
   .summary-card {
-    padding: 16px 16px;
+    padding: 15px 16px;
+  }
+  .summary-card .value {
+    font-size: 21px;
+  }
+  .summary-card.hero {
+    padding: 18px 18px;
+  }
+  .summary-card.hero .value {
+    font-size: 26px;
   }
 
   /* Keep table cells on one line; the .table-wrap scrolls horizontally so
