@@ -188,7 +188,7 @@ export default function App() {
             onClick={() => setAssistantOpen((o) => !o)}
             title="Toggle AI assistant sidebar"
           >
-            ✦ Assistant
+            ✦ <span className="nav-label">Assistant</span>
           </button>
           <button className="secondary" onClick={refresh} title="Refresh prices">
             ↻

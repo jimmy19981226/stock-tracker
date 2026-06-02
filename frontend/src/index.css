@@ -914,15 +914,28 @@ tr:last-child td {
     white-space: nowrap;
     flex-shrink: 0;
   }
-  /* Tab bar takes the full width and wraps to a second row rather than
-     overflowing off the side of the screen. */
+  /* Tab bar = a clean full-width segmented control on one row: the three
+     view tabs share the space equally, with the Assistant (collapsed to its
+     ✦ icon) and refresh as compact square buttons at the end. */
   header.app-header nav {
     width: 100%;
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 3px;
   }
   header.app-header nav button {
-    padding: 8px 12px;
+    flex: 1 1 0;
+    padding: 9px 4px;
+    text-align: center;
+  }
+  header.app-header nav .assistant-toggle,
+  header.app-header nav .secondary {
+    flex: 0 0 auto;
+    min-width: 38px;
+    padding: 9px 10px;
+  }
+  /* Hide the "Assistant" word on phones — the ✦ icon stands in for it. */
+  header.app-header nav .nav-label {
+    display: none;
   }
 
   .panel {
