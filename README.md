@@ -20,7 +20,9 @@ A self-hosted **Taiwan equities workbench** — live MIS prices, broker-matching
 
 ### 📊 Live portfolio dashboard
 - Hero **Total Earned** card (realized + dividends) with gradient styling
-- Per-currency summary grid with live unrealized P/L, today's P/L, and dividends
+- **Total Return** card — realized + dividends + unrealized, your all-in profit
+- Per-currency summary grid: market value, unrealized P/L, realized P/L, dividends, and today's move (accent-colored)
+- Unrealized P/L is **net of estimated exit costs** (sell commission + transaction tax), so it matches your broker's 損益試算 / 獲利率 rather than the gross gain
 - **Cumulative earnings chart** stacking realized P/L + dividends
 - **Unrealized P/L by position** with divergent green/red bars, sorted
 - Open positions table + allocation donut
@@ -155,13 +157,14 @@ Unified `portfolio.csv` for trades and dividends. Import in append OR replace mo
 Backend                            Frontend
 ─────────────────                  ─────────────────
 FastAPI                            Vite
-SQLAlchemy 2.0 + SQLite            React 18 + TypeScript
-TWSE MIS  (live quotes)            Recharts (charts)
-yfinance  (history + fundamentals) react-markdown (AI replies)
-FinMind   (TW monthly revenue)     remark-gfm (tables / GFM)
-google-genai (Gemini AI)           Inter font
-python-multipart                   Pure CSS (no framework)
-python-dotenv
+SQLAlchemy 2.0                     React 18 + TypeScript
+  · SQLite (local default)         Recharts (charts)
+  · Postgres / Neon (optional)     react-markdown (AI replies)
+TWSE MIS  (live quotes)            remark-gfm (tables / GFM)
+yfinance  (history + fundamentals) Inter font
+FinMind   (TW monthly revenue)     Pure CSS (no framework)
+google-genai (Gemini AI)
+python-multipart · python-dotenv · psycopg
 ```
 
 All TW data flows through standardised endpoints (TWSE MIS, FinMind, yfinance) — no scraping, no broker login, no paid feeds.
@@ -178,7 +181,7 @@ flowchart LR
   subgraph Phone["Phone (same Wi-Fi)"]
     PhonePage[Mobile upload page<br/>scans QR, picks photo]
   end
-  subgraph Backend["FastAPI :8000"]
+  subgraph Backend["FastAPI :8001"]
     Trades["/api/trades"]
     Dividends["/api/dividends"]
     Portfolio["/api/portfolio/*"]
@@ -281,16 +284,16 @@ frontend/
 ```powershell
 cd backend
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --port 8001
 ```
 
-API docs: <http://127.0.0.1:8000/docs>
+API docs: <http://127.0.0.1:8001/docs>
 
 > **Want to use the QR phone-upload feature?** Start uvicorn with
-> `--host 0.0.0.0` instead, and allow inbound port 8000 through Windows
+> `--host 0.0.0.0` instead, and allow inbound port 8001 through Windows
 > Firewall — your phone needs to reach the backend over your Wi-Fi:
 > ```powershell
-> python -m uvicorn app.main:app --reload --port 8000 --host 0.0.0.0
+> python -m uvicorn app.main:app --reload --port 8001 --host 0.0.0.0
 > ```
 
 ### Frontend
@@ -301,7 +304,19 @@ npm install
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Vite proxies `/api/*` to the backend on `:8000`.
+Open <http://127.0.0.1:5173>. Vite proxies `/api/*` to the backend on `:8001`.
+
+### Cloud database (optional)
+
+By default the app stores everything in a local SQLite file (`backend/data/trades.db`).
+To use a cloud Postgres instead (e.g. a free [Neon](https://neon.tech) database — handy
+for syncing across devices or deploying), set `DATABASE_URL` in `backend/.env`:
+
+```
+DATABASE_URL=postgresql://user:password@ep-xxx.us-west-2.aws.neon.tech/dbname?sslmode=require
+```
+
+The app auto-detects it (routing through `psycopg`) and falls back to SQLite when unset.
 
 ### AI assistant (optional)
 
@@ -312,6 +327,22 @@ GOOGLE_AI_API_KEY=AIza...
 ```
 
 Restart the backend. The ✦ Assistant button now opens a chat panel instead of the setup hint.
+
+### Deploy to the cloud (optional)
+
+To reach the app from your phone or any device, host the three pieces — all have free tiers:
+
+- **Database → [Neon](https://neon.tech)** (Postgres). Create a project, copy the connection string.
+- **Backend → [Render](https://render.com)** (Web Service). The repo ships a [`render.yaml`](render.yaml)
+  blueprint — point Render at the repo and set these env vars in the dashboard:
+  `DATABASE_URL` (Neon), `GOOGLE_AI_API_KEY` (optional), and `FRONTEND_ORIGINS` (your Vercel URL).
+- **Frontend → [Vercel](https://vercel.com)** (static). Set **Root Directory** to `frontend` and add the
+  env var `VITE_API_BASE` = your Render backend URL.
+
+Deploy order: **backend first** (to get its URL) → frontend (with `VITE_API_BASE`) → then set
+`FRONTEND_ORIGINS` on the backend to the frontend's URL so CORS allows it. Note both free tiers
+"scale to zero," so the first request after idle takes ~30–60 s to wake, then it's fast. The QR
+phone-upload feature assumes a local network and won't work over the public internet.
 
 ---
 
