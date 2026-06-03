@@ -8,18 +8,18 @@ interface Props {
 }
 
 const PALETTE = [
-  "#8b5cf6", // aurora violet
-  "#22d3ee", // cyan
-  "#e879f9", // magenta
-  "#2ee6a6", // mint
+  "#4d8bff", // electric blue
+  "#7aa9ff", // light blue
+  "#38bdf8", // sky
+  "#2dd4bf", // teal
+  "#34d399", // green
+  "#818cf8", // indigo
   "#fbbf24", // amber
   "#60a5fa", // blue
-  "#f472b6", // pink
-  "#a78bfa", // light violet
-  "#fb923c", // orange
+  "#fb7185", // rose
   "#94a3b8", // slate
 ];
-const OTHER_COLOR = "#2a2a44";
+const OTHER_COLOR = "#2a3142";
 const TOP_N = 8;
 const SMALL_PCT_THRESHOLD = 0.02; // <2% rolls into "Other"
 
