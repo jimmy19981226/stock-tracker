@@ -93,7 +93,7 @@ export type EarningsByCurrency = Record<string, EarningsPoint[]>;
 // In production the frontend (Vercel) and backend (Render) live on different
 // domains, so API calls need the backend's absolute URL. Set VITE_API_BASE at
 // build time, e.g. https://stock-tracker-api.onrender.com. Left empty in dev,
-// where Vite's proxy forwards /api to the local backend on :8001.
+// where Vite's proxy forwards /api to the local backend on :8011.
 export const API_BASE = (import.meta.env.VITE_API_BASE ?? "").replace(/\/+$/, "");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

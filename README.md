@@ -175,7 +175,7 @@ flowchart LR
   subgraph Phone["Phone (same Wi-Fi)"]
     PhonePage[Mobile upload page<br/>scans QR, picks photo]
   end
-  subgraph Backend["FastAPI :8001"]
+  subgraph Backend["FastAPI :8011"]
     Trades["/api/trades"]
     Dividends["/api/dividends"]
     Portfolio["/api/portfolio/*"]
@@ -278,16 +278,16 @@ frontend/
 ```powershell
 cd backend
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --port 8001
+python -m uvicorn app.main:app --reload --port 8011
 ```
 
-API docs: <http://127.0.0.1:8001/docs>
+API docs: <http://127.0.0.1:8011/docs>
 
 > **Want to use the QR phone-upload feature?** Start uvicorn with
-> `--host 0.0.0.0` instead, and allow inbound port 8001 through Windows
+> `--host 0.0.0.0` instead, and allow inbound port 8011 through Windows
 > Firewall — your phone needs to reach the backend over your Wi-Fi:
 > ```powershell
-> python -m uvicorn app.main:app --reload --port 8001 --host 0.0.0.0
+> python -m uvicorn app.main:app --reload --port 8011 --host 0.0.0.0
 > ```
 
 ### Frontend
@@ -298,7 +298,7 @@ npm install
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Vite proxies `/api/*` to the backend on `:8001`.
+Open <http://127.0.0.1:5173>. Vite proxies `/api/*` to the backend on `:8011`.
 
 ### Cloud database (optional)
 

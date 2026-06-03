@@ -1,7 +1,7 @@
 """Capture the README demo-gallery screenshots from the live dev stack.
 
 Usage:
-    # 1. backend on :8001 and frontend on :5173 must already be running
+    # 1. backend on :8011 and frontend on :5173 must already be running
     # 2. seed the demo chat so the AI citations shot has content:
     python backend/seed_demo_chat.py
     # 3. capture:
@@ -31,7 +31,7 @@ OUT = ROOT / "docs" / "screenshots"
 OUT.mkdir(parents=True, exist_ok=True)
 
 FRONTEND = "http://127.0.0.1:5173"
-BACKEND = "http://127.0.0.1:8001"
+BACKEND = "http://127.0.0.1:8011"
 
 # 1920x1080 at 2x DPR -> effectively 4K, sharp on Retina.
 VIEWPORT = {"width": 1920, "height": 1080}
