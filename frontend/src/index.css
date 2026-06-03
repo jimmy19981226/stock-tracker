@@ -811,6 +811,12 @@ main.app > .dual-grid { animation-delay: 200ms; }
 .summary-card.hero .sub {
   margin-top: 8px;
   font-size: 12.5px;
+  /* The hero sub carries two figures (realized · dividends); let it wrap
+     instead of truncating a number mid-digit on narrow screens. */
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.5;
 }
 
 /* P/L colors */
