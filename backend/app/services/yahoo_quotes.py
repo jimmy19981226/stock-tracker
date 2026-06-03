@@ -16,10 +16,13 @@ import json
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Iterable
 
 from .quotes import QuoteData, resolve_symbol
+
+_TAIPEI = timezone(timedelta(hours=8))
 
 _CHART = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=1d"
 _HEADERS = {
@@ -68,10 +71,33 @@ def _fetch_one(bare: str) -> QuoteData | None:
     except (TypeError, ValueError):
         volume = None
 
+    price = _f("regularMarketPrice")
+    prev_close = _f("previousClose") or _f("chartPreviousClose")
+
+    # Staleness guard: Yahoo's TW feed is delayed and, for the first ~15-30 min
+    # of a session, can still serve the *previous* day's snapshot whole — both
+    # price and prev-close a day behind. Computing "today's change" from that
+    # mislabels yesterday's full-day move as today's. If the snapshot predates
+    # the current Taipei trading day, treat it as flat (prev = price) until
+    # fresh intraday data arrives, rather than showing a wrong non-zero move.
+    mkt_time = meta.get("regularMarketTime")
+    if mkt_time is not None and price is not None:
+        try:
+            snap_date = (
+                datetime.fromtimestamp(int(mkt_time), tz=timezone.utc)
+                .astimezone(_TAIPEI)
+                .date()
+            )
+            today = datetime.now(timezone.utc).astimezone(_TAIPEI).date()
+            if snap_date < today:
+                prev_close = price
+        except (TypeError, ValueError, OverflowError, OSError):
+            pass
+
     return QuoteData(
         symbol=resolve_symbol(bare),
-        price=_f("regularMarketPrice"),
-        previous_close=_f("chartPreviousClose") or _f("previousClose"),
+        price=price,
+        previous_close=prev_close,
         currency=meta.get("currency") or "TWD",
         name=meta.get("shortName") or meta.get("longName") or "",
         day_open=_f("regularMarketOpen"),

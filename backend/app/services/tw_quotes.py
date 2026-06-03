@@ -14,26 +14,30 @@ back to yfinance.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import urllib.parse
 import urllib.request
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from threading import Lock
 from typing import Iterable
 
 from .quotes import QuoteData, resolve_symbol
+from .tw_calendar import is_tw_market_holiday
 
 
 _TAIPEI = timezone(timedelta(hours=8))
 
 
 def _is_tw_market_open(now: datetime | None = None) -> bool:
-    """09:00-13:30 Taipei time, Monday-Friday. Used to decide whether MIS's
-    `y` field is yesterday's close (during session) vs today's close that
-    has rolled over (after session)."""
+    """09:00-13:30 Taipei time, Monday-Friday, excluding TW public holidays.
+    Used to decide whether MIS's `y` field is yesterday's close (during
+    session) vs today's close that has rolled over (after session)."""
     tw = (now or datetime.now(timezone.utc)).astimezone(_TAIPEI)
-    if tw.weekday() >= 5:
+    if tw.weekday() >= 5 or is_tw_market_holiday(tw.date()):
         return False
     minutes = tw.hour * 60 + tw.minute
     return 9 * 60 <= minutes < 13 * 60 + 30
@@ -64,6 +68,48 @@ _cache: dict[str, tuple[float, QuoteData]] = {}
 # whenever MIS gives us a degraded response.
 _last_good: dict[str, QuoteData] = {}
 _lock = Lock()
+
+# Persist `_last_good` so a process restart doesn't lose the prior-session
+# close. Without this, a fresh process queried outside market hours has an
+# empty cache and falls back to MIS's rolled `y` (= today's close), making
+# "today's move" read 0. The file lives beside the DB and is gitignored.
+_LAST_GOOD_FILE = Path(__file__).resolve().parents[2] / "data" / "last_good_quotes.json"
+_SAVE_INTERVAL = 60.0
+_last_save = 0.0
+
+
+def _load_last_good() -> None:
+    try:
+        with open(_LAST_GOOD_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (FileNotFoundError, ValueError, OSError):
+        return
+    for bare, d in (raw or {}).items():
+        try:
+            _last_good[bare] = QuoteData(**d)
+        except (TypeError, ValueError):
+            continue
+
+
+def _save_last_good(now: float) -> None:
+    """Throttled, best-effort snapshot of `_last_good` to disk."""
+    global _last_save
+    if now - _last_save < _SAVE_INTERVAL:
+        return
+    _last_save = now
+    with _lock:
+        snapshot = {b: asdict(q) for b, q in _last_good.items()}
+    try:
+        _LAST_GOOD_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _LAST_GOOD_FILE.with_name(_LAST_GOOD_FILE.name + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f)
+        os.replace(tmp, _LAST_GOOD_FILE)
+    except OSError:
+        pass
+
+
+_load_last_good()
 
 
 def _bare(ticker: str) -> str:
@@ -229,5 +275,8 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
             _cache[bare] = (now, q)
             for original in bare_to_originals.get(bare, []):
                 out[original] = q
+
+    if fresh:
+        _save_last_good(now)
 
     return out

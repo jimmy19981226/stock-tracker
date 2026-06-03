@@ -109,10 +109,10 @@ export function PortfolioSummary({ summaries }: Props) {
             </div>
             <div className="summary-card">
               <div className="label">Today</div>
-              <div className="value" style={{ color: "var(--accent)" }}>
+              <div className={`value ${plClass(s.today_pl)}`}>
                 {fmtMoney(s.today_pl, s.currency)}
               </div>
-              <div className="sub" style={{ color: "var(--accent)" }}>
+              <div className={`sub ${plClass(s.today_pl_pct)}`}>
                 {fmtPct(s.today_pl_pct)}
               </div>
             </div>

@@ -77,9 +77,33 @@ export function presetRange(preset: DatePreset): {
   }
 }
 
+// 2026 TWSE market-holiday closures (mirror of backend tw_calendar.py).
+// Update yearly. Weekends are handled separately.
+const TW_MARKET_HOLIDAYS = new Set<string>([
+  "2026-01-01",
+  "2026-02-16", "2026-02-17", "2026-02-18", "2026-02-19", "2026-02-20",
+  "2026-02-27",
+  "2026-04-03", "2026-04-06",
+  "2026-05-01",
+  "2026-06-19",
+  "2026-09-25", "2026-09-28",
+  "2026-10-09", "2026-10-26",
+  "2026-12-25",
+]);
+
+/** ISO date string for a Date whose UTC fields hold Taipei wall-clock time. */
+function twDateStr(tw: Date): string {
+  const m = String(tw.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(tw.getUTCDate()).padStart(2, "0");
+  return `${tw.getUTCFullYear()}-${m}-${d}`;
+}
+
+function isTwHoliday(tw: Date): boolean {
+  return TW_MARKET_HOLIDAYS.has(twDateStr(tw));
+}
+
 /** Is the Taiwan stock market currently open? 09:00–13:30 Taipei time,
- *  Monday-Friday. Doesn't account for public holidays — close enough
- *  for a visual indicator. */
+ *  Monday-Friday, excluding TW public holidays. */
 export function isTwMarketOpen(now: Date = new Date()): boolean {
   // Taipei is UTC+8, no DST. Compute "wall clock" time in Taipei from UTC.
   const utcMs = now.getTime();
@@ -87,6 +111,7 @@ export function isTwMarketOpen(now: Date = new Date()): boolean {
   const tw = new Date(taipeiMs);
   const day = tw.getUTCDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return false;
+  if (isTwHoliday(tw)) return false;
   const minutes = tw.getUTCHours() * 60 + tw.getUTCMinutes();
   return minutes >= 9 * 60 && minutes < 13 * 60 + 30;
 }
@@ -105,21 +130,16 @@ export function nextTwMarketTransition(now: Date = new Date()): {
   if (open) {
     return { open: true, inMinutes: 13 * 60 + 30 - minsNow };
   }
-  // Currently closed — find next opening.
-  const day = tw.getUTCDay();
-  let daysAhead = 0;
-  // If before 09:00 today and today is a weekday, opens later today.
-  if (day >= 1 && day <= 5 && minsNow < 9 * 60) {
-    daysAhead = 0;
-  } else {
-    // After 13:30 weekday, or weekend — find next weekday.
-    daysAhead = 1;
-    while (((day + daysAhead) % 7) === 0 || ((day + daysAhead) % 7) === 6) {
-      daysAhead += 1;
-    }
+  // Currently closed — find the next day the market opens, skipping
+  // weekends and TW public holidays.
+  let daysAhead = minsNow < 9 * 60 ? 0 : 1;
+  for (;;) {
+    const cand = new Date(taipeiMs + daysAhead * 24 * 60 * 60 * 1000);
+    const cd = cand.getUTCDay();
+    if (cd !== 0 && cd !== 6 && !isTwHoliday(cand)) break;
+    daysAhead += 1;
   }
-  const minsToNextOpen =
-    daysAhead * 24 * 60 + (9 * 60 - minsNow);
+  const minsToNextOpen = daysAhead * 24 * 60 + (9 * 60 - minsNow);
   return { open: false, inMinutes: minsToNextOpen };
 }
 
