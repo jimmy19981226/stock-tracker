@@ -38,7 +38,7 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
           className="tag status-open"
           style={{ marginLeft: 8, verticalAlign: "middle" }}
         >
-          {holdings.length} OPEN
+          {valid.length} OPEN
         </span>
       </h2>
       {Object.entries(byCurrency).map(([currency, rawItems]) => {

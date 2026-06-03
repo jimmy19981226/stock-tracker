@@ -64,7 +64,13 @@ def _apply_trade(state: HoldingState, trade: Trade) -> None:
             return
         avg = state.cost_basis / state.shares
         sold = min(trade.shares, state.shares)
+        oversold = max(0.0, trade.shares - state.shares)
         state.realized_pl += sold * (trade.price - avg) - trade.fee
+        # Shares sold beyond the open position have no cost basis — book their
+        # proceeds as pure realized gain (mirrors the no-position branch above),
+        # otherwise an over-sell silently discards that sale's P/L.
+        if oversold:
+            state.realized_pl += oversold * trade.price
         state.cost_basis -= sold * avg
         state.shares -= trade.shares
         if state.shares <= 1e-9:

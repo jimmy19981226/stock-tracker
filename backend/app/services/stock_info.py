@@ -328,11 +328,14 @@ def get_quarterly_financials(ticker: str, quarters: int = 8) -> list[dict]:
         net_income = _row("Net Income", col)
         gross_profit = _row("Gross Profit", col)
         operating_income = _row("Operating Income", col)
-        eps = _row("Diluted EPS", col) or _row("Basic EPS", col)
+        eps_diluted = _row("Diluted EPS", col)
+        eps = eps_diluted if eps_diluted is not None else _row("Basic EPS", col)
 
-        gross_margin = (gross_profit / revenue * 100) if revenue and gross_profit else None
-        operating_margin = (operating_income / revenue * 100) if revenue and operating_income else None
-        net_margin = (net_income / revenue * 100) if revenue and net_income else None
+        # `revenue` kept truthy (non-zero) to avoid div-by-zero; numerators
+        # checked with `is not None` so a legitimate 0 / loss isn't dropped.
+        gross_margin = (gross_profit / revenue * 100) if revenue and gross_profit is not None else None
+        operating_margin = (operating_income / revenue * 100) if revenue and operating_income is not None else None
+        net_margin = (net_income / revenue * 100) if revenue and net_income is not None else None
 
         try:
             qkey = col.date().isoformat() if hasattr(col, "date") else str(col)[:10]
@@ -341,10 +344,10 @@ def get_quarterly_financials(ticker: str, quarters: int = 8) -> list[dict]:
 
         out.append({
             "quarter": qkey,
-            "revenue": int(revenue) if revenue else None,
-            "net_income": int(net_income) if net_income else None,
-            "gross_profit": int(gross_profit) if gross_profit else None,
-            "operating_income": int(operating_income) if operating_income else None,
+            "revenue": int(revenue) if revenue is not None else None,
+            "net_income": int(net_income) if net_income is not None else None,
+            "gross_profit": int(gross_profit) if gross_profit is not None else None,
+            "operating_income": int(operating_income) if operating_income is not None else None,
             "eps_diluted": eps,
             "gross_margin": gross_margin,
             "operating_margin": operating_margin,

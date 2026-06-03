@@ -49,11 +49,17 @@ export function presetRange(preset: DatePreset): {
   to: string;
 } {
   const today = new Date();
-  const toStr = today.toISOString().slice(0, 10);
+  // Build the date string from LOCAL components — toISOString() converts to
+  // UTC first, which shifts the date by a day for users far from UTC.
+  const localStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
+  const toStr = localStr(today);
   const subtract = (days: number) => {
     const d = new Date(today);
     d.setDate(d.getDate() - days);
-    return d.toISOString().slice(0, 10);
+    return localStr(d);
   };
   switch (preset) {
     case "30d":
