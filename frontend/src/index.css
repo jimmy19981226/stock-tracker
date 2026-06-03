@@ -871,6 +871,36 @@ tbody tr {
   position: relative;
 }
 
+/* Filler rows hold a paginated list at constant height so a short last page
+   doesn't collapse and shift the pagination controls (and content below) up. */
+/* Uniform row height across the paginated tables (trades / dividends /
+   holdings — the only users of .table-wrap) so rows and fixed-height fillers
+   line up perfectly on every page, with no shift on a short last page. */
+.table-wrap tbody tr {
+  height: 62px;
+}
+
+.pager-filler {
+  pointer-events: none;
+}
+/* Keep the 1px border box (so collapsed-border height matches data rows) but
+   render it invisible for a clean blank tail. */
+.pager-filler td {
+  border-bottom-color: transparent;
+}
+.pager-filler-ghost {
+  display: flex;
+  flex-direction: column;
+  visibility: hidden;
+}
+.pager-filler-ghost > span {
+  font-size: 11px;
+  font-weight: 500;
+}
+.pl-row.pager-filler {
+  height: 52px;
+}
+
 tbody tr:hover {
   background: rgba(255, 255, 255, 0.025);
 }

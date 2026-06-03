@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Holding } from "../api";
 import { fmtMoney, fmtNumber, fmtPct, plClass } from "../format";
+import { FillerRows } from "./PageFiller";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -109,6 +110,10 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
                   </td>
                 </tr>
               ))}
+              <FillerRows
+                count={items.length > pageSize ? pageSize - pageItems.length : 0}
+                cols={8}
+              />
             </tbody>
           </table>
           </div>

@@ -138,6 +138,14 @@ export function UnrealizedChart({ holdings, names = {} }: Props) {
                   </div>
                 );
               })}
+              {sorted.length > pageSize &&
+                Array.from({ length: pageSize - pageRows.length }).map((_, i) => (
+                  <div
+                    key={`filler-${i}`}
+                    className="pl-row pager-filler"
+                    aria-hidden="true"
+                  />
+                ))}
             </div>
 
             <Pagination

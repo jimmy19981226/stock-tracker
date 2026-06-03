@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Trade } from "../api";
 import { type DatePreset, fmtNumber, presetRange } from "../format";
 import { ConfirmModal } from "./ConfirmModal";
+import { FillerRows } from "./PageFiller";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -364,7 +365,13 @@ export function TradeList({ trades, names, onChanged }: Props) {
                 </td>
                 <td>{isEditing ? "—" : fmtNumber(total, 2)}</td>
                 <td
-                  style={{ textAlign: "left", maxWidth: 200 }}
+                  style={{
+                    textAlign: "left",
+                    maxWidth: 200,
+                    whiteSpace: isEditing ? "normal" : "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
                   className={isEditing ? "editing muted" : "muted"}
                 >
                   {isEditing && draft ? (
@@ -422,6 +429,10 @@ export function TradeList({ trades, names, onChanged }: Props) {
               </tr>
             );
           })}
+          <FillerRows
+            count={visible.length > pageSize ? pageSize - pageRows.length : 0}
+            cols={10}
+          />
         </tbody>
       </table>
       </div>

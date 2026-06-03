@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Dividend } from "../api";
 import { type DatePreset, fmtMoney, presetRange } from "../format";
 import { ConfirmModal } from "./ConfirmModal";
+import { FillerRows } from "./PageFiller";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -277,7 +278,13 @@ export function DividendList({ dividends, names, onChanged }: Props) {
                   )}
                 </td>
                 <td
-                  style={{ textAlign: "left", maxWidth: 240 }}
+                  style={{
+                    textAlign: "left",
+                    maxWidth: 240,
+                    whiteSpace: isEditing ? "normal" : "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
                   className={isEditing ? "editing muted" : "muted"}
                 >
                   {isEditing && draft ? (
@@ -335,6 +342,10 @@ export function DividendList({ dividends, names, onChanged }: Props) {
               </tr>
             );
           })}
+          <FillerRows
+            count={visible.length > pageSize ? pageSize - pageRows.length : 0}
+            cols={5}
+          />
         </tbody>
       </table>
       </div>
