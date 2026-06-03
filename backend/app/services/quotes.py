@@ -57,13 +57,25 @@ def get_quote(ticker: str) -> QuoteData | None:
 
 def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
     # Lazy imports avoid a circular dependency at module load time.
-    from . import tw_quotes, yahoo_quotes
+    from . import quote_relay_client, tw_quotes, yahoo_quotes
 
     tickers = list(tickers)
-    out = tw_quotes.get_quotes(tickers)  # primary: real-time TWSE MIS
+    out: dict[str, QuoteData] = {}
 
-    # Fill anything MIS couldn't return (e.g. when hosted on an IP MIS blocks)
-    # from Yahoo, keyed by bare code so "2330" and "2330.TW" share one fetch.
+    # 1) Real-time via an out-of-cloud relay on a Taiwan connection, if one is
+    #    configured (QUOTE_RELAY_URL). This is how a cloud-hosted backend gets
+    #    live MIS prices despite TWSE blocking its IP. No-op when unset.
+    if quote_relay_client.configured():
+        out.update(quote_relay_client.get_quotes(tickers))
+
+    # 2) Direct TWSE MIS — real-time when this process itself runs on a TW IP
+    #    (e.g. local dev); a silent no-op on an IP MIS blocks.
+    still = [t for t in tickers if t not in out]
+    if still:
+        out.update(tw_quotes.get_quotes(still))
+
+    # 3) Fill anything still missing from Yahoo (delayed), keyed by bare code so
+    #    "2330" and "2330.TW" share one fetch.
     missing: dict[str, list[str]] = {}
     for t in tickers:
         if t not in out:
