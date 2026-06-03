@@ -15,9 +15,9 @@ interface Props {
   history: EarningsByCurrency;
 }
 
-const REALIZED_COLOR = "#6384ff"; // blue
+const REALIZED_COLOR = "#8b5cf6"; // aurora violet
 const DIVIDENDS_COLOR = "#fbbf24"; // amber
-const TOTAL_COLOR = "#a78bfa"; // purple — used for the latest-value highlight
+const TOTAL_COLOR = "#22d3ee"; // aurora cyan — used for the latest-value highlight
 
 export function PerformanceChart({ history }: Props) {
   const currencies = Object.keys(history);

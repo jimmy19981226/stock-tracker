@@ -462,7 +462,7 @@ function PriceChart({
             type="monotone"
             dataKey="close"
             name={detail.ticker}
-            stroke="#6384ff"
+            stroke="#8b5cf6"
             strokeWidth={2}
             dot={false}
             activeDot={{ r: 4 }}
@@ -472,7 +472,7 @@ function PriceChart({
               type="monotone"
               dataKey="taiex_scaled"
               name="TAIEX (scaled)"
-              stroke="#a78bfa"
+              stroke="#22d3ee"
               strokeDasharray="4 3"
               strokeWidth={1.5}
               dot={false}
@@ -485,7 +485,7 @@ function PriceChart({
               x={t.date}
               y={t.price}
               r={6}
-              fill={t.type === "buy" ? "#34d399" : "#f87171"}
+              fill={t.type === "buy" ? "#2ee6a6" : "#fb6f8e"}
               stroke="white"
               strokeWidth={1.5}
               ifOverflow="extendDomain"
@@ -511,11 +511,11 @@ function PriceChart({
       </ResponsiveContainer>
     </div>
     <div className="stock-chart-legend">
-      <LegendItem color="#6384ff" label="Price" />
-      <LegendItem color="#34d399" label="Buy" />
-      <LegendItem color="#f87171" label="Sell" />
+      <LegendItem color="#8b5cf6" label="Price" />
+      <LegendItem color="#2ee6a6" label="Buy" />
+      <LegendItem color="#fb6f8e" label="Sell" />
       <LegendItem color="#fbbf24" label="Dividend" />
-      {showTaiex && <LegendItem color="#a78bfa" label="TAIEX (scaled)" />}
+      {showTaiex && <LegendItem color="#22d3ee" label="TAIEX (scaled)" />}
     </div>
     </>
   );
@@ -640,7 +640,7 @@ function MonthlyRevenueChart({ rows }: { rows: MonthlyRevenue[] }) {
                 return [v.toFixed(2), name as string];
               }}
             />
-            <Bar yAxisId="left" dataKey="revenue_b" name="Revenue" fill="#6384ff" radius={[3, 3, 0, 0]} />
+            <Bar yAxisId="left" dataKey="revenue_b" name="Revenue" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
             <Line
               yAxisId="right"
               type="monotone"
@@ -655,7 +655,7 @@ function MonthlyRevenueChart({ rows }: { rows: MonthlyRevenue[] }) {
         </ResponsiveContainer>
       </div>
       <div className="stock-chart-legend">
-        <LegendItem color="#6384ff" label="Monthly revenue (NT$ B)" />
+        <LegendItem color="#8b5cf6" label="Monthly revenue (NT$ B)" />
         <LegendItem color="#fbbf24" label="YoY % (right axis)" />
       </div>
     </>
@@ -744,8 +744,8 @@ function QuarterlyFinancialsChart({ rows }: { rows: QuarterlyFinancials[] }) {
                 return [`NT$${v.toFixed(2)} B`, name as string];
               }}
             />
-            <Bar yAxisId="left" dataKey="revenue_b" name="Revenue" fill="#6384ff" radius={[3, 3, 0, 0]} />
-            <Bar yAxisId="left" dataKey="net_income_b" name="Net Income" fill="#34d399" radius={[3, 3, 0, 0]} />
+            <Bar yAxisId="left" dataKey="revenue_b" name="Revenue" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+            <Bar yAxisId="left" dataKey="net_income_b" name="Net Income" fill="#2ee6a6" radius={[3, 3, 0, 0]} />
             <Line
               yAxisId="right"
               type="monotone"
@@ -760,8 +760,8 @@ function QuarterlyFinancialsChart({ rows }: { rows: QuarterlyFinancials[] }) {
         </ResponsiveContainer>
       </div>
       <div className="stock-chart-legend">
-        <LegendItem color="#6384ff" label="Revenue (NT$ B)" />
-        <LegendItem color="#34d399" label="Net income (NT$ B)" />
+        <LegendItem color="#8b5cf6" label="Revenue (NT$ B)" />
+        <LegendItem color="#2ee6a6" label="Net income (NT$ B)" />
         <LegendItem color="#fbbf24" label="Diluted EPS (NT$, right)" />
       </div>
     </>

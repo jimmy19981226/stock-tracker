@@ -8,18 +8,18 @@ interface Props {
 }
 
 const PALETTE = [
-  "#6384ff", // blue
-  "#a78bfa", // purple
-  "#34d399", // emerald
-  "#fbbf24", // amber
-  "#f472b6", // pink
+  "#8b5cf6", // aurora violet
   "#22d3ee", // cyan
+  "#e879f9", // magenta
+  "#2ee6a6", // mint
+  "#fbbf24", // amber
+  "#60a5fa", // blue
+  "#f472b6", // pink
+  "#a78bfa", // light violet
   "#fb923c", // orange
-  "#60a5fa", // light blue
-  "#c084fc", // light purple
   "#94a3b8", // slate
 ];
-const OTHER_COLOR = "#3a4356";
+const OTHER_COLOR = "#2a2a44";
 const TOP_N = 8;
 const SMALL_PCT_THRESHOLD = 0.02; // <2% rolls into "Other"
 
@@ -160,7 +160,7 @@ function renderWedgeLabel(props: WedgeLabelProps) {
     <text
       x={x}
       y={y}
-      fill="#0f1218"
+      fill="#0e0e1c"
       textAnchor="middle"
       dominantBaseline="central"
       fontWeight={700}
@@ -279,7 +279,7 @@ export function AllocationChart({ holdings, names = {} }: Props) {
                   innerRadius="56%"
                   outerRadius="86%"
                   paddingAngle={2}
-                  stroke="#11161f"
+                  stroke="#16162b"
                   strokeWidth={2}
                   isAnimationActive={false}
                   label={renderWedgeLabel}
@@ -303,7 +303,7 @@ export function AllocationChart({ holdings, names = {} }: Props) {
                     dy="-0.6em"
                     fontSize={10}
                     fontWeight={700}
-                    fill="#6b7589"
+                    fill="#74769b"
                     style={{ letterSpacing: "0.1em" }}
                   >
                     TOTAL
@@ -313,7 +313,7 @@ export function AllocationChart({ holdings, names = {} }: Props) {
                     dy="1.6em"
                     fontSize={16}
                     fontWeight={700}
-                    fill="#e8ecf2"
+                    fill="#f3f2ff"
                   >
                     {fmtMoney(total, currency)}
                   </tspan>
