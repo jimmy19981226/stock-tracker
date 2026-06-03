@@ -880,22 +880,40 @@ tbody tr {
   height: 62px;
 }
 
+/* Never let a header or cell wrap. With table-layout:auto each page's data
+   sets different column widths, so a header label ("Unrealized P/L"…) would
+   wrap to 2 lines on some pages — making the header (and that page) taller and
+   shifting the scroll when paginating. One line everywhere = constant height. */
+.table-wrap th,
+.table-wrap td {
+  white-space: nowrap;
+}
+
+/* Keep the ticker-name subline on ONE line (truncate, don't wrap). A long
+   name wrapping to a 2nd line makes that row taller than 62px, so a page that
+   happens to contain it is taller than other pages — which shifts the scroll
+   when paginating. */
+/* Cap the ticker-name subline width so a long name can't widen the column
+   (which would re-flow other columns between pages). It stays on one line via
+   the table-wide nowrap rule above. */
+.table-wrap tbody td:first-child > div {
+  min-width: 0;
+}
+.table-wrap tbody td:first-child .muted {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .pager-filler {
   pointer-events: none;
 }
 /* Keep the 1px border box (so collapsed-border height matches data rows) but
-   render it invisible for a clean blank tail. */
+   render it invisible for a clean blank tail. The empty cell + the uniform
+   62px row height above make every filler exactly one data-row tall. */
 .pager-filler td {
   border-bottom-color: transparent;
-}
-.pager-filler-ghost {
-  display: flex;
-  flex-direction: column;
-  visibility: hidden;
-}
-.pager-filler-ghost > span {
-  font-size: 11px;
-  font-weight: 500;
 }
 .pl-row.pager-filler {
   height: 52px;
