@@ -54,3 +54,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 tools/
+
+# Personal brokerage import files (financial data — never commit)
+firstrade_us_import.xlsx
+*_us_import.xlsx
