@@ -116,6 +116,47 @@ export function isTwMarketOpen(now: Date = new Date()): boolean {
   return minutes >= 9 * 60 && minutes < 13 * 60 + 30;
 }
 
+// 2026 US (NYSE/Nasdaq) full-day market-holiday closures. Update yearly.
+// Half-days (e.g. the day after Thanksgiving) are treated as open — close
+// enough for deciding the refresh cadence.
+const US_MARKET_HOLIDAYS = new Set<string>([
+  "2026-01-01", // New Year's Day
+  "2026-01-19", // Martin Luther King Jr. Day
+  "2026-02-16", // Presidents' Day
+  "2026-04-03", // Good Friday
+  "2026-05-25", // Memorial Day
+  "2026-06-19", // Juneteenth
+  "2026-07-03", // Independence Day (observed)
+  "2026-09-07", // Labor Day
+  "2026-11-26", // Thanksgiving
+  "2026-12-25", // Christmas
+]);
+
+/** Is the US stock market currently open? 09:30–16:00 US Eastern, Monday-Friday,
+ *  excluding US market holidays. Uses Intl with the America/New_York zone so
+ *  EST/EDT (daylight saving) is handled automatically. */
+export function isUsMarketOpen(now: Date = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const wd = get("weekday");
+  if (wd === "Sat" || wd === "Sun") return false;
+  const date = `${get("year")}-${get("month")}-${get("day")}`;
+  if (US_MARKET_HOLIDAYS.has(date)) return false;
+  let hour = parseInt(get("hour"), 10);
+  if (hour === 24) hour = 0; // some engines render midnight as "24"
+  const minutes = hour * 60 + parseInt(get("minute"), 10);
+  return minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+}
+
 /** Minutes until TW market open or close, whichever applies. */
 export function nextTwMarketTransition(now: Date = new Date()): {
   open: boolean;

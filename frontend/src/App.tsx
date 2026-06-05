@@ -20,7 +20,7 @@ import { TradeForm } from "./components/TradeForm";
 import { TradeList } from "./components/TradeList";
 import { UnrealizedChart } from "./components/UnrealizedChart";
 import { AgentProvider } from "./agent/AgentProvider";
-import { isTwMarketOpen } from "./format";
+import { isTwMarketOpen, isUsMarketOpen } from "./format";
 
 const AssistantPanel = lazy(() =>
   import("./components/AssistantPanel").then((m) => ({ default: m.AssistantPanel })),
@@ -94,11 +94,23 @@ export default function App() {
   // Pauses on tab switch, minimize, or view change; resumes with an immediate
   // refresh.
   const [polling, setPolling] = useState(false);
-  const [marketOpen, setMarketOpen] = useState(() => isTwMarketOpen());
+  // "Is the market I'm currently viewing open?" — drives the fast (5s) vs slow
+  // (60s) refresh cadence. TW trades by day in Taipei; US trades overnight in
+  // Taipei, so the cadence has to follow whichever portfolio is on screen.
+  const [marketOpen, setMarketOpen] = useState(false);
   useEffect(() => {
-    const tick = window.setInterval(() => setMarketOpen(isTwMarketOpen()), 60_000);
+    const check = () =>
+      setMarketOpen(
+        market === "US"
+          ? isUsMarketOpen()
+          : market === "TW"
+            ? isTwMarketOpen()
+            : false,
+      );
+    check();
+    const tick = window.setInterval(check, 60_000);
     return () => clearInterval(tick);
-  }, []);
+  }, [market]);
 
   useEffect(() => {
     if (market === null || view !== "dashboard") {
