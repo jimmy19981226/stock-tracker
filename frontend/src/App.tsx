@@ -34,8 +34,23 @@ type View = "dashboard" | "trades" | "dividends";
 
 export default function App() {
   // null = the Overview landing page; "TW"/"US" = inside that portfolio.
-  const [market, setMarket] = useState<MarketCode | null>(null);
-  const [view, setView] = useState<View>("dashboard");
+  // Persisted so a page refresh keeps you where you were, not back on Overview.
+  const [market, setMarket] = useState<MarketCode | null>(() => {
+    try {
+      const v = localStorage.getItem("ui.market");
+      return v === "TW" || v === "US" ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const [view, setView] = useState<View>(() => {
+    try {
+      const v = localStorage.getItem("ui.view");
+      return v === "trades" || v === "dividends" ? v : "dashboard";
+    } catch {
+      return "dashboard";
+    }
+  });
   const [trades, setTrades] = useState<Trade[]>([]);
   const [dividends, setDividends] = useState<Dividend[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -52,6 +67,17 @@ export default function App() {
       return false;
     }
   });
+
+  // Remember the current portfolio + tab across refreshes.
+  useEffect(() => {
+    try {
+      if (market) localStorage.setItem("ui.market", market);
+      else localStorage.removeItem("ui.market");
+      localStorage.setItem("ui.view", view);
+    } catch {
+      /* ignore */
+    }
+  }, [market, view]);
 
   useEffect(() => {
     try {
