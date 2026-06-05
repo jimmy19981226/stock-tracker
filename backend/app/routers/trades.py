@@ -1,10 +1,11 @@
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..database import Trade, get_db
 from ..schemas import TradeCreate, TradeOut
+from ..services import quotes
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -56,32 +57,37 @@ def _to_out(t: Trade, status: str) -> dict:
         "trade_date": t.trade_date,
         "fee": t.fee,
         "notes": t.notes,
+        "market": t.market,
         "created_at": t.created_at,
         "status": status,
     }
 
 
 @router.get("", response_model=list[TradeOut])
-def list_trades(db: Session = Depends(get_db)):
-    rows = (
-        db.query(Trade)
-        .order_by(Trade.trade_date.desc(), Trade.id.desc())
-        .all()
-    )
+def list_trades(
+    market: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Trade)
+    if market:
+        q = q.filter(Trade.market == market.upper())
+    rows = q.order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
     statuses = _compute_statuses(rows)
     return [_to_out(t, statuses.get(t.id, "open")) for t in rows]
 
 
 @router.post("", response_model=TradeOut, status_code=status.HTTP_201_CREATED)
 def create_trade(payload: TradeCreate, db: Session = Depends(get_db)):
+    ticker = payload.ticker.strip().upper()
     trade = Trade(
         type=payload.type,
-        ticker=payload.ticker.strip().upper(),
+        ticker=ticker,
         shares=payload.shares,
         price=payload.price,
         trade_date=payload.trade_date,
         fee=payload.fee,
         notes=payload.notes,
+        market=payload.market or quotes.market_of(ticker),
     )
     db.add(trade)
     db.commit()
@@ -103,6 +109,7 @@ def update_trade(
     trade.trade_date = payload.trade_date
     trade.fee = payload.fee
     trade.notes = payload.notes
+    trade.market = payload.market or quotes.market_of(trade.ticker)
     db.commit()
     db.refresh(trade)
     return trade

@@ -2,6 +2,8 @@ export type TradeType = "buy" | "sell";
 
 export type TradeStatus = "open" | "closed";
 
+export type MarketCode = "TW" | "US";
+
 export interface Trade {
   id: number;
   type: TradeType;
@@ -11,6 +13,7 @@ export interface Trade {
   trade_date: string;
   fee: number;
   notes: string | null;
+  market: MarketCode;
   created_at: string;
   status: TradeStatus;
 }
@@ -23,12 +26,14 @@ export interface TradeCreate {
   trade_date: string;
   fee: number;
   notes?: string | null;
+  market?: MarketCode;
 }
 
 export interface Holding {
   ticker: string;
   name: string;
   currency: string;
+  market: MarketCode;
   shares: number;
   avg_cost: number;
   current_price: number | null;
@@ -62,6 +67,7 @@ export interface Dividend {
   ticker: string;
   amount: number;
   currency: string;
+  market: MarketCode;
   pay_date: string;
   notes: string | null;
   created_at: string;
@@ -72,6 +78,17 @@ export interface DividendCreate {
   amount: number;
   pay_date: string;
   notes?: string | null;
+  market?: MarketCode;
+}
+
+// The landing-page overview: a summary card per market plus the combined net
+// worth in both currencies. `tw`/`us` reuse CurrencySummary; either can be null
+// (no holdings in that market). Combined figures are null when FX is down.
+export interface PortfolioOverview {
+  tw: CurrencySummary | null;
+  us: CurrencySummary | null;
+  fx: { usd_twd: number | null; asof: string | null };
+  combined: { twd: number | null; usd: number | null };
 }
 
 export interface HistoryPoint {
@@ -228,6 +245,7 @@ export interface AgentStep {
   say: string;
   view?: "dashboard" | "trades" | "dividends";
   ticker?: string;
+  market?: MarketCode;
   trade_type?: TradeType;
   shares?: number;
   price?: number;
@@ -389,6 +407,7 @@ export const api = {
   getLastExport: () =>
     request<{ last_export: string | null }>("/api/data/last-export"),
   getHoldings: () => request<Holding[]>("/api/portfolio/holdings"),
+  getOverview: () => request<PortfolioOverview>("/api/portfolio/overview"),
   getNames: () => request<Record<string, string>>("/api/portfolio/names"),
   lookupQuote: (ticker: string) =>
     request<{

@@ -92,9 +92,12 @@ def stock_detail(
             realized_pl = 0.0
 
         market_value = (quote.price * shares) if (quote and shares > 0) else None
-        # Net of estimated exit costs (commission + tax), matching 損益試算.
+        # Net of estimated exit costs (commission + tax), matching 損益試算 (0 for US).
+        market = trades[0].market or quotes.market_of(ticker)
         exit_cost = (
-            estimate_exit_cost(ticker, market_value) if market_value is not None else None
+            estimate_exit_cost(ticker, market_value, market)
+            if market_value is not None
+            else None
         )
         unrealized_pl = (
             market_value - cost_basis - exit_cost if market_value is not None else None

@@ -11,6 +11,8 @@ class TradeCreate(BaseModel):
     trade_date: date
     fee: float = Field(default=0.0, ge=0)
     notes: str | None = None
+    # None ⇒ the server infers the market from the ticker format.
+    market: Literal["TW", "US"] | None = None
 
 
 class TradeOut(BaseModel):
@@ -23,6 +25,7 @@ class TradeOut(BaseModel):
     trade_date: date
     fee: float
     notes: str | None
+    market: str = "TW"
     created_at: datetime
     status: str = "open"  # "open" (unrealized) or "closed" (realized)
 
@@ -31,11 +34,13 @@ class Holding(BaseModel):
     ticker: str
     name: str = ""
     currency: str
+    market: str = "TW"
     shares: float
     avg_cost: float
     current_price: float | None
     market_value: float | None
     cost_basis: float
+    exit_cost: float | None = None
     unrealized_pl: float | None
     unrealized_pl_pct: float | None
     today_change: float | None
@@ -61,6 +66,7 @@ class DividendCreate(BaseModel):
     amount: float = Field(gt=0)
     pay_date: date
     notes: str | None = None
+    market: Literal["TW", "US"] | None = None
 
 
 class DividendOut(BaseModel):
@@ -69,6 +75,7 @@ class DividendOut(BaseModel):
     ticker: str
     amount: float
     currency: str
+    market: str = "TW"
     pay_date: date
     notes: str | None
     created_at: datetime

@@ -8,9 +8,10 @@ from openpyxl import Workbook, load_workbook
 from sqlalchemy.orm import Session
 
 from ..database import Dividend, Trade
+from .quotes import market_of
 
-TRADE_HEADERS = ["type", "ticker", "shares", "price", "date", "fee", "notes"]
-DIVIDEND_HEADERS = ["ticker", "amount", "date", "notes"]
+TRADE_HEADERS = ["type", "ticker", "shares", "price", "date", "fee", "notes", "market"]
+DIVIDEND_HEADERS = ["ticker", "amount", "date", "notes", "market"]
 TRADES_SHEET = "Trades"
 DIVIDENDS_SHEET = "Dividends"
 
@@ -39,6 +40,7 @@ def portfolio_to_xlsx(
                 t.trade_date,
                 t.fee,
                 t.notes or "",
+                t.market or market_of(t.ticker),
             ]
         )
 
@@ -51,6 +53,7 @@ def portfolio_to_xlsx(
                 d.amount,
                 d.pay_date,
                 d.notes or "",
+                d.market or market_of(d.ticker),
             ]
         )
 
@@ -176,6 +179,9 @@ def parse_portfolio_xlsx(data: bytes) -> tuple[list[Trade], list[Dividend]]:
             if fee < 0:
                 raise ValueError(f"{where}: fee must be >= 0")
             notes = _cell_str(get("notes")) or None
+            # Optional column — old workbooks (pre-US support) won't have it, so
+            # fall back to inferring the market from the ticker.
+            market = _cell_str(get("market")).upper() or market_of(ticker)
             trades.append(
                 Trade(
                     type=type_,
@@ -185,6 +191,7 @@ def parse_portfolio_xlsx(data: bytes) -> tuple[list[Trade], list[Dividend]]:
                     trade_date=_parse_date(get("date"), where),
                     fee=fee,
                     notes=notes,
+                    market=market,
                 )
             )
 
@@ -217,12 +224,14 @@ def parse_portfolio_xlsx(data: bytes) -> tuple[list[Trade], list[Dividend]]:
             if amount <= 0:
                 raise ValueError(f"{where}: amount must be > 0")
             notes = _cell_str(get("notes")) or None
+            market = _cell_str(get("market")).upper() or market_of(ticker)
             dividends.append(
                 Dividend(
                     ticker=ticker,
                     amount=amount,
                     pay_date=_parse_date(get("date"), where),
                     notes=notes,
+                    market=market,
                 )
             )
 

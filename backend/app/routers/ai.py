@@ -368,6 +368,7 @@ _AGENT_STEP_SCHEMA: dict = {
         "say": {"type": "string"},
         "view": {"type": "string", "enum": ["dashboard", "trades", "dividends"]},
         "ticker": {"type": "string"},
+        "market": {"type": "string", "enum": ["TW", "US"]},
         "trade_type": {"type": "string", "enum": ["buy", "sell"]},
         "shares": {"type": "number"},
         "price": {"type": "number"},
@@ -450,7 +451,12 @@ def _agent_prompt(context_json: str, view: str | None, today: str) -> str:
         "- note — narration only, no action. Use sparingly.\n"
         "\n"
         "Rules:\n"
-        "- ticker is the bare TW code: \"2330\", \"00919\" (no .TW, no name).\n"
+        "- ticker is the bare code: TW codes are numeric (\"2330\", \"00919\"); US\n"
+        "  tickers are letters (\"AAPL\", \"MSFT\"). No .TW suffix, no company name.\n"
+        "- The app has TWO portfolios: TW (NT$) and US (US$). The market is\n"
+        "  auto-derived from the ticker (numeric → TW, letters → US); only set the\n"
+        "  optional `market` field if you must override that. For US trades the\n"
+        "  price is in US$; for TW trades it's in NT$.\n"
         "- Put the stock code in the `ticker` field for add_trade, add_dividend,\n"
         "  open_stock and filter_trades. The `target` field is ONLY for highlight\n"
         "  — never put a ticker in `target` for the other actions.\n"
@@ -769,8 +775,10 @@ def _system_prompt(context_json: str) -> str:
         "  from the web (e.g. 'According to Reuters…'). Citation links are\n"
         "  appended automatically — don't fabricate URLs.\n"
         "- If neither CONTEXT nor search yields a confident answer, say so plainly.\n"
-        "- All amounts are TWD (NT$). When mentioning a ticker, include its Chinese\n"
-        "  name in parentheses if available, e.g. `2330 (台積電)`.\n"
+        "- TW holdings are in TWD (NT$); US holdings are in USD (US$) — use each\n"
+        "  position's own currency and don't mix them in a single total. When\n"
+        "  mentioning a TW ticker, include its Chinese name in parentheses if\n"
+        "  available, e.g. `2330 (台積電)`.\n"
         "- Be concise and factual. Use bullet points or short tables for multi-row\n"
         "  answers. Round NT$ amounts to whole dollars unless precision matters.\n"
         "- `unrealized_pl` and `total_value` are gross (price × shares − cost),\n"

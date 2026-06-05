@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, date
-from sqlalchemy import create_engine, String, Float, Date, DateTime, Integer, Text, ForeignKey
+from sqlalchemy import create_engine, inspect, text, String, Float, Date, DateTime, Integer, Text, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session, relationship
 from pathlib import Path
 
@@ -59,6 +59,9 @@ class Trade(Base):
     trade_date: Mapped[date] = mapped_column(Date, nullable=False)
     fee: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Which portfolio this belongs to: "TW" (TWD) or "US" (USD). server_default
+    # is what backfills existing rows when the column is added by the migration.
+    market: Mapped[str] = mapped_column(String(2), nullable=False, server_default="TW")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -70,6 +73,7 @@ class Dividend(Base):
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     pay_date: Mapped[date] = mapped_column(Date, nullable=False)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    market: Mapped[str] = mapped_column(String(2), nullable=False, server_default="TW")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -114,8 +118,35 @@ class ChatMessage(Base):
     chat: Mapped["Chat"] = relationship(back_populates="messages")
 
 
+def _ensure_market_column() -> None:
+    """Add the ``market`` column to existing trades/dividends tables.
+
+    ``create_all`` only CREATEs new tables — it never ALTERs an existing one,
+    so a database created before this column existed (e.g. the prod Neon DB)
+    needs an explicit migration. The DDL below is valid on both SQLite and
+    Postgres, and the column-presence guard makes it a no-op on reruns. The
+    ``DEFAULT 'TW'`` backfills every existing row in one statement, so prior
+    trades/dividends become part of the TW portfolio.
+    """
+    insp = inspect(engine)
+    existing_tables = set(insp.get_table_names())
+    for table in ("trades", "dividends"):
+        if table not in existing_tables:
+            continue  # fresh DB — create_all already added the column
+        cols = {c["name"] for c in insp.get_columns(table)}
+        if "market" not in cols:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        "ADD COLUMN market VARCHAR(2) NOT NULL DEFAULT 'TW'"
+                    )
+                )
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _ensure_market_column()
 
 
 def get_db():

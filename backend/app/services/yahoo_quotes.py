@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Iterable
 
-from .quotes import QuoteData, resolve_symbol
+from .quotes import QuoteData, market_of, resolve_symbol
 
 _TAIPEI = timezone(timedelta(hours=8))
 
@@ -52,9 +52,14 @@ def _fetch_meta(sym: str) -> dict | None:
 
 
 def _fetch_one(bare: str) -> QuoteData | None:
-    # TSE stocks are <code>.TW on Yahoo; TPEx/OTC are <code>.TWO. We don't
-    # know which a code is, so try .TW then fall back to .TWO.
-    meta = _fetch_meta(f"{bare}.TW") or _fetch_meta(f"{bare}.TWO")
+    is_tw = market_of(bare) == "TW"
+    if is_tw:
+        # TSE stocks are <code>.TW on Yahoo; TPEx/OTC are <code>.TWO. We don't
+        # know which a code is, so try .TW then fall back to .TWO.
+        meta = _fetch_meta(f"{bare}.TW") or _fetch_meta(f"{bare}.TWO")
+    else:
+        # US (and other already-qualified) symbols are fetched as-is.
+        meta = _fetch_meta(bare)
     if meta is None:
         return None
 
@@ -81,7 +86,7 @@ def _fetch_one(bare: str) -> QuoteData | None:
     # the current Taipei trading day, treat it as flat (prev = price) until
     # fresh intraday data arrives, rather than showing a wrong non-zero move.
     mkt_time = meta.get("regularMarketTime")
-    if mkt_time is not None and price is not None:
+    if is_tw and mkt_time is not None and price is not None:
         try:
             snap_date = (
                 datetime.fromtimestamp(int(mkt_time), tz=timezone.utc)

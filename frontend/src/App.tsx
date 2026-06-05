@@ -5,6 +5,7 @@ import {
   type Dividend,
   type EarningsByCurrency,
   type Holding,
+  type MarketCode,
   type Trade,
 } from "./api";
 import { AllocationChart } from "./components/AllocationChart";
@@ -12,6 +13,7 @@ import { DividendForm } from "./components/DividendForm";
 import { DividendList } from "./components/DividendList";
 import { HoldingsTable } from "./components/HoldingsTable";
 import { MarketStatus } from "./components/MarketStatus";
+import { Overview } from "./components/Overview";
 import { PerformanceChart } from "./components/PerformanceChart";
 import { PortfolioSummary } from "./components/PortfolioSummary";
 import { TradeForm } from "./components/TradeForm";
@@ -30,6 +32,8 @@ const StockDetail = lazy(() =>
 type View = "dashboard" | "trades" | "dividends";
 
 export default function App() {
+  // null = the Overview landing page; "TW"/"US" = inside that portfolio.
+  const [market, setMarket] = useState<MarketCode | null>(null);
   const [view, setView] = useState<View>("dashboard");
   const [trades, setTrades] = useState<Trade[]>([]);
   const [dividends, setDividends] = useState<Dividend[]>([]);
@@ -97,7 +101,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== "dashboard") {
+    if (market === null || view !== "dashboard") {
       setPolling(false);
       return;
     }
@@ -129,7 +133,16 @@ export default function App() {
       stop();
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [view, refresh, marketOpen]);
+  }, [market, view, refresh, marketOpen]);
+
+  // Scope every view to the selected market. Holdings/summaries split by
+  // currency (TWD↔TW, USD↔US); trades/dividends carry an explicit market.
+  const cur = market === "US" ? "USD" : "TWD";
+  const mHoldings = holdings.filter((h) => h.market === market);
+  const mSummaries = summaries.filter((s) => s.currency === cur);
+  const mTrades = trades.filter((t) => t.market === market);
+  const mDividends = dividends.filter((d) => d.market === market);
+  const mHistory: EarningsByCurrency = history[cur] ? { [cur]: history[cur] } : {};
 
   return (
     <AgentProvider>
@@ -167,27 +180,45 @@ export default function App() {
           )}
         </div>
         <nav>
-          <button
-            data-agent="nav-dashboard"
-            className={view === "dashboard" ? "active" : ""}
-            onClick={() => setView("dashboard")}
-          >
-            Dashboard
-          </button>
-          <button
-            data-agent="nav-trades"
-            className={view === "trades" ? "active" : ""}
-            onClick={() => setView("trades")}
-          >
-            Trades
-          </button>
-          <button
-            data-agent="nav-dividends"
-            className={view === "dividends" ? "active" : ""}
-            onClick={() => setView("dividends")}
-          >
-            Dividends
-          </button>
+          {market !== null && (
+            <>
+              <button
+                data-agent="nav-overview"
+                className="secondary nav-back"
+                onClick={() => {
+                  setMarket(null);
+                  setView("dashboard");
+                }}
+                title="Back to all portfolios"
+              >
+                ‹ <span className="nav-label">Portfolios</span>
+              </button>
+              <span className="market-badge" aria-label={`${market} portfolio`}>
+                {market === "US" ? "🇺🇸 US" : "🇹🇼 TW"}
+              </span>
+              <button
+                data-agent="nav-dashboard"
+                className={view === "dashboard" ? "active" : ""}
+                onClick={() => setView("dashboard")}
+              >
+                Dashboard
+              </button>
+              <button
+                data-agent="nav-trades"
+                className={view === "trades" ? "active" : ""}
+                onClick={() => setView("trades")}
+              >
+                Trades
+              </button>
+              <button
+                data-agent="nav-dividends"
+                className={view === "dividends" ? "active" : ""}
+                onClick={() => setView("dividends")}
+              >
+                Dividends
+              </button>
+            </>
+          )}
           <button
             className={assistantOpen ? "active assistant-toggle" : "assistant-toggle"}
             onClick={() => setAssistantOpen((o) => !o)}
@@ -201,30 +232,39 @@ export default function App() {
       {error && <div className="error">{error}</div>}
       {loading && <div className="muted">Loading…</div>}
 
-      {view === "dashboard" && !loading && (
+      {market === null && !loading && (
+        <Overview
+          onEnter={(m) => {
+            setMarket(m);
+            setView("dashboard");
+          }}
+        />
+      )}
+
+      {market !== null && view === "dashboard" && !loading && (
         <>
-          <PortfolioSummary summaries={summaries} />
-          <PerformanceChart history={history} />
-          <UnrealizedChart holdings={holdings} names={names} />
+          <PortfolioSummary summaries={mSummaries} />
+          <PerformanceChart history={mHistory} />
+          <UnrealizedChart holdings={mHoldings} names={names} />
           <div className="dual-grid">
-            <HoldingsTable holdings={holdings} onSelectTicker={setSelectedTicker} />
-            <AllocationChart holdings={holdings} names={names} />
+            <HoldingsTable holdings={mHoldings} onSelectTicker={setSelectedTicker} />
+            <AllocationChart holdings={mHoldings} names={names} />
           </div>
         </>
       )}
 
-      {view === "trades" && !loading && (
+      {market !== null && view === "trades" && !loading && (
         <>
-          <TradeForm names={names} onCreated={refresh} />
-          <TradeList trades={trades} names={names} onChanged={refresh} />
+          <TradeForm names={names} market={market} onCreated={refresh} />
+          <TradeList trades={mTrades} names={names} onChanged={refresh} />
         </>
       )}
 
-      {view === "dividends" && !loading && (
+      {market !== null && view === "dividends" && !loading && (
         <>
-          <DividendForm names={names} onCreated={refresh} />
+          <DividendForm names={names} market={market} onCreated={refresh} />
           <DividendList
-            dividends={dividends}
+            dividends={mDividends}
             names={names}
             onChanged={refresh}
           />
@@ -238,7 +278,7 @@ export default function App() {
             holdings={holdings}
             trades={trades}
             dividends={dividends}
-            currentView={view}
+            currentView={market === null ? "overview" : view}
             onClose={() => setAssistantOpen(false)}
             onPortfolioChanged={refresh}
           />

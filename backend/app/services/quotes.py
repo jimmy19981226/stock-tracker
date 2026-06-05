@@ -1,8 +1,9 @@
-"""Quote service — Taiwan equities only.
+"""Quote service — Taiwan + US equities.
 
 Live prices for TWSE / TPEx tickers via the TWSE MIS endpoint
-(see ``tw_quotes.py``). Tickers that don't match the TW pattern simply
-return ``None`` — there's no US / yfinance fallback in this build.
+(see ``tw_quotes.py``); US tickers (and any quote MIS can't serve) fall back
+to Yahoo (see ``yahoo_quotes.py``). A ticker's market is inferred from its
+format: bare 4-6 digit codes are Taiwan (TWD), letter symbols are US (USD).
 """
 from __future__ import annotations
 
@@ -14,11 +15,26 @@ from typing import Iterable
 _TW_NUMERIC = re.compile(r"^\d{4,6}[A-Z]?$")
 
 
+def market_of(ticker: str) -> str:
+    """Infer the market ("TW" or "US") from a ticker's format.
+
+    TW codes are numeric (``2330``, ``00919``, ``00937B``); US tickers are
+    letter-based (``AAPL``, ``BRK.B``). Used as the default for the form's
+    market picker and to classify tickers with no stored market row.
+    """
+    return "TW" if _TW_NUMERIC.match(_bare(ticker)) else "US"
+
+
+def currency_of(market: str) -> str:
+    """The reporting currency for a market: TW → TWD, US → USD."""
+    return "USD" if (market or "").upper() == "US" else "TWD"
+
+
 def resolve_symbol(ticker: str) -> str:
     """Map a user-entered ticker to its Yahoo-style symbol form.
 
     Bare 4-6 digit codes (e.g. ``2330``, ``00937B``) get a ``.TW`` suffix.
-    Anything already qualified is returned as-is in upper case.
+    US / already-qualified tickers are returned as-is in upper case.
     """
     t = ticker.strip().upper()
     if _TW_NUMERIC.match(t):
@@ -26,9 +42,10 @@ def resolve_symbol(ticker: str) -> str:
     return t
 
 
-def detect_currency(_symbol: str) -> str:
-    """Single-currency build — always TWD."""
-    return "TWD"
+def detect_currency(ticker: str) -> str:
+    """Currency for a ticker, inferred from its market. Tolerates either a
+    bare code or an already-resolved symbol (e.g. ``2330.TW``)."""
+    return currency_of(market_of(ticker))
 
 
 @dataclass
@@ -75,13 +92,13 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
         out.update(tw_quotes.get_quotes(still))
 
     # 3) Fill anything still missing from Yahoo (delayed), keyed by bare code so
-    #    "2330" and "2330.TW" share one fetch.
+    #    "2330" and "2330.TW" share one fetch. This now covers US tickers too —
+    #    yahoo_quotes resolves the right symbol per market (.TW for TW, bare for
+    #    US), so this is the primary source for US quotes (MIS is TW-only).
     missing: dict[str, list[str]] = {}
     for t in tickers:
         if t not in out:
-            b = _bare(t)
-            if _TW_NUMERIC.match(b):
-                missing.setdefault(b, []).append(t)
+            missing.setdefault(_bare(t), []).append(t)
     if missing:
         yq = yahoo_quotes.get_quotes(missing.keys())
         for bare, originals in missing.items():

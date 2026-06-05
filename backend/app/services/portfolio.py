@@ -32,11 +32,17 @@ def _sell_tax_rate(ticker: str) -> float:
     return 0.003
 
 
-def estimate_exit_cost(ticker: str, market_value: float) -> float:
+def estimate_exit_cost(ticker: str, market_value: float, market: str = "TW") -> float:
     """Estimated commission + transaction tax to sell a position at
     ``market_value``. Each component is floored to the dollar, mirroring how
-    TW brokers print 損益試算."""
+    TW brokers print 損益試算.
+
+    US positions are treated as commission-free with no transaction tax (the
+    norm at modern US brokers), so their exit cost is 0 and unrealized P/L is
+    reported gross (market value − cost)."""
     if market_value <= 0:
+        return 0.0
+    if (market or "TW").upper() == "US":
         return 0.0
     fee = math.floor(market_value * SELL_FEE_RATE)
     tax = math.floor(market_value * _sell_tax_rate(ticker))
@@ -87,9 +93,21 @@ def compute_states(trades: Iterable[Trade]) -> dict[str, HoldingState]:
     return states
 
 
+def _ticker_markets(db: Session) -> dict[str, str]:
+    """Map each ticker the user has traded to its stored market ("TW"/"US").
+
+    The stored market is authoritative (it respects a user's explicit pick in
+    the form); fall back to inferring from the ticker format if absent."""
+    out: dict[str, str] = {}
+    for ticker, market in db.query(Trade.ticker, Trade.market).distinct():
+        out[ticker] = market or quotes.market_of(ticker)
+    return out
+
+
 def build_holdings(db: Session) -> list[dict]:
     trades = db.query(Trade).all()
     states = compute_states(trades)
+    ticker_market = {t.ticker: (t.market or quotes.market_of(t.ticker)) for t in trades}
 
     open_tickers = [t for t, st in states.items() if st.shares > 0]
     quote_map = quotes.get_quotes(open_tickers)
@@ -100,16 +118,17 @@ def build_holdings(db: Session) -> list[dict]:
             continue
         avg_cost = st.cost_basis / st.shares if st.shares else 0.0
         quote = quote_map.get(ticker)
-        currency = quote.currency if quote else quotes.detect_currency(
-            quotes.resolve_symbol(ticker)
-        )
+        market = ticker_market.get(ticker) or quotes.market_of(ticker)
+        # Group by the stored market's currency so holdings and the per-market
+        # summaries always agree (don't trust a stray quote currency mismatch).
+        currency = quotes.currency_of(market)
         current_price = quote.price if quote else None
         prev_close = quote.previous_close if quote else None
         # Gross market value (price × shares) — matches the broker's 資產市值.
         market_value = current_price * st.shares if current_price is not None else None
-        # Estimated cost to liquidate, so unrealized P/L matches 損益試算.
+        # Estimated cost to liquidate, so unrealized P/L matches 損益試算 (0 for US).
         exit_cost = (
-            estimate_exit_cost(ticker, market_value)
+            estimate_exit_cost(ticker, market_value, market)
             if market_value is not None
             else None
         )
@@ -138,6 +157,7 @@ def build_holdings(db: Session) -> list[dict]:
                 "ticker": ticker,
                 "name": quote.name if quote else "",
                 "currency": currency,
+                "market": market,
                 "shares": st.shares,
                 "avg_cost": avg_cost,
                 "current_price": current_price,
@@ -164,15 +184,16 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
     # Realized P/L from all trades (closed positions too)
     trades = db.query(Trade).all()
     states = compute_states(trades)
+    ticker_market = {t.ticker: (t.market or quotes.market_of(t.ticker)) for t in trades}
     realized_by_currency: dict[str, float] = defaultdict(float)
     for ticker, st in states.items():
-        currency = quotes.detect_currency(quotes.resolve_symbol(ticker))
+        currency = quotes.currency_of(ticker_market.get(ticker) or quotes.market_of(ticker))
         realized_by_currency[currency] += st.realized_pl
 
-    # Dividend income grouped by currency (derived from the ticker's market)
+    # Dividend income grouped by currency (from each dividend's stored market)
     dividends_by_currency: dict[str, float] = defaultdict(float)
     for div in db.query(Dividend).all():
-        currency = quotes.detect_currency(quotes.resolve_symbol(div.ticker))
+        currency = quotes.currency_of(div.market or quotes.market_of(div.ticker))
         dividends_by_currency[currency] += div.amount
 
     all_currencies = (
@@ -248,7 +269,7 @@ def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]
     # Seed every currency that has any trades, so a flat line shows up
     # even before its first event in the visible window.
     for tr in trades:
-        currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+        currency = quotes.currency_of(tr.market or quotes.market_of(tr.ticker))
         cumulative.setdefault(currency, 0.0)
 
     idx = 0
@@ -258,7 +279,7 @@ def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]
         state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
         before = state.realized_pl
         _apply_trade(state, tr)
-        currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+        currency = quotes.currency_of(tr.market or quotes.market_of(tr.ticker))
         cumulative[currency] += state.realized_pl - before
         idx += 1
 
@@ -269,7 +290,7 @@ def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]
             state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
             before = state.realized_pl
             _apply_trade(state, tr)
-            currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+            currency = quotes.currency_of(tr.market or quotes.market_of(tr.ticker))
             cumulative[currency] += state.realized_pl - before
             idx += 1
 
@@ -306,9 +327,9 @@ def build_earnings_history(db: Session, days: int = 180) -> dict[str, list[dict]
     # their first event in the visible window.
     currencies: set[str] = set()
     for tr in trades:
-        currencies.add(quotes.detect_currency(quotes.resolve_symbol(tr.ticker)))
+        currencies.add(quotes.currency_of(tr.market or quotes.market_of(tr.ticker)))
     for d in dividends:
-        currencies.add(quotes.detect_currency(quotes.resolve_symbol(d.ticker)))
+        currencies.add(quotes.currency_of(d.market or quotes.market_of(d.ticker)))
     for c in currencies:
         cum_realized.setdefault(c, 0.0)
         cum_dividends.setdefault(c, 0.0)
@@ -320,12 +341,12 @@ def build_earnings_history(db: Session, days: int = 180) -> dict[str, list[dict]
         state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
         before = state.realized_pl
         _apply_trade(state, tr)
-        currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+        currency = quotes.currency_of(tr.market or quotes.market_of(tr.ticker))
         cum_realized[currency] += state.realized_pl - before
         t_idx += 1
     while d_idx < len(dividends) and dividends[d_idx].pay_date < start:
         d = dividends[d_idx]
-        currency = quotes.detect_currency(quotes.resolve_symbol(d.ticker))
+        currency = quotes.currency_of(d.market or quotes.market_of(d.ticker))
         cum_dividends[currency] += d.amount
         d_idx += 1
 
@@ -336,12 +357,12 @@ def build_earnings_history(db: Session, days: int = 180) -> dict[str, list[dict]
             state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
             before = state.realized_pl
             _apply_trade(state, tr)
-            currency = quotes.detect_currency(quotes.resolve_symbol(tr.ticker))
+            currency = quotes.currency_of(tr.market or quotes.market_of(tr.ticker))
             cum_realized[currency] += state.realized_pl - before
             t_idx += 1
         while d_idx < len(dividends) and dividends[d_idx].pay_date == cursor:
             d = dividends[d_idx]
-            currency = quotes.detect_currency(quotes.resolve_symbol(d.ticker))
+            currency = quotes.currency_of(d.market or quotes.market_of(d.ticker))
             cum_dividends[currency] += d.amount
             d_idx += 1
 

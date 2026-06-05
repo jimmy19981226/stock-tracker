@@ -120,6 +120,27 @@ export function AgentProvider({ children }: { children: ReactNode }) {
       await sleep(260);
     }
 
+    // True when we're on the Overview landing page (cards present, no in-market
+    // nav). The tabs/forms only exist inside a market, so most actions must
+    // enter one first.
+    function onOverview(): boolean {
+      return !!agentEl("overview-tw") && !agentEl("nav-dashboard");
+    }
+
+    const marketOfTicker = (t: string): "TW" | "US" =>
+      /^\d/.test((t || "").trim()) ? "TW" : "US";
+
+    async function ensureMarket(code?: string): Promise<void> {
+      if (!onOverview()) return;
+      const c = (code || "TW").toUpperCase() === "US" ? "us" : "tw";
+      const card = agentEl(`overview-${c}`);
+      if (card) {
+        await pointAt(card);
+        await press(card);
+        await sleep(440); // portfolio view mounts
+      }
+    }
+
     async function navigate(view?: string): Promise<void> {
       const v = view || "dashboard";
       const btn = agentEl(`nav-${v}`);
@@ -132,6 +153,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
     async function openStock(ticker?: string): Promise<void> {
       if (!ticker) return;
+      await ensureMarket(marketOfTicker(ticker));
       await navigate("dashboard");
       const row = await waitForAgent(`holding-${ticker.toUpperCase()}`, 3000);
       if (row) {
@@ -158,8 +180,11 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const tickerOf = (step: AgentStep) => (step.ticker || step.target || "").toUpperCase();
 
     async function addTrade(step: AgentStep): Promise<void> {
+      const m = step.market || marketOfTicker(tickerOf(step));
+      await ensureMarket(m);
       await navigate("trades");
       if (!(await waitForAgent("trade-ticker", 4000))) return;
+      if (step.market) await choose("trade-market", step.market);
       if (step.trade_type) await choose("trade-type", step.trade_type);
       await fill("trade-ticker", tickerOf(step));
       if (step.shares != null) await fill("trade-shares", String(step.shares));
@@ -176,8 +201,11 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     }
 
     async function addDividend(step: AgentStep): Promise<void> {
+      const m = step.market || marketOfTicker(tickerOf(step));
+      await ensureMarket(m);
       await navigate("dividends");
       if (!(await waitForAgent("dividend-ticker", 4000))) return;
+      if (step.market) await choose("dividend-market", step.market);
       await fill("dividend-ticker", tickerOf(step));
       if (step.amount != null) await fill("dividend-amount", String(step.amount));
       await fill("dividend-date", step.date || todayISO());
@@ -191,6 +219,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     }
 
     async function filterTrades(step: AgentStep): Promise<void> {
+      await ensureMarket(step.market || (tickerOf(step) ? marketOfTicker(tickerOf(step)) : "TW"));
       await navigate("trades");
       if (step.ticker || step.target) await fill("trade-filter-ticker", tickerOf(step));
       if (step.trade_type) await choose("trade-filter-type", step.trade_type);
@@ -200,6 +229,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     async function highlight(target?: string): Promise<void> {
       if (!target) return;
       const id = target.startsWith("holding-") ? target.toUpperCase().replace("HOLDING-", "holding-") : `summary-${target}`;
+      const tkr = id.startsWith("holding-") ? id.slice("holding-".length) : "";
+      await ensureMarket(tkr ? marketOfTicker(tkr) : "TW");
       await navigate("dashboard");
       const el = await waitForAgent(id, 2500);
       if (!el) return;
@@ -211,7 +242,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
     async function playStep(step: AgentStep): Promise<void> {
       switch (step.action) {
-        case "navigate": return navigate(step.view);
+        case "navigate": { await ensureMarket(step.market); return navigate(step.view); }
         case "open_stock": return openStock(step.ticker || step.target);
         case "close_modal": return closeModal();
         case "add_trade": return addTrade(step);

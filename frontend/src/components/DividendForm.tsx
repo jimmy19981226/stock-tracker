@@ -1,22 +1,36 @@
 import { useState } from "react";
-import { api, type DividendCreate } from "../api";
+import { api, type DividendCreate, type MarketCode } from "../api";
 import { useTickerName } from "../hooks/useTickerName";
 
 interface Props {
   names: Record<string, string>;
+  market: MarketCode;
   onCreated: () => void;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function DividendForm({ names, onCreated }: Props) {
+const deriveMarket = (t: string, fallback: MarketCode): MarketCode => {
+  const s = t.trim();
+  if (!s) return fallback;
+  return /^\d/.test(s) ? "TW" : "US";
+};
+
+export function DividendForm({ names, market: activeMarket, onCreated }: Props) {
   const [ticker, setTicker] = useState("");
   const resolvedName = useTickerName(ticker, names);
+  const [market, setMarket] = useState<MarketCode>(activeMarket);
+  const [marketTouched, setMarketTouched] = useState(false);
   const [amount, setAmount] = useState("");
   const [payDate, setPayDate] = useState(today());
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const onTickerChange = (v: string) => {
+    setTicker(v);
+    if (!marketTouched) setMarket(deriveMarket(v, activeMarket));
+  };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,6 +40,7 @@ export function DividendForm({ names, onCreated }: Props) {
       amount: Number(amount),
       pay_date: payDate,
       notes: notes.trim() || null,
+      market,
     };
     if (!payload.ticker) return setError("Ticker is required.");
     if (!(payload.amount > 0))
@@ -37,6 +52,8 @@ export function DividendForm({ names, onCreated }: Props) {
       setTicker("");
       setAmount("");
       setNotes("");
+      setMarket(activeMarket);
+      setMarketTouched(false);
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save dividend");
@@ -50,12 +67,26 @@ export function DividendForm({ names, onCreated }: Props) {
       <h2>Record Dividend</h2>
       <div className="form-grid">
         <label>
+          Market
+          <select
+            data-agent="dividend-market"
+            value={market}
+            onChange={(e) => {
+              setMarket(e.target.value as MarketCode);
+              setMarketTouched(true);
+            }}
+          >
+            <option value="TW">🇹🇼 Taiwan (NT$)</option>
+            <option value="US">🇺🇸 US ($)</option>
+          </select>
+        </label>
+        <label>
           Ticker
           <input
             data-agent="dividend-ticker"
             value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            placeholder="2330 / 00919"
+            onChange={(e) => onTickerChange(e.target.value)}
+            placeholder={market === "US" ? "AAPL / MSFT" : "2330 / 00919"}
             autoCapitalize="characters"
           />
           <span
@@ -73,7 +104,7 @@ export function DividendForm({ names, onCreated }: Props) {
           </span>
         </label>
         <label>
-          Amount Received
+          Amount Received ({market === "US" ? "$" : "NT$"})
           <input
             data-agent="dividend-amount"
             type="number"
@@ -111,7 +142,7 @@ export function DividendForm({ names, onCreated }: Props) {
           {submitting ? "Saving…" : "Add Dividend"}
         </button>
         <span className="muted" style={{ fontSize: 12 }}>
-          Amounts are recorded in TWD.
+          Recorded in {market === "US" ? "USD (US$)" : "TWD (NT$)"}.
         </span>
       </div>
       {error && <div className="error">{error}</div>}

@@ -1,18 +1,29 @@
 import { useState } from "react";
-import { api, type TradeCreate } from "../api";
+import { api, type MarketCode, type TradeCreate } from "../api";
 import { useTickerName } from "../hooks/useTickerName";
 
 interface Props {
   names: Record<string, string>;
+  market: MarketCode;
   onCreated: () => void;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export function TradeForm({ names, onCreated }: Props) {
+// TW codes are numeric (optional trailing letter); US tickers start with a
+// letter. Used to auto-pick the market as the user types a ticker.
+const deriveMarket = (t: string, fallback: MarketCode): MarketCode => {
+  const s = t.trim();
+  if (!s) return fallback;
+  return /^\d/.test(s) ? "TW" : "US";
+};
+
+export function TradeForm({ names, market: activeMarket, onCreated }: Props) {
   const [type, setType] = useState<"buy" | "sell">("buy");
   const [ticker, setTicker] = useState("");
   const resolvedName = useTickerName(ticker, names);
+  const [market, setMarket] = useState<MarketCode>(activeMarket);
+  const [marketTouched, setMarketTouched] = useState(false);
   const [shares, setShares] = useState("");
   const [price, setPrice] = useState("");
   const [tradeDate, setTradeDate] = useState(today());
@@ -20,6 +31,11 @@ export function TradeForm({ names, onCreated }: Props) {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const onTickerChange = (v: string) => {
+    setTicker(v);
+    if (!marketTouched) setMarket(deriveMarket(v, activeMarket));
+  };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,6 +48,7 @@ export function TradeForm({ names, onCreated }: Props) {
       trade_date: tradeDate,
       fee: Number(fee || "0"),
       notes: notes.trim() || null,
+      market,
     };
     if (!payload.ticker) return setError("Ticker is required.");
     if (!(payload.shares > 0)) return setError("Shares must be greater than 0.");
@@ -45,6 +62,8 @@ export function TradeForm({ names, onCreated }: Props) {
       setPrice("");
       setFee("0");
       setNotes("");
+      setMarket(activeMarket);
+      setMarketTouched(false);
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save trade");
@@ -58,6 +77,20 @@ export function TradeForm({ names, onCreated }: Props) {
       <h2>Record Trade</h2>
       <div className="form-grid">
         <label>
+          Market
+          <select
+            data-agent="trade-market"
+            value={market}
+            onChange={(e) => {
+              setMarket(e.target.value as MarketCode);
+              setMarketTouched(true);
+            }}
+          >
+            <option value="TW">🇹🇼 Taiwan (NT$)</option>
+            <option value="US">🇺🇸 US ($)</option>
+          </select>
+        </label>
+        <label>
           Type
           <select data-agent="trade-type" value={type} onChange={(e) => setType(e.target.value as "buy" | "sell")}>
             <option value="buy">Buy</option>
@@ -69,8 +102,8 @@ export function TradeForm({ names, onCreated }: Props) {
           <input
             data-agent="trade-ticker"
             value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            placeholder="2330 / 00919"
+            onChange={(e) => onTickerChange(e.target.value)}
+            placeholder={market === "US" ? "AAPL / MSFT" : "2330 / 00919"}
             autoCapitalize="characters"
           />
           <span
@@ -100,7 +133,7 @@ export function TradeForm({ names, onCreated }: Props) {
           />
         </label>
         <label>
-          Price
+          Price ({market === "US" ? "$" : "NT$"})
           <input
             data-agent="trade-price"
             type="number"
@@ -149,8 +182,9 @@ export function TradeForm({ names, onCreated }: Props) {
           {submitting ? "Saving…" : "Add Trade"}
         </button>
         <span className="muted" style={{ fontSize: 12 }}>
-          Tip: 4-digit codes for stocks (2330), 5-digit for ETFs (00919),
-          letter suffix for bond ETFs (00937B).
+          {market === "US"
+            ? "US tickers are letters (AAPL, MSFT). Price in US$."
+            : "TW: 4-digit stocks (2330), 5-digit ETFs (00919), letter suffix for bond ETFs (00937B)."}
         </span>
       </div>
       {error && <div className="error">{error}</div>}
