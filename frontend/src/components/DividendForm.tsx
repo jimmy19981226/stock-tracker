@@ -52,6 +52,7 @@ export function DividendForm({ names, onCreated }: Props) {
         <label>
           Ticker
           <input
+            data-agent="dividend-ticker"
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
             placeholder="2330 / 00919"
@@ -74,6 +75,7 @@ export function DividendForm({ names, onCreated }: Props) {
         <label>
           Amount Received
           <input
+            data-agent="dividend-amount"
             type="number"
             step="any"
             min="0"
@@ -85,6 +87,7 @@ export function DividendForm({ names, onCreated }: Props) {
         <label>
           Pay Date
           <input
+            data-agent="dividend-date"
             type="text"
             placeholder="YYYY-MM-DD"
             pattern="\d{4}-\d{2}-\d{2}"
@@ -96,6 +99,7 @@ export function DividendForm({ names, onCreated }: Props) {
         <label style={{ gridColumn: "1 / -1" }}>
           Notes (optional)
           <input
+            data-agent="dividend-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="e.g. 2024 Q3 cash dividend"
@@ -103,7 +107,7 @@ export function DividendForm({ names, onCreated }: Props) {
         </label>
       </div>
       <div className="row-actions">
-        <button type="submit" disabled={submitting}>
+        <button data-agent="dividend-submit" type="submit" disabled={submitting}>
           {submitting ? "Saving…" : "Add Dividend"}
         </button>
         <span className="muted" style={{ fontSize: 12 }}>

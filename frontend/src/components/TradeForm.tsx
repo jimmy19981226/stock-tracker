@@ -59,7 +59,7 @@ export function TradeForm({ names, onCreated }: Props) {
       <div className="form-grid">
         <label>
           Type
-          <select value={type} onChange={(e) => setType(e.target.value as "buy" | "sell")}>
+          <select data-agent="trade-type" value={type} onChange={(e) => setType(e.target.value as "buy" | "sell")}>
             <option value="buy">Buy</option>
             <option value="sell">Sell</option>
           </select>
@@ -67,6 +67,7 @@ export function TradeForm({ names, onCreated }: Props) {
         <label>
           Ticker
           <input
+            data-agent="trade-ticker"
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
             placeholder="2330 / 00919"
@@ -89,6 +90,7 @@ export function TradeForm({ names, onCreated }: Props) {
         <label>
           Shares
           <input
+            data-agent="trade-shares"
             type="number"
             step="any"
             min="0"
@@ -100,6 +102,7 @@ export function TradeForm({ names, onCreated }: Props) {
         <label>
           Price
           <input
+            data-agent="trade-price"
             type="number"
             step="any"
             min="0"
@@ -111,6 +114,7 @@ export function TradeForm({ names, onCreated }: Props) {
         <label>
           Date
           <input
+            data-agent="trade-date"
             type="text"
             placeholder="YYYY-MM-DD"
             pattern="\d{4}-\d{2}-\d{2}"
@@ -122,6 +126,7 @@ export function TradeForm({ names, onCreated }: Props) {
         <label>
           Fee
           <input
+            data-agent="trade-fee"
             type="number"
             step="any"
             min="0"
@@ -132,6 +137,7 @@ export function TradeForm({ names, onCreated }: Props) {
         <label style={{ gridColumn: "1 / -1" }}>
           Notes (optional)
           <input
+            data-agent="trade-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Anything you want to remember about this trade"
@@ -139,7 +145,7 @@ export function TradeForm({ names, onCreated }: Props) {
         </label>
       </div>
       <div className="row-actions">
-        <button type="submit" disabled={submitting}>
+        <button data-agent="trade-submit" type="submit" disabled={submitting}>
           {submitting ? "Saving…" : "Add Trade"}
         </button>
         <span className="muted" style={{ fontSize: 12 }}>

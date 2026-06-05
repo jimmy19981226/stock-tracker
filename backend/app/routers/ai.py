@@ -19,7 +19,7 @@ import json
 import os
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -335,6 +335,222 @@ def chat(req: ChatRequest):
             "X-Accel-Buffering": "no",  # disable proxy buffering
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Agentic mode: the assistant can DRIVE the UI. Instead of (only) answering in
+# text, the planner returns an ordered list of "steps" that the frontend plays
+# out — moving an on-screen cursor, opening tabs, typing into the real forms.
+# This is a fast, non-streaming structured call (response_schema forces shape);
+# questions/analysis fall through to the normal streaming /chat endpoint.
+# ---------------------------------------------------------------------------
+
+_TAIPEI = timezone(timedelta(hours=8))
+
+
+class AgentRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+    view: str | None = None  # the tab the user is currently looking at
+
+
+# One flat step object: every action's fields live here as optional keys so the
+# schema stays a simple (Gemini-friendly) array of uniform objects.
+_AGENT_STEP_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "action": {
+            "type": "string",
+            "enum": [
+                "navigate", "open_stock", "close_modal", "add_trade",
+                "add_dividend", "filter_trades", "highlight", "note",
+            ],
+        },
+        "say": {"type": "string"},
+        "view": {"type": "string", "enum": ["dashboard", "trades", "dividends"]},
+        "ticker": {"type": "string"},
+        "trade_type": {"type": "string", "enum": ["buy", "sell"]},
+        "shares": {"type": "number"},
+        "price": {"type": "number"},
+        "amount": {"type": "number"},
+        "date": {"type": "string"},
+        "fee": {"type": "number"},
+        "notes": {"type": "string"},
+        "status": {"type": "string", "enum": ["all", "open", "closed"]},
+        "target": {"type": "string"},
+    },
+    "required": ["action", "say"],
+}
+
+_AGENT_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "mode": {"type": "string", "enum": ["act", "chat"]},
+        "reply": {"type": "string"},
+        "steps": {"type": "array", "items": _AGENT_STEP_SCHEMA},
+    },
+    "required": ["mode", "reply", "steps"],
+}
+
+
+def _agent_context(db: Session) -> str:
+    """Compact holdings list so the planner can resolve 'my biggest position',
+    pick real tickers, and know what exists. Kept tiny (no fundamentals)."""
+    try:
+        holdings = portfolio.build_holdings(db)
+    except Exception:
+        holdings = []
+    rows = [
+        {
+            "ticker": h.get("ticker"),
+            "name": h.get("name"),
+            "shares": h.get("shares"),
+            "market_value": h.get("market_value"),
+        }
+        for h in holdings
+        if h.get("ticker")
+    ]
+    return json.dumps(rows, default=str, ensure_ascii=False)
+
+
+def _agent_prompt(context_json: str, view: str | None, today: str) -> str:
+    return (
+        "You are the UI-automation planner for \"AI Stock Studio\", a Taiwan\n"
+        "stock-portfolio web app. The user types a request; you output a JSON\n"
+        "plan that the app PLAYS OUT by physically moving an on-screen cursor,\n"
+        "switching tabs, and typing into real forms while the user watches.\n"
+        "\n"
+        "Choose one mode:\n"
+        "- \"act\": the user wants to DO something in the app — navigate, open a\n"
+        "  stock, add a trade/dividend, filter, or be shown where something is.\n"
+        "  Return an ordered `steps` array.\n"
+        "- \"chat\": the user is asking a QUESTION or wants analysis, news, or an\n"
+        "  explanation (e.g. \"how is 2330 doing?\", \"what's my best position?\").\n"
+        "  Return mode \"chat\" with an EMPTY steps array — a separate analysis\n"
+        "  assistant answers those. When torn between explaining and acting,\n"
+        "  prefer \"chat\".\n"
+        "\n"
+        "Each step has an `action` and a short `say`: a 2–5 word present-tense\n"
+        "caption shown while it runs (e.g. \"Opening Trades\", \"Typing 2330\",\n"
+        "\"Submitting the trade\").\n"
+        "\n"
+        "Actions and their fields:\n"
+        "- navigate {view: dashboard|trades|dividends} — switch the top tab.\n"
+        "- open_stock {ticker} — open the detail modal for a position. Precede\n"
+        "  it with a navigate to \"dashboard\".\n"
+        "- close_modal — close the open stock modal.\n"
+        "- add_trade {trade_type: buy|sell, ticker, shares, price, date, fee?,\n"
+        "  notes?} — fills + submits the Record Trade form (auto-opens Trades).\n"
+        "- add_dividend {ticker, amount, date, notes?} — fills + submits the\n"
+        "  Record Dividend form (auto-opens Dividends).\n"
+        "- filter_trades {ticker?, trade_type?, status?} — set the Trades filters.\n"
+        "- highlight {target} — glow + point at a region so the user sees it.\n"
+        "  Valid targets: today, total-earned, total-return, market-value,\n"
+        "  unrealized, realized, dividends (dashboard summary cards), or\n"
+        "  \"holding-<TICKER>\" for a position row (e.g. holding-2330).\n"
+        "- note — narration only, no action. Use sparingly.\n"
+        "\n"
+        "Rules:\n"
+        "- ticker is the bare TW code: \"2330\", \"00919\" (no .TW, no name).\n"
+        "- Put the stock code in the `ticker` field for add_trade, add_dividend,\n"
+        "  open_stock and filter_trades. The `target` field is ONLY for highlight\n"
+        "  — never put a ticker in `target` for the other actions.\n"
+        "- shares is a SHARE count (1 lot/張 = 1000 shares); price is per-share NT$.\n"
+        f"- date is ISO YYYY-MM-DD; default to TODAY ({today}) if unspecified.\n"
+        "- add_trade REQUIRES trade_type, ticker, shares, price. If the request\n"
+        "  is missing a required value, do NOT act — return mode \"chat\" with a\n"
+        "  `reply` that asks for the missing detail.\n"
+        "- Only use tickers/targets that make sense. open_stock and\n"
+        "  holding-<TICKER> highlights should reference a held position from the\n"
+        "  HOLDINGS list below (or one the user explicitly named).\n"
+        "- Keep plans minimal and ordered so they're easy to follow.\n"
+        "- `reply` is ONE plain sentence (no markdown): for \"act\", what you're\n"
+        "  about to do; for \"chat\", your question or a brief hand-off.\n"
+        "\n"
+        f"CURRENT_VIEW: {view or 'dashboard'}\n"
+        f"HOLDINGS (ticker, name, shares, market_value):\n{context_json}"
+    )
+
+
+@router.post("/agent")
+def agent_plan(req: AgentRequest):
+    """Plan a UI-driving action sequence for the agentic assistant.
+
+    Returns ``{mode, reply, steps}``. ``mode == "chat"`` (with empty steps)
+    means "this is a question, not an action" — the frontend then calls the
+    normal streaming ``/chat`` endpoint. ``mode == "act"`` ships an ordered
+    list of steps the frontend plays out over the live UI.
+    """
+    api_key = os.environ.get("GOOGLE_AI_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "GOOGLE_AI_API_KEY environment variable is not set. "
+                "Get a free key at https://aistudio.google.com/apikey "
+                "and start the backend with the variable set."
+            ),
+        )
+
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="google-genai not installed. Run `pip install -r requirements.txt`.",
+        )
+
+    user_text = req.message.strip()
+    if not user_text:
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+
+    with SessionLocal() as db:
+        context_json = _agent_context(db)
+
+    today = datetime.now(_TAIPEI).date().isoformat()
+    system_prompt = _agent_prompt(context_json, req.view, today)
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=DEFAULT_MODEL,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.1,
+                response_mime_type="application/json",
+                response_schema=_AGENT_SCHEMA,
+            ),
+            contents=[
+                types.Content(role="user", parts=[types.Part(text=user_text)]),
+            ],
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini call failed: {type(exc).__name__}: {exc}",
+        )
+
+    text = (getattr(response, "text", None) or "").strip()
+    if not text:
+        # Treat a blank plan as "just chat" rather than erroring the user out.
+        return {"mode": "chat", "reply": "", "steps": []}
+
+    try:
+        plan = json.loads(text)
+    except json.JSONDecodeError:
+        return {"mode": "chat", "reply": "", "steps": []}
+
+    mode = plan.get("mode") if plan.get("mode") in ("act", "chat") else "chat"
+    steps = plan.get("steps") or []
+    if mode != "act" or not isinstance(steps, list) or not steps:
+        # No real actions → let the streaming chat assistant handle it.
+        return {"mode": "chat", "reply": plan.get("reply") or "", "steps": []}
+
+    return {
+        "mode": "act",
+        "reply": plan.get("reply") or "",
+        "steps": steps,
+    }
 
 
 PARSE_MAX_BYTES = 8 * 1024 * 1024  # 8 MB cap on uploads to keep latency sane

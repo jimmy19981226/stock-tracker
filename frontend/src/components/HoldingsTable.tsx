@@ -79,6 +79,7 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
               {pageItems.map((h) => (
                 <tr
                   key={h.ticker}
+                  data-agent={`holding-${h.ticker}`}
                   className={onSelectTicker ? "row-clickable" : undefined}
                   onClick={onSelectTicker ? () => onSelectTicker(h.ticker) : undefined}
                 >

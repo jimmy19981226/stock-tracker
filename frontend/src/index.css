@@ -3692,3 +3692,130 @@ main.app {
   font-weight: 500;
   letter-spacing: 0.005em;
 }
+
+/* ===================================================================
+   Agentic mode — the assistant driving the UI.
+   A floating cursor glides to each target (transform transition), a
+   spotlight ring pulses on it, and tagged form fields get typed into.
+   Everything here is overlay chrome: pointer-events:none so it never
+   intercepts the very clicks the agent is performing.
+   =================================================================== */
+.agent-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100001;
+  pointer-events: none;
+  will-change: transform;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: drop-shadow(0 4px 10px rgba(8, 14, 30, 0.45));
+}
+.agent-cursor svg {
+  display: block;
+  transition: transform 0.12s ease;
+}
+.agent-cursor[data-pressing] svg {
+  transform: scale(0.8);
+}
+.agent-cursor-label {
+  position: absolute;
+  left: 22px;
+  top: 20px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent, #4d8bff), var(--accent-2, #6ea8ff));
+  padding: 5px 10px;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(11, 16, 32, 0.4);
+  animation: agent-label-in 0.25s ease both;
+}
+@keyframes agent-label-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+.agent-spotlight {
+  position: fixed;
+  z-index: 100000;
+  pointer-events: none;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 3px rgba(77, 139, 255, 0.55),
+    0 0 0 9px rgba(77, 139, 255, 0.18),
+    0 0 26px 6px rgba(77, 139, 255, 0.4);
+  transition:
+    left 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: agent-spot-pulse 1.5s ease-in-out infinite;
+}
+@keyframes agent-spot-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 3px rgba(77, 139, 255, 0.55),
+      0 0 0 9px rgba(77, 139, 255, 0.16),
+      0 0 24px 5px rgba(77, 139, 255, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(77, 139, 255, 0.7),
+      0 0 0 13px rgba(77, 139, 255, 0.22),
+      0 0 34px 9px rgba(77, 139, 255, 0.5);
+  }
+}
+
+/* One-shot glow when the agent points out a summary card / position row. */
+.agent-flash {
+  animation: agent-flash 1.5s ease-in-out;
+  border-radius: 12px;
+}
+@keyframes agent-flash {
+  0%, 100% { box-shadow: none; }
+  30%, 70% {
+    box-shadow:
+      0 0 0 2px rgba(77, 139, 255, 0.6),
+      0 0 28px 6px rgba(77, 139, 255, 0.45);
+  }
+}
+
+/* A small "agent at work" badge the assistant header can show while running. */
+.agent-running-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent, #4d8bff);
+}
+.agent-running-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #4d8bff);
+  box-shadow: 0 0 0 0 rgba(77, 139, 255, 0.6);
+  animation: agent-running-dot 1.2s ease-in-out infinite;
+}
+@keyframes agent-running-dot {
+  0% { box-shadow: 0 0 0 0 rgba(77, 139, 255, 0.55); }
+  70% { box-shadow: 0 0 0 7px rgba(77, 139, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(77, 139, 255, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-cursor,
+  .agent-spotlight {
+    transition-duration: 0.01ms !important;
+  }
+  .agent-spotlight,
+  .agent-flash,
+  .agent-running-pill::before {
+    animation: none !important;
+  }
+}

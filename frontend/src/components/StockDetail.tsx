@@ -105,6 +105,7 @@ export function StockDetail({ ticker, onClose }: Props) {
           </div>
           <button
             type="button"
+            data-agent="modal-close"
             className="secondary assistant-close"
             onClick={onClose}
             aria-label="Close"

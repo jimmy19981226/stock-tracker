@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   api,
+  type AgentPlan,
   type ChatDetail,
   type ChatMessage,
   type ChatSummary,
@@ -23,6 +24,7 @@ import {
   type ParsedTradeRow,
   type Trade,
 } from "../api";
+import { useAgent } from "../agent/AgentProvider";
 import { MobileUploadModal } from "./MobileUploadModal";
 
 interface Props {
@@ -32,6 +34,9 @@ interface Props {
    *  the user re-uploads a screenshot they already imported. */
   trades?: Trade[];
   dividends?: Dividend[];
+  /** The tab the user is currently viewing — handed to the agent planner so
+   *  it knows where the user is starting from. */
+  currentView?: string;
   /** Called after the user confirms imported trades/dividends so the parent
    *  dashboard can refresh. */
   onPortfolioChanged?: () => void;
@@ -176,8 +181,10 @@ export function AssistantPanel({
   holdings = [],
   trades: existingTrades = [],
   dividends: existingDividends = [],
+  currentView = "dashboard",
   onPortfolioChanged,
 }: Props) {
+  const agent = useAgent();
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [model, setModel] = useState<string>("");
   const [view, setView] = useState<View>("messages");
@@ -323,6 +330,51 @@ export function AssistantPanel({
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // First ask the planner whether this message is an ACTION (drive the UI)
+    // or a QUESTION (stream a normal answer). Actions are played out over the
+    // live app; questions fall through to the streaming chat below. If the
+    // planner errors (e.g. not configured), we also fall through so the chat
+    // path can surface the real error.
+    if (agent) {
+      let plan: AgentPlan | null = null;
+      try {
+        plan = await api.aiAgentPlan(trimmed, currentView, controller.signal);
+      } catch {
+        plan = null;
+      }
+      if (controller.signal.aborted) {
+        setMessages((prev) => prev.slice(0, assistantIdx));
+        setBusy(false);
+        abortRef.current = null;
+        return;
+      }
+      if (plan && plan.mode === "act" && plan.steps.length > 0) {
+        const reply = plan.reply || "On it — watch the screen.";
+        setMessages((prev) => {
+          const next = prev.slice();
+          if (next[assistantIdx]?.role === "assistant") {
+            next[assistantIdx] = { role: "assistant", content: reply };
+          }
+          return next;
+        });
+        try {
+          await agent.runPlan(plan);
+        } catch {
+          /* an executor hiccup shouldn't crash the chat */
+        }
+        setMessages((prev) => {
+          const next = prev.slice();
+          if (next[assistantIdx]?.role === "assistant") {
+            next[assistantIdx] = { role: "assistant", content: `${reply}\n\n_Done._` };
+          }
+          return next;
+        });
+        setBusy(false);
+        abortRef.current = null;
+        return;
+      }
+    }
+
     let streamed = "";
     let finalChatId = activeChatId;
 
@@ -381,6 +433,7 @@ export function AssistantPanel({
 
   function stopGeneration() {
     abortRef.current?.abort();
+    agent?.stop();
   }
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {

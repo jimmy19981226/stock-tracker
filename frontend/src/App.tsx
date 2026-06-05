@@ -17,6 +17,7 @@ import { PortfolioSummary } from "./components/PortfolioSummary";
 import { TradeForm } from "./components/TradeForm";
 import { TradeList } from "./components/TradeList";
 import { UnrealizedChart } from "./components/UnrealizedChart";
+import { AgentProvider } from "./agent/AgentProvider";
 import { isTwMarketOpen } from "./format";
 
 const AssistantPanel = lazy(() =>
@@ -131,6 +132,7 @@ export default function App() {
   }, [view, refresh, marketOpen]);
 
   return (
+    <AgentProvider>
     <div className="layout">
       <main className="app">
       <header className="app-header">
@@ -166,18 +168,21 @@ export default function App() {
         </div>
         <nav>
           <button
+            data-agent="nav-dashboard"
             className={view === "dashboard" ? "active" : ""}
             onClick={() => setView("dashboard")}
           >
             Dashboard
           </button>
           <button
+            data-agent="nav-trades"
             className={view === "trades" ? "active" : ""}
             onClick={() => setView("trades")}
           >
             Trades
           </button>
           <button
+            data-agent="nav-dividends"
             className={view === "dividends" ? "active" : ""}
             onClick={() => setView("dividends")}
           >
@@ -233,6 +238,7 @@ export default function App() {
             holdings={holdings}
             trades={trades}
             dividends={dividends}
+            currentView={view}
             onClose={() => setAssistantOpen(false)}
             onPortfolioChanged={refresh}
           />
@@ -245,5 +251,6 @@ export default function App() {
         )}
       </Suspense>
     </div>
+    </AgentProvider>
   );
 }

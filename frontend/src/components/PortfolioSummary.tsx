@@ -60,7 +60,7 @@ export function PortfolioSummary({ summaries }: Props) {
             {s.holdings_count === 1 ? "holding" : "holdings"}
           </h2>
           <div className="summary-grid">
-            <div className="summary-card hero">
+            <div className="summary-card hero" data-agent="summary-total-earned">
               <div className="label">Total Earned</div>
               <div className="value">
                 {fmtMoney(s.total_earned, s.currency)}
@@ -70,21 +70,21 @@ export function PortfolioSummary({ summaries }: Props) {
                 Dividends {fmtMoney(s.dividends, s.currency)}
               </div>
             </div>
-            <div className="summary-card">
+            <div className="summary-card" data-agent="summary-total-return">
               <div className="label">Total Return</div>
               <div className={`value ${plClass(totalReturn)}`}>
                 {fmtMoney(totalReturn, s.currency)}
               </div>
               <div className="sub muted">Realized + dividends + unrealized</div>
             </div>
-            <div className="summary-card">
+            <div className="summary-card" data-agent="summary-market-value">
               <div className="label">Market Value</div>
               <div className="value">{fmtMoney(s.total_value, s.currency)}</div>
               <div className="sub muted">
                 Cost: {fmtMoney(s.total_cost, s.currency)}
               </div>
             </div>
-            <div className="summary-card">
+            <div className="summary-card" data-agent="summary-unrealized">
               <div className="label">Unrealized P/L</div>
               <div className={`value ${plClass(s.total_pl)}`}>
                 {fmtMoney(s.total_pl, s.currency)}
@@ -93,21 +93,21 @@ export function PortfolioSummary({ summaries }: Props) {
                 {fmtPct(s.total_pl_pct)}
               </div>
             </div>
-            <div className="summary-card">
+            <div className="summary-card" data-agent="summary-realized">
               <div className="label">Realized P/L</div>
               <div className={`value ${plClass(s.realized_pl)}`}>
                 {fmtMoney(s.realized_pl, s.currency)}
               </div>
               <div className="sub muted">From closed positions</div>
             </div>
-            <div className="summary-card">
+            <div className="summary-card" data-agent="summary-dividends">
               <div className="label">Dividends</div>
               <div className={`value ${plClass(s.dividends)}`}>
                 {fmtMoney(s.dividends, s.currency)}
               </div>
               <div className="sub muted">Cash payouts received</div>
             </div>
-            <div className="summary-card">
+            <div className="summary-card" data-agent="summary-today">
               <div className="label">Today</div>
               <div className={`value ${plClass(s.today_pl)}`}>
                 {fmtMoney(s.today_pl, s.currency)}

@@ -210,6 +210,53 @@ async function uploadPortfolioXlsx(
   return res.json();
 }
 
+// --- Agentic mode -----------------------------------------------------------
+// The planner returns an ordered list of UI steps the frontend plays out over
+// the live app (moving a cursor, switching tabs, typing into the real forms).
+export type AgentAction =
+  | "navigate"
+  | "open_stock"
+  | "close_modal"
+  | "add_trade"
+  | "add_dividend"
+  | "filter_trades"
+  | "highlight"
+  | "note";
+
+export interface AgentStep {
+  action: AgentAction;
+  say: string;
+  view?: "dashboard" | "trades" | "dividends";
+  ticker?: string;
+  trade_type?: TradeType;
+  shares?: number;
+  price?: number;
+  amount?: number;
+  date?: string;
+  fee?: number;
+  notes?: string;
+  status?: "all" | "open" | "closed";
+  target?: string;
+}
+
+export interface AgentPlan {
+  mode: "act" | "chat";
+  reply: string;
+  steps: AgentStep[];
+}
+
+async function aiAgentPlan(
+  message: string,
+  view: string,
+  signal?: AbortSignal,
+): Promise<AgentPlan> {
+  return request<AgentPlan>("/api/ai/agent", {
+    method: "POST",
+    body: JSON.stringify({ message, view }),
+    signal,
+  });
+}
+
 export interface AiStreamCallbacks {
   onInit: (chatId: number, title: string) => void;
   onChunk: (delta: string) => void;
@@ -370,6 +417,7 @@ export const api = {
   deleteChat: (id: number) =>
     request<void>(`/api/ai/chats/${id}`, { method: "DELETE" }),
   aiChatStream,
+  aiAgentPlan,
   parseRecords,
   createMobileSession: () =>
     request<MobileSession>("/api/mobile/sessions", { method: "POST" }),

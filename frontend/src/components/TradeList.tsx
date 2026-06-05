@@ -147,12 +147,14 @@ export function TradeList({ trades, names, onChanged }: Props) {
 
       <div className="filter-bar">
         <input
+          data-agent="trade-filter-ticker"
           placeholder="Filter by ticker…"
           value={tickerQuery}
           onChange={(e) => setTickerQuery(e.target.value)}
           style={{ minWidth: 160 }}
         />
         <select
+          data-agent="trade-filter-type"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
         >
@@ -161,6 +163,7 @@ export function TradeList({ trades, names, onChanged }: Props) {
           <option value="sell">Sell only</option>
         </select>
         <select
+          data-agent="trade-filter-status"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
         >
