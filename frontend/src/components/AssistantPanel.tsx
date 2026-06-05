@@ -73,6 +73,14 @@ interface Suggestion {
 // get filled with one of the user's actual top holdings; templates with
 // {ticker2} use a different one for comparisons.
 const POOL: Record<string, Suggestion[]> = {
+  // Action prompts — these trigger agentic mode (the assistant drives the UI:
+  // navigates, opens a stock, filters, fills + submits the real forms).
+  "Take action": [
+    { icon: "🪄", category: "Take action", prompt: "Open my biggest holding" },
+    { icon: "🪄", category: "Take action", prompt: "Filter my trades to only {ticker} buys" },
+    { icon: "🪄", category: "Take action", prompt: "Show me my Today profit/loss card" },
+    { icon: "🪄", category: "Take action", prompt: "Take me to my dividends" },
+  ],
   "Trend analysis": [
     { icon: "📈", category: "Trend analysis", prompt: "How is {ticker}'s monthly revenue trending?" },
     { icon: "📈", category: "Trend analysis", prompt: "Show me {ticker}'s YoY revenue growth pattern over the last year." },
@@ -127,6 +135,28 @@ const POOL: Record<string, Suggestion[]> = {
   ],
 };
 
+// Fill a template's {ticker}/{ticker2} placeholders with the user's actual top
+// holdings. Returns the resolved suggestion plus the advanced ticker index so
+// successive picks rotate through different holdings.
+function fillPlaceholders(
+  variant: Suggestion,
+  topTickers: string[],
+  startIdx: number,
+  fallbackTicker: string,
+): { suggestion: Suggestion; nextIdx: number } {
+  let prompt = variant.prompt;
+  let tickerIdx = startIdx;
+  while (prompt.includes("{ticker}") || prompt.includes("{ticker2}")) {
+    const next =
+      topTickers[tickerIdx % Math.max(topTickers.length, 1)] || fallbackTicker;
+    prompt = prompt
+      .replace("{ticker}", next)
+      .replace("{ticker2}", topTickers[(tickerIdx + 1) % Math.max(topTickers.length, 1)] || fallbackTicker);
+    tickerIdx += 1;
+  }
+  return { suggestion: { ...variant, prompt }, nextIdx: tickerIdx };
+}
+
 function pickSuggestions(
   topTickers: string[],
   count = 4,
@@ -135,26 +165,36 @@ function pickSuggestions(
   // Deterministic-ish shuffle so the React render is stable across re-renders
   // until the seed changes (we change the seed when a new chat is started).
   const rand = mulberry32(shuffleSeed || Date.now());
-  const categories = Object.keys(POOL);
-  const shuffledCats = [...categories].sort(() => rand() - 0.5);
+  const fallbackTicker = topTickers[0] ?? "2330";
   const picks: Suggestion[] = [];
   let tickerIdx = 0;
-  const fallbackTicker = topTickers[0] ?? "2330";
 
+  // Always lead with one "do it for me" action so agentic mode is
+  // discoverable right from the welcome screen.
+  const actions = POOL["Take action"];
+  const action = fillPlaceholders(
+    actions[Math.floor(rand() * actions.length)],
+    topTickers,
+    tickerIdx,
+    fallbackTicker,
+  );
+  picks.push(action.suggestion);
+  tickerIdx = action.nextIdx;
+
+  // Fill the rest from the question categories.
+  const categories = Object.keys(POOL).filter((c) => c !== "Take action");
+  const shuffledCats = [...categories].sort(() => rand() - 0.5);
   for (const cat of shuffledCats) {
     if (picks.length >= count) break;
     const variants = POOL[cat];
-    const variant = variants[Math.floor(rand() * variants.length)];
-    let prompt = variant.prompt;
-    while (prompt.includes("{ticker}") || prompt.includes("{ticker2}")) {
-      const next =
-        topTickers[tickerIdx % Math.max(topTickers.length, 1)] || fallbackTicker;
-      prompt = prompt
-        .replace("{ticker}", next)
-        .replace("{ticker2}", topTickers[(tickerIdx + 1) % Math.max(topTickers.length, 1)] || fallbackTicker);
-      tickerIdx += 1;
-    }
-    picks.push({ ...variant, prompt });
+    const filled = fillPlaceholders(
+      variants[Math.floor(rand() * variants.length)],
+      topTickers,
+      tickerIdx,
+      fallbackTicker,
+    );
+    picks.push(filled.suggestion);
+    tickerIdx = filled.nextIdx;
   }
   return picks;
 }
@@ -756,7 +796,7 @@ export function AssistantPanel({
                 </button>
 
                 <div className="assistant-suggestions-label muted">
-                  Or ask me anything
+                  Tell me to do it — or just ask
                 </div>
                 <div className="assistant-suggestions">
                   {suggestions.map((s) => (
@@ -1289,6 +1329,8 @@ function Bubble({
 // lines so the user discovers features without us listing all eight at once.
 // Personalised: lines that take a ticker fill in the user's biggest holding.
 const ROTATING_CAPS: ReadonlyArray<(t: string) => string> = [
+  (t) => `add a trade for you — just say "buy 1000 ${t} at 1085".`,
+  () => "open a holding, filter your trades, or switch tabs — I'll do it live.",
   () => "extract trades and dividends from a brokerage screenshot.",
   () => "import records straight from your phone with a QR scan.",
   (t) => `analyze ${t}'s monthly revenue trend and margins.`,
