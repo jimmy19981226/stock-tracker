@@ -9,3 +9,4 @@ psycopg[binary]>=3.2.0
 google-genai>=0.8.0
 yfinance>=0.2.40
 openpyxl>=3.1.0
+tzdata>=2024.1  # IANA timezone db for zoneinfo (market session hours)

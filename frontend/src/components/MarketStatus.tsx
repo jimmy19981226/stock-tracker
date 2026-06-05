@@ -1,26 +1,31 @@
 import { useEffect, useState } from "react";
-import { isTwMarketOpen, nextTwMarketTransition } from "../format";
+import type { MarketConfig } from "../api";
+import { isMarketOpen, nextMarketTransition } from "../format";
 
-export function MarketStatus() {
+/** Open/closed pill for a market, driven by its DB-sourced config (hours,
+ *  timezone, holidays). Shows the active portfolio's market. */
+export function MarketStatus({ market }: { market: MarketConfig | null }) {
   const [now, setNow] = useState(new Date());
 
-  // Tick once a minute so the badge flips at 09:00 / 13:30 automatically.
+  // Tick once a minute so the badge flips at the session open/close automatically.
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
-  const open = isTwMarketOpen(now);
-  const { inMinutes } = nextTwMarketTransition(now);
+  if (!market) return null;
+
+  const open = isMarketOpen(market, now);
+  const { inMinutes } = nextMarketTransition(market, now);
 
   const title = open
-    ? `TW market open. Closes in ${formatGap(inMinutes)}.`
-    : `TW market closed. Opens in ${formatGap(inMinutes)}.`;
+    ? `${market.name} market open. Closes in ${formatGap(inMinutes)}.`
+    : `${market.name} market closed. Opens in ${formatGap(inMinutes)}.`;
 
   return (
     <span className={`market-pill ${open ? "open" : "closed"}`} title={title}>
       <span className="market-dot" />
-      TW {open ? "OPEN" : "CLOSED"}
+      {market.code} {open ? "OPEN" : "CLOSED"}
     </span>
   );
 }

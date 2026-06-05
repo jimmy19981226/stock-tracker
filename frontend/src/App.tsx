@@ -6,6 +6,7 @@ import {
   type EarningsByCurrency,
   type Holding,
   type MarketCode,
+  type MarketConfig,
   type Trade,
 } from "./api";
 import { AllocationChart } from "./components/AllocationChart";
@@ -20,7 +21,7 @@ import { TradeForm } from "./components/TradeForm";
 import { TradeList } from "./components/TradeList";
 import { UnrealizedChart } from "./components/UnrealizedChart";
 import { AgentProvider } from "./agent/AgentProvider";
-import { isTwMarketOpen, isUsMarketOpen } from "./format";
+import { isMarketOpen } from "./format";
 
 const AssistantPanel = lazy(() =>
   import("./components/AssistantPanel").then((m) => ({ default: m.AssistantPanel })),
@@ -94,23 +95,28 @@ export default function App() {
   // Pauses on tab switch, minimize, or view change; resumes with an immediate
   // refresh.
   const [polling, setPolling] = useState(false);
+  // Market config (currency, session hours, holidays) comes from the DB via
+  // /api/markets — nothing about trading calendars is hardcoded here.
+  const [markets, setMarkets] = useState<MarketConfig[]>([]);
+  useEffect(() => {
+    api.getMarkets().then(setMarkets).catch(() => {
+      /* offline — cadence safely defaults to the slow 60s path */
+    });
+  }, []);
+  const activeMarketCfg = market ? markets.find((m) => m.code === market) ?? null : null;
+  // Status pill on Overview defaults to TW; in a portfolio it tracks that market.
+  const statusMarket = activeMarketCfg ?? markets.find((m) => m.code === "TW") ?? null;
+
   // "Is the market I'm currently viewing open?" — drives the fast (5s) vs slow
-  // (60s) refresh cadence. TW trades by day in Taipei; US trades overnight in
-  // Taipei, so the cadence has to follow whichever portfolio is on screen.
+  // (60s) refresh cadence. Each market's hours/holidays/timezone come from its
+  // config, so the cadence follows whichever portfolio is on screen.
   const [marketOpen, setMarketOpen] = useState(false);
   useEffect(() => {
-    const check = () =>
-      setMarketOpen(
-        market === "US"
-          ? isUsMarketOpen()
-          : market === "TW"
-            ? isTwMarketOpen()
-            : false,
-      );
+    const check = () => setMarketOpen(isMarketOpen(activeMarketCfg));
     check();
     const tick = window.setInterval(check, 60_000);
     return () => clearInterval(tick);
-  }, [market]);
+  }, [activeMarketCfg]);
 
   useEffect(() => {
     if (market === null || view !== "dashboard") {
@@ -177,7 +183,7 @@ export default function App() {
             </span>
             <span className="brand-text">AI Stock Studio</span>
           </h1>
-          <MarketStatus />
+          <MarketStatus market={statusMarket} />
           {polling && (
             <span
               className="live-indicator"

@@ -26,21 +26,17 @@ from threading import Lock
 from typing import Iterable
 
 from .quotes import QuoteData, resolve_symbol
-from .tw_calendar import is_tw_market_holiday
+from . import markets
 
 
 _TAIPEI = timezone(timedelta(hours=8))
 
 
 def _is_tw_market_open(now: datetime | None = None) -> bool:
-    """09:00-13:30 Taipei time, Monday-Friday, excluding TW public holidays.
-    Used to decide whether MIS's `y` field is yesterday's close (during
-    session) vs today's close that has rolled over (after session)."""
-    tw = (now or datetime.now(timezone.utc)).astimezone(_TAIPEI)
-    if tw.weekday() >= 5 or is_tw_market_holiday(tw.date()):
-        return False
-    minutes = tw.hour * 60 + tw.minute
-    return 9 * 60 <= minutes < 13 * 60 + 30
+    """Whether the TW market is currently in session — its hours/holidays now
+    live in the DB (see services/markets.py). Used to decide whether MIS's `y`
+    field is yesterday's close (during session) vs today's rolled-over close."""
+    return markets.is_market_open("TW", now)
 
 
 def _first_token(s: str) -> str:

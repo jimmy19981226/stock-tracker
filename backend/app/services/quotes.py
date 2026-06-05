@@ -26,8 +26,10 @@ def market_of(ticker: str) -> str:
 
 
 def currency_of(market: str) -> str:
-    """The reporting currency for a market: TW → TWD, US → USD."""
-    return "USD" if (market or "").upper() == "US" else "TWD"
+    """The reporting currency for a market code, sourced from the ``markets``
+    table (TW → TWD, US → USD by default). See services/markets.py."""
+    from . import markets  # lazy to avoid any import-order issues at startup
+    return markets.currency_for(market)
 
 
 def resolve_symbol(ticker: str) -> str:

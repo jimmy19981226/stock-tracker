@@ -91,6 +91,19 @@ export interface PortfolioOverview {
   combined: { twd: number | null; usd: number | null };
 }
 
+// Market reference data (currency, session hours, holidays) — sourced from the
+// DB so it isn't hardcoded in the frontend. Shape matches MarketHours in
+// format.ts, so it can be passed straight to isMarketOpen/nextMarketTransition.
+export interface MarketConfig {
+  code: MarketCode;
+  name: string;
+  currency: string;
+  timezone: string;
+  open_minute: number;
+  close_minute: number;
+  holidays: string[];
+}
+
 export interface HistoryPoint {
   date: string;
   value: number;
@@ -407,6 +420,7 @@ export const api = {
   getLastExport: () =>
     request<{ last_export: string | null }>("/api/data/last-export"),
   getHoldings: () => request<Holding[]>("/api/portfolio/holdings"),
+  getMarkets: () => request<MarketConfig[]>("/api/markets"),
   getOverview: () => request<PortfolioOverview>("/api/portfolio/overview"),
   getNames: () => request<Record<string, string>>("/api/portfolio/names"),
   lookupQuote: (ticker: string) =>

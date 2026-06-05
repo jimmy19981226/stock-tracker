@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, date
-from sqlalchemy import create_engine, inspect, text, String, Float, Date, DateTime, Integer, Text, ForeignKey
+from sqlalchemy import create_engine, inspect, text, String, Float, Date, DateTime, Integer, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session, relationship
 from pathlib import Path
 
@@ -118,6 +118,99 @@ class ChatMessage(Base):
     chat: Mapped["Chat"] = relationship(back_populates="messages")
 
 
+class Market(Base):
+    """A tradeable market (TW, US, …) — its currency, timezone and session
+    hours. The single source of truth for what used to be hardcoded in
+    quotes.currency_of and the *MarketOpen helpers."""
+    __tablename__ = "markets"
+
+    code: Mapped[str] = mapped_column(String(2), primary_key=True)  # "TW","US"
+    name: Mapped[str] = mapped_column(String(40), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(40), nullable=False)  # IANA tz
+    open_minute: Mapped[int] = mapped_column(Integer, nullable=False)   # from local midnight
+    close_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
+class MarketHoliday(Base):
+    """A full-day market closure. Replaces the hardcoded holiday lists; add a
+    row to close a market on a date, no code change needed."""
+    __tablename__ = "market_holidays"
+    __table_args__ = (UniqueConstraint("market_code", "holiday_date", name="uq_market_holiday"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market_code: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    holiday_date: Mapped[date] = mapped_column(Date, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+
+# One-time bootstrap data (used only when the markets table is empty). After
+# seeding, the DB is authoritative — edit rows / use the API to change these.
+_SEED_MARKETS = [
+    # code, name, currency, timezone, open_minute, close_minute, sort_order
+    ("TW", "Taiwan", "TWD", "Asia/Taipei", 9 * 60, 13 * 60 + 30, 0),
+    ("US", "United States", "USD", "America/New_York", 9 * 60 + 30, 16 * 60, 1),
+]
+_SEED_HOLIDAYS = {
+    "TW": [
+        ("2026-01-01", "New Year / ROC Founding Day"),
+        ("2026-02-16", "Lunar New Year (eve)"),
+        ("2026-02-17", "Lunar New Year"),
+        ("2026-02-18", "Lunar New Year"),
+        ("2026-02-19", "Lunar New Year"),
+        ("2026-02-20", "Lunar New Year"),
+        ("2026-02-27", "Peace Memorial Day (observed)"),
+        ("2026-04-03", "Children's Day (observed)"),
+        ("2026-04-06", "Tomb-Sweeping Day (observed)"),
+        ("2026-05-01", "Labor Day"),
+        ("2026-06-19", "Dragon Boat Festival"),
+        ("2026-09-25", "Mid-Autumn Festival"),
+        ("2026-09-28", "Teachers' Day"),
+        ("2026-10-09", "National Day (observed)"),
+        ("2026-10-26", "Taiwan Restoration Day (observed)"),
+        ("2026-12-25", "Constitution Day"),
+    ],
+    "US": [
+        ("2026-01-01", "New Year's Day"),
+        ("2026-01-19", "Martin Luther King Jr. Day"),
+        ("2026-02-16", "Presidents' Day"),
+        ("2026-04-03", "Good Friday"),
+        ("2026-05-25", "Memorial Day"),
+        ("2026-06-19", "Juneteenth"),
+        ("2026-07-03", "Independence Day (observed)"),
+        ("2026-09-07", "Labor Day"),
+        ("2026-11-26", "Thanksgiving"),
+        ("2026-12-25", "Christmas"),
+    ],
+}
+
+
+def seed_markets() -> None:
+    """Bootstrap the markets + holidays tables from ``_SEED_*`` if (and only if)
+    no markets exist yet. Idempotent: a no-op once the DB is populated, so it
+    seeds a fresh local DB and the existing prod DB alike without clobbering
+    edits."""
+    from datetime import date as _date
+
+    with SessionLocal() as db:
+        if db.query(Market).first() is not None:
+            return
+        for code, name, currency, tz, op, cl, order in _SEED_MARKETS:
+            db.add(Market(
+                code=code, name=name, currency=currency, timezone=tz,
+                open_minute=op, close_minute=cl, sort_order=order,
+            ))
+        for code, days in _SEED_HOLIDAYS.items():
+            for iso, hname in days:
+                db.add(MarketHoliday(
+                    market_code=code,
+                    holiday_date=_date.fromisoformat(iso),
+                    name=hname,
+                ))
+        db.commit()
+
+
 def _ensure_market_column() -> None:
     """Add the ``market`` column to existing trades/dividends tables.
 
@@ -147,6 +240,7 @@ def _ensure_market_column() -> None:
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_market_column()
+    seed_markets()
 
 
 def get_db():
