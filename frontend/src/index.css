@@ -561,6 +561,14 @@ header.app-header nav .secondary {
   margin-left: 2px;
 }
 
+/* On the Overview there are no tabs — strip the segmented-pill chrome so the
+   lone Assistant button doesn't sit in an empty box. */
+header.app-header nav.nav-bare {
+  background: transparent;
+  border-color: transparent;
+  padding: 0;
+}
+
 /* Panels */
 .panel {
   position: relative;
@@ -4036,4 +4044,21 @@ main.app {
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 8px currentColor;
+}
+
+/* Mobile polish: stack the two combined-net-worth currencies (NT$ / US$) and
+   drop the "·" so it never dangles at a line break; keep the bare Overview nav
+   (Assistant only) from stretching full-width into an empty bar. */
+@media (max-width: 560px) {
+  .networth-values {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .networth-sep {
+    display: none;
+  }
+  header.app-header nav.nav-bare {
+    width: auto;
+    margin-left: auto;
+  }
 }

@@ -250,7 +250,7 @@ export default function App() {
               </span>
             </div>
           )}
-          <nav>
+          <nav className={market === null ? "nav-bare" : undefined}>
             {market !== null && (
               <>
                 <button
