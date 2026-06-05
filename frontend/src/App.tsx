@@ -179,54 +179,68 @@ export default function App() {
             </span>
           )}
         </div>
-        <nav>
+        <div className="header-right">
           {market !== null && (
-            <>
+            <div className="portfolio-context">
               <button
                 data-agent="nav-overview"
-                className="secondary nav-back"
+                className="nav-back"
                 onClick={() => {
                   setMarket(null);
                   setView("dashboard");
                 }}
                 title="Back to all portfolios"
               >
-                ‹ <span className="nav-label">Portfolios</span>
+                <span className="nav-back-chevron" aria-hidden>
+                  ‹
+                </span>
+                <span className="nav-label">Portfolios</span>
               </button>
-              <span className="market-badge" aria-label={`${market} portfolio`}>
-                {market === "US" ? "🇺🇸 US" : "🇹🇼 TW"}
+              <span
+                className="market-chip"
+                data-market={market}
+                aria-label={`${market === "US" ? "United States" : "Taiwan"} portfolio`}
+              >
+                <span className="market-chip-dot" aria-hidden />
+                {market}
               </span>
-              <button
-                data-agent="nav-dashboard"
-                className={view === "dashboard" ? "active" : ""}
-                onClick={() => setView("dashboard")}
-              >
-                Dashboard
-              </button>
-              <button
-                data-agent="nav-trades"
-                className={view === "trades" ? "active" : ""}
-                onClick={() => setView("trades")}
-              >
-                Trades
-              </button>
-              <button
-                data-agent="nav-dividends"
-                className={view === "dividends" ? "active" : ""}
-                onClick={() => setView("dividends")}
-              >
-                Dividends
-              </button>
-            </>
+            </div>
           )}
-          <button
-            className={assistantOpen ? "active assistant-toggle" : "assistant-toggle"}
-            onClick={() => setAssistantOpen((o) => !o)}
-            title="Toggle AI assistant sidebar"
-          >
-            ✦ <span className="nav-label">Assistant</span>
-          </button>
-        </nav>
+          <nav>
+            {market !== null && (
+              <>
+                <button
+                  data-agent="nav-dashboard"
+                  className={view === "dashboard" ? "active" : ""}
+                  onClick={() => setView("dashboard")}
+                >
+                  Dashboard
+                </button>
+                <button
+                  data-agent="nav-trades"
+                  className={view === "trades" ? "active" : ""}
+                  onClick={() => setView("trades")}
+                >
+                  Trades
+                </button>
+                <button
+                  data-agent="nav-dividends"
+                  className={view === "dividends" ? "active" : ""}
+                  onClick={() => setView("dividends")}
+                >
+                  Dividends
+                </button>
+              </>
+            )}
+            <button
+              className={assistantOpen ? "active assistant-toggle" : "assistant-toggle"}
+              onClick={() => setAssistantOpen((o) => !o)}
+              title="Toggle AI assistant sidebar"
+            >
+              ✦ <span className="nav-label">Assistant</span>
+            </button>
+          </nav>
+        </div>
       </header>
 
       {error && <div className="error">{error}</div>}

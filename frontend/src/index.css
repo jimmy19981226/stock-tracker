@@ -1073,6 +1073,16 @@ tr:last-child td {
     width: 6px;
     height: 6px;
   }
+  /* The whole right cluster goes full-width and wraps: the back+chip context
+     on its own row, then the segmented tab bar below it. */
+  .header-right {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .portfolio-context {
+    flex: 1 1 100%;
+  }
   /* Tab bar = a clean full-width segmented control on one row: the three
      view tabs share the space equally, with the Assistant (collapsed to its
      ✦ icon) and refresh as compact square buttons at the end. */
@@ -3956,17 +3966,74 @@ main.app {
   line-height: 1.5;
 }
 
-/* Header badge + back control shown when inside a portfolio. */
-.market-badge {
+/* Header context shown when inside a portfolio: a ghost back control + a small
+   market chip, kept visually separate from the segmented tab pill. */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.portfolio-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* "‹ Portfolios" lives OUTSIDE <nav>, so it must fully self-style (the base
+   <button> is a filled accent button otherwise). Kept as a quiet ghost link. */
+.header-right .nav-back {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px 7px 9px;
+  border-radius: 9px;
+  box-shadow: none;
+}
+.header-right .nav-back:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border);
+  color: var(--text);
+  transform: none;
+  filter: none;
+  box-shadow: none;
+}
+.nav-back-chevron {
+  font-size: 18px;
+  line-height: 1;
+  margin-top: -1px;
+}
+
+/* Compact market chip: a glowing dot + the 2-letter code (TW blue, US teal).
+   No flag emoji — Windows renders those as the bare letters anyway. */
+.market-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  padding: 4px 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 5px 11px;
   border-radius: 999px;
+}
+.market-chip[data-market="TW"] {
+  color: #6ea8ff;
   background: rgba(77, 139, 255, 0.14);
-  color: var(--accent-2, #6ea8ff);
-  border: 1px solid rgba(77, 139, 255, 0.3);
+  border: 1px solid rgba(77, 139, 255, 0.36);
+}
+.market-chip[data-market="US"] {
+  color: #4dd6a8;
+  background: rgba(52, 211, 153, 0.14);
+  border: 1px solid rgba(52, 211, 153, 0.36);
+}
+.market-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
 }
