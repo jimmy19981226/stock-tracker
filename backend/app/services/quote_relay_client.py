@@ -81,7 +81,12 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
     url = base.rstrip("/") + "/quotes?" + urllib.parse.urlencode(
         {"codes": ",".join(misses)}
     )
-    headers = {"User-Agent": "stock-tracker-relay-client"}
+    headers = {
+        "User-Agent": "stock-tracker-relay-client",
+        # ngrok's free tier serves a browser-warning HTML interstitial unless
+        # this header is present; without it the cloud would get HTML, not JSON.
+        "ngrok-skip-browser-warning": "true",
+    }
     secret = os.environ.get("QUOTE_RELAY_SECRET")
     if secret:
         headers["X-Relay-Secret"] = secret
