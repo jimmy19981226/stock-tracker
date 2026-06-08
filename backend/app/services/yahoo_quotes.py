@@ -31,7 +31,12 @@ _HEADERS = {
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
 }
-_TTL_SECONDS = 30.0  # longer than MIS's 5s — Yahoo data is delayed anyway
+# Short cache so on-screen prices stay close to the broker. Yahoo's US quotes
+# are near-real-time, so the main lag is this cache; 10s keeps prices fresh
+# while staying well under Yahoo's rate limits (only open US tickers are
+# fetched — TW goes through the relay/MIS). The frontend re-polls every 5s
+# during market hours, so effective freshness is ~10s.
+_TTL_SECONDS = 10.0
 _cache: dict[str, tuple[float, QuoteData]] = {}
 _lock = Lock()
 
