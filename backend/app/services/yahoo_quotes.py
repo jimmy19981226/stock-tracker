@@ -32,11 +32,12 @@ _HEADERS = {
     )
 }
 # Short cache so on-screen prices stay close to the broker. Yahoo's US quotes
-# are near-real-time, so the main lag is this cache; 10s keeps prices fresh
-# while staying well under Yahoo's rate limits (only open US tickers are
-# fetched — TW goes through the relay/MIS). The frontend re-polls every 5s
-# during market hours, so effective freshness is ~10s.
-_TTL_SECONDS = 10.0
+# are near-real-time, so the main lag is this cache. 5s matches the frontend's
+# in-session poll cadence, so prices refresh on essentially every poll. Only
+# open US tickers hit Yahoo (TW uses the relay/MIS), so this stays within rate
+# limits — the one exception is if the TW relay is down and TW also falls back
+# to Yahoo, which adds more tickers to each fetch.
+_TTL_SECONDS = 5.0
 _cache: dict[str, tuple[float, QuoteData]] = {}
 _lock = Lock()
 
