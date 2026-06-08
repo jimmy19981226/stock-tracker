@@ -2,21 +2,29 @@
 
 # ✦ AI Stock Studio
 
-A self-hosted **Taiwan equities workbench** — live MIS prices, broker-matching P/L, per-stock fundamentals, monthly revenue, quarterly financials, and a streaming AI assistant that **searches the web for fresh news, cites every claim, and analyzes your portfolio** alongside it.
+A self-hosted **multi-market equities workbench** for **Taiwan + US** portfolios — live prices, broker-matching P/L, per-stock fundamentals, monthly revenue, quarterly financials, a **combined net-worth overview** across both markets (NT$ and US$), live-value flash animations, and a streaming, **agentic** AI assistant that searches the web, cites every claim, analyzes your portfolio, and can even **drive the UI for you**.
 
 </div>
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
-> Built because every off-the-shelf TW portfolio tracker either ignores
+> Built because every off-the-shelf portfolio tracker either ignores
 > dividends, charges money, or sends your trade history to a third party.
-> This one runs on your laptop, stores everything in a local SQLite file,
-> and only talks to TWSE MIS for live quotes — no other outbound calls
-> (the AI assistant is opt-in and gated by your own key).
+> This one runs on your laptop, stores everything in a local SQLite file
+> (or your own Neon Postgres), and only pulls public market data — TWSE MIS
+> for Taiwan, Yahoo for US — with no broker login. The AI assistant is opt-in
+> and gated by your own key.
 
 ---
 
 ## What's inside
+
+### 🌏 Multi-market overview (TW + US)
+- **Two portfolios, one app** — Taiwan (TWD) and US (USD) holdings are tracked separately, each with their own dashboard, trades, and dividends. Market is detected from the ticker format (numeric → TW, letters → US).
+- **Overview landing page** — a TW card and a US card showing each market's value, total P/L, today's move, and total earned. Click a card to enter that portfolio; a back button + market chip return you to the overview.
+- **Combined net worth** — both portfolios summed into a single figure shown in **both NT$ and US$**, with the live USD↔TWD rate. The number flashes green/red as it ticks.
+- **Live-value flash** — every price-driven number (combined net worth, each market total, the in-portfolio summary cards, and individual holding price/value) flashes green on an uptick, red on a down-tick.
+- **DB-driven market config** — trading hours, holidays, currency, and timezone for each market live in the database (`markets` + `market_holidays` tables), not hardcoded, so the open/closed status is correct per market and editable without a redeploy.
 
 ### 📊 Live portfolio dashboard
 - Hero **Total Earned** card (realized + dividends) with gradient styling
@@ -38,6 +46,7 @@ All live numbers update every 5 seconds while the Dashboard tab is visible — p
 - **Activity timeline** of every trade and dividend on this ticker
 
 ### ✦ Agentic AI assistant
+- **Drives the UI for you** — tell it "add a buy of 10 NVDA at 120" or "open the US portfolio and show me Apple," and it executes the steps on the real interface: a floating cursor glides to each control, a spotlight highlights it, forms get typed into and submitted. Add-only by design (it never edits or deletes existing records).
 - Slide-in sidebar with persistent chat history (rename, delete, switch threads)
 - **📎 Import trades from a screenshot or PDF** — drop a brokerage screenshot, Gemini extracts every trade and dividend (Taiwan-aware: 民國 dates → Gregorian, 張 → shares × 1000, 買進/賣出 → buy/sell). You review in an editable preview card with per-row checkboxes, then commit. Nothing writes to the DB until you confirm — and the dashboard auto-refreshes the moment you do.
 - **📱 Send from your phone via QR** — opens a modal with a QR pointing to a session URL on your LAN. Scan with your phone's camera, take a photo of the statement, the desktop picks it up automatically and drops you into the same review-and-confirm preview. No AirDrop, no email, no cable.
@@ -148,20 +157,21 @@ Filter bar combining ticker search, trade type, status, and date range. Stock na
 ## Tech stack
 
 ```
-Backend                            Frontend
-─────────────────                  ─────────────────
-FastAPI                            Vite
-SQLAlchemy 2.0                     React 18 + TypeScript
-  · SQLite (local default)         Recharts (charts)
-  · Postgres / Neon (optional)     react-markdown (AI replies)
-TWSE MIS  (live quotes)            remark-gfm (tables / GFM)
-yfinance  (history + fundamentals) Inter font
-FinMind   (TW monthly revenue)     Pure CSS (no framework)
+Backend                                Frontend
+─────────────────                      ─────────────────
+FastAPI                                Vite
+SQLAlchemy 2.0                         React 18 + TypeScript
+  · SQLite (local default)             Recharts (charts)
+  · Postgres / Neon (optional)         react-markdown (AI replies)
+TWSE MIS    (live TW quotes)           remark-gfm (tables / GFM)
+Yahoo       (live US quotes + history) Inter font
+FinMind     (TW monthly revenue)       Pure CSS (no framework)
 google-genai (Gemini AI)
+quote relay + ngrok  (cloud TW quotes)
 python-multipart · python-dotenv · psycopg
 ```
 
-All TW data flows through standardised endpoints (TWSE MIS, FinMind, yfinance) — no scraping, no broker login, no paid feeds.
+All market data flows through standardised public endpoints (TWSE MIS, Yahoo, FinMind) — no scraping, no broker login, no paid feeds. Because TWSE MIS only answers from Taiwan IPs, a hosted backend reaches it through a small **quote relay** running on a Taiwan/home connection, exposed at a permanent **ngrok** URL (see [Real-time TW quotes in the cloud](#real-time-tw-quotes-in-the-cloud-the-relay)). US quotes from Yahoo work from anywhere.
 
 ---
 
@@ -176,26 +186,28 @@ flowchart LR
     PhonePage[Mobile upload page<br/>scans QR, picks photo]
   end
   subgraph Backend["FastAPI :8011"]
-    Trades["/api/trades"]
-    Dividends["/api/dividends"]
-    Portfolio["/api/portfolio/*"]
+    Trades["/api/trades · /api/dividends"]
+    Portfolio["/api/portfolio/*<br/>holdings · overview · summary"]
+    Markets["/api/markets<br/>DB-driven config"]
     Stock["/api/stock/:ticker/detail"]
     Data["/api/data/*"]
-    AI["/api/ai/*"]
+    AI["/api/ai/*<br/>chat · agentic planner"]
     Mobile["/api/mobile/sessions/*<br/>/m/upload/:token"]
-    Quotes["tw_quotes.py — 5s in-mem cache"]
+    Quotes["tw_quotes · yahoo_quotes<br/>5s cache (TW + US)"]
     SInfo["stock_info.py — 1h fundamentals · 6h financials"]
-    DB[("SQLite trades.db<br/>chats · chat_messages")]
+    DB[("trades.db / Neon<br/>trades · markets · chats")]
   end
-  TWSE[("TWSE MIS<br/>~5s")]
+  TWSE[("TWSE MIS<br/>live TW · ~5s")]
+  Relay["quote relay (TW IP)<br/>via ngrok — cloud hop"]
+  YLive[("Yahoo<br/>live US quotes + FX")]
   YF[("yfinance<br/>history · fundamentals")]
   FM[("FinMind<br/>monthly revenue")]
   Gemini[("Google Gemini 2.5 Flash<br/>SSE streaming · vision · opt-in")]
   GSearch[("Google Search<br/>via Gemini grounding")]
 
   UI -- "fetch /api/*" --> Trades
-  UI --> Dividends
   UI --> Portfolio
+  UI --> Markets
   UI --> Stock
   UI --> Data
   UI -- "SSE stream" --> AI
@@ -203,9 +215,9 @@ flowchart LR
   PhonePage -- "GET upload page" --> Mobile
   PhonePage -- "POST file" --> Mobile
   Trades --> DB
-  Dividends --> DB
   Data --> DB
   Portfolio --> DB
+  Markets --> DB
   Portfolio --> Quotes
   Stock --> Quotes
   Stock --> SInfo
@@ -215,6 +227,9 @@ flowchart LR
   Mobile -- "vision parse" --> Gemini
   Gemini -- "google_search tool" --> GSearch
   Quotes --> TWSE
+  Quotes -. "cloud only" .-> Relay
+  Relay --> TWSE
+  Quotes --> YLive
   SInfo --> YF
   SInfo --> FM
 ```
@@ -227,46 +242,58 @@ flowchart LR
 backend/
   app/
     main.py            FastAPI app + CORS + seed-load + .env loader
-    database.py        Trade, Dividend, Metadata, Chat, ChatMessage models
+    database.py        Trade, Dividend (+ market col), Metadata, Chat,
+                       ChatMessage, Market, MarketHoliday models + seeding
     schemas.py         Pydantic request/response models
     routers/
       trades.py        CRUD + PUT + FIFO open/closed status per row
       dividends.py     CRUD + PUT for dividends
-      portfolio.py     holdings / summary / earnings-history / names / quote
+      portfolio.py     holdings / overview / summary / earnings / names / quote
+      markets.py       market configs + holiday add/remove (DB-driven)
       data.py          unified portfolio.csv import + export
-      ai.py            Gemini Q&A + persistent chat history (CRUD)
-      stock.py         per-stock detail (live + fundamentals + financials)
+      ai.py            Gemini Q&A + agentic UI planner + chat history (CRUD)
+      stock.py         per-stock detail (parallel live + fundamentals + financials)
     services/
-      quotes.py        QuoteData + symbol resolution
+      quotes.py        QuoteData + symbol resolution + TW/US market detection
       tw_quotes.py     TWSE MIS client (batched, 5s cache, name capture)
+      yahoo_quotes.py  US live quotes via Yahoo (5s cache)
+      quote_relay_client.py  cloud → relay hop for TW quotes (ngrok URL)
+      markets.py       DB-driven market config: currency, hours, holidays, open/closed
       portfolio.py     avg-cost, realized P/L, daily earnings, gross MV
       stock_info.py    yfinance fundamentals + history + TAIEX,
                        FinMind monthly revenue, quarterly_income_stmt
-      csv_io.py        unified CSV parse + serialize
+      fx.py            USD↔TWD rate (Yahoo, cached) for combined net worth
+      csv_io.py · xlsx_io.py   unified import / export
+  quote_relay.py       run on a TW connection; cloud reaches MIS through it
   data/trades.db       (auto-created, gitignored)
 frontend/
   src/
-    App.tsx            shell + Dashboard / Trades / Dividends / Data tabs
+    App.tsx            shell + Overview / per-market Dashboard / Trades / Dividends
     api.ts             typed fetch client
-    format.ts          money / percent / date / TW-detection helpers
+    format.ts          money / percent / date + config-driven market hours
     index.css          premium dark theme + animated gradient mesh
+    agent/             agentic executor — floating cursor + spotlight, drives DOM
     components/
+      Overview.tsx            landing page: TW + US cards + combined net worth
+      FlashValue.tsx          green/red flash wrapper for any live number
       PortfolioSummary.tsx    hero + per-currency cards (sticky last-good)
       PerformanceChart.tsx    stacked area earnings chart
       UnrealizedChart.tsx     divergent bar chart, sorted by P/L
       AllocationChart.tsx     donut + legend with names
       HoldingsTable.tsx       open positions, click → StockDetail modal
       StockDetail.tsx         per-stock modal (key stats + chart + financials)
-      TradeForm.tsx           buy/sell entry with live name lookup
+      TradeForm.tsx           buy/sell entry with market + live name lookup
       TradeList.tsx           filter + paginate + inline edit + status
       DividendForm.tsx        dividend entry with live name lookup
       DividendList.tsx        filter + paginate + inline edit
       DataPanel.tsx           CSV import/export + last-export tracker
-      MarketStatus.tsx        TW market open/closed pill
+      MarketStatus.tsx        active market's open/closed pill (TW or US)
       Pagination.tsx          page-size + page-number controls
       AssistantPanel.tsx      Gemini chat sidebar (markdown, stop, history)
     hooks/
       useTickerName.ts        debounced ticker → name resolution
+tools/
+  start-relay-ngrok.ps1  one-click relay + permanent ngrok tunnel (TW quotes)
 ```
 
 ---
@@ -329,7 +356,8 @@ To reach the app from your phone or any device, host the three pieces — all ha
 - **Database → [Neon](https://neon.tech)** (Postgres). Create a project, copy the connection string.
 - **Backend → [Render](https://render.com)** (Web Service). The repo ships a [`render.yaml`](render.yaml)
   blueprint — point Render at the repo and set these env vars in the dashboard:
-  `DATABASE_URL` (Neon), `GOOGLE_AI_API_KEY` (optional), and `FRONTEND_ORIGINS` (your Vercel URL).
+  `DATABASE_URL` (Neon), `GOOGLE_AI_API_KEY` (optional), `FRONTEND_ORIGINS` (your Vercel URL),
+  and optionally `QUOTE_RELAY_URL` + `QUOTE_RELAY_SECRET` for live TW quotes (see below).
 - **Frontend → [Vercel](https://vercel.com)** (static). Set **Root Directory** to `frontend` and add the
   env var `VITE_API_BASE` = your Render backend URL.
 
@@ -338,27 +366,49 @@ Deploy order: **backend first** (to get its URL) → frontend (with `VITE_API_BA
 "scale to zero," so the first request after idle takes ~30–60 s to wake, then it's fast. The QR
 phone-upload feature assumes a local network and won't work over the public internet.
 
+### Real-time TW quotes in the cloud (the relay)
+
+TWSE MIS only answers requests from **Taiwan IPs**, so a cloud-hosted backend can't fetch live TW
+prices directly — it falls back to Yahoo, which is **~15 min delayed** for TW. To get near-real-time
+TW quotes on the deployed app, run the **quote relay** on a machine that *can* reach MIS and expose it
+at a stable URL:
+
+1. **Run** [`tools/start-relay-ngrok.ps1`](tools/start-relay-ngrok.ps1) (Windows). It starts
+   `quote_relay.py` on `localhost:8500` and opens a **permanent [ngrok](https://ngrok.com) tunnel** to it.
+2. **One-time ngrok setup** — a free ngrok account gives you one free static domain; paste your
+   authtoken + domain into `tools/ngrok_authtoken.txt` / `tools/ngrok_domain.txt` (the script reads them).
+3. **Point the backend at it** — set `QUOTE_RELAY_URL` (your ngrok URL) and `QUOTE_RELAY_SECRET`
+   (matching `tools/relay_secret.txt`) in Render's env. The cloud now borrows your machine's TW
+   connection just for the quote hop; everything else stays on the cloud.
+
+The relay is read-only (quotes only — it never touches your DB). TW prices are live while the relay is
+running; when it's off, the app transparently falls back to delayed Yahoo. **US prices need no relay** —
+Yahoo serves them from anywhere. Tell the source apart on `/api/portfolio/quote/2330`: the MIS feed
+returns the Chinese name (台積電) and bid/ask/volume; Yahoo returns the English name only.
+
 ---
 
 ## How it works
 
-- **Ticker resolution** — bare 4-6 digit codes (`2330`, `00919`, `00937B`) auto-suffix to `xxxx.TW` against TWSE MIS.
-- **Live quotes** — TW tickers go to TWSE MIS, batched into a single HTTP call per refresh. We probe both `tse_` (上市) and `otc_` (上櫃) prefixes per ticker so callers don't need to know which exchange.
+- **Market detection** — a ticker's format decides its market: numeric codes (`2330`, `00919`, `00937B`) → **TW / TWD**, alphabetic symbols (`NVDA`, `BRK.B`) → **US / USD**. Each trade/dividend also carries an explicit `market` column.
+- **Ticker resolution** — bare 4-6 digit TW codes auto-suffix to `xxxx.TW`; US symbols resolve directly.
+- **Live quotes** — TW tickers go to **TWSE MIS** (batched into one HTTP call per refresh, probing both `tse_` 上市 and `otc_` 上櫃 prefixes); US tickers go to **Yahoo**. Both are cached ~5 s server-side so the 5 s frontend poll tracks the broker closely without hammering either source.
+- **Combined net worth** — the Overview sums both portfolios into one figure shown in NT$ **and** US$, converting with a live USD↔TWD rate (Yahoo, cached). If a market that holds positions is missing a live value, the combined total blanks rather than showing a fabricated number.
 - **Cost basis** — weighted-average. Sells reduce open cost basis proportionally and realize the difference vs. average price (minus fees).
 - **Market value** — `current_price × shares`, gross. Matches 資產市值 / 總現值 in most TW broker apps.
 - **Unrealized P/L** — market value − cost basis − estimated exit cost (sell commission 0.1425% + securities transaction tax: 0.3% shares / 0.1% equity ETFs / 0% bond ETFs, each floored). This nets out the cost of liquidating, so it lines up with the broker's 損益試算 / 獲利率 columns rather than the gross gain.
 - **Open vs closed status** — FIFO-matched per ticker: buys queue up; sells consume buy lots front-first; any buy lot with leftover shares is `open`, fully-consumed buys and all sells are `closed`.
-- **Per-stock detail** — `/api/stock/{ticker}/detail` aggregates live MIS quote + yfinance fundamentals (1 h cache) + yfinance daily history + FinMind monthly revenue + yfinance quarterly_income_stmt (6 h cache) + your local trades / dividends — all in one call.
+- **Per-stock detail** — `/api/stock/{ticker}/detail` aggregates the live quote + yfinance fundamentals (1 h cache) + daily history + FinMind monthly revenue (TW) + yfinance quarterly financials (6 h cache) + your local trades / dividends in one call. The five upstream fetches run **concurrently**, so the modal loads in ~the slowest single call instead of the sum.
 - **AI context** — every chat sends your full portfolio JSON + light fundamentals on every holding. If your question mentions a ticker, deep monthly revenue + quarterly margins for that ticker also get attached so the model can answer trend questions with citations.
 
 ### Live data flow
 
-The Dashboard tab polls `/api/portfolio/{holdings,summary,earnings-history,names}` every 5 s while it's the active view AND the browser tab is visible. The backend's MIS cache (5 s TTL) absorbs duplicate calls, so even with multiple browser tabs open you'll hit MIS once per 5 s per ticker batch.
+The Dashboard tab polls `/api/portfolio/{holdings,summary,earnings-history,names}` every 5 s while it's the active view AND the browser tab is visible (the Overview polls its own summary every 15 s). The server-side quote caches (~5 s) absorb duplicate calls, and `names` is cached ~10 min so the poll never re-fetches quotes for closed positions. Live numbers **flash green/red** as they tick.
 
-The header shows two pills:
+The header shows two pills, **scoped to the market you're viewing**:
 
-- **● TW OPEN** (green, pulsing) when 09:00 ≤ Taipei time < 13:30 on weekdays. **● TW CLOSED** (grey) otherwise. Auto-flips at 09:00 / 13:30; checks every 60 s.
-- **● LIVE** (green, pulsing) appears whenever the polling loop is active. Disappears the moment you switch tabs, minimize, or navigate away from the Dashboard.
+- **● TW OPEN / US OPEN** (green, pulsing) during that market's hours — TW 09:00–13:30 Taipei, US 09:30–16:00 New York — **● CLOSED** (grey) otherwise. Hours, holidays, and timezone come from the DB `markets` config, so it's correct per market and editable without a redeploy.
+- **● LIVE** (green, pulsing) appears whenever the polling loop is active. Disappears the moment you switch tabs, minimize, or navigate away.
 
 Outside market hours MIS rolls `y` (yesterday's close) over to today's close, but the parser caches the last good quote per ticker and uses bid/ask midpoint / `o` (today's open) as fallbacks — so the TODAY column doesn't collapse to 0 % between trades.
 
@@ -404,13 +454,17 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | GET    | /api/data/export                    | download unified portfolio CSV              |
 | POST   | /api/data/import?mode={append,replace} | upload unified CSV                       |
 | GET    | /api/data/last-export               | timestamp of most recent export             |
-| GET    | /api/portfolio/holdings             | per-ticker open positions + live P/L        |
-| GET    | /api/portfolio/summary              | TWD totals incl. dividends + total earned   |
+| GET    | /api/portfolio/holdings             | per-ticker open positions + live P/L (TW + US) |
+| GET    | /api/portfolio/overview             | TW + US summary cards + combined net worth (NT$ & US$) + FX |
+| GET    | /api/portfolio/summary              | per-currency totals incl. dividends + total earned |
 | GET    | /api/portfolio/names                | ticker → short-name map (e.g. 2330→台積電)    |
 | GET    | /api/portfolio/realized-history?days=N | daily cumulative realized P/L            |
 | GET    | /api/portfolio/earnings-history?days=N | daily cumulative realized + dividends    |
 | GET    | /api/portfolio/quote/{ticker}       | live spot quote (price + name)              |
-| GET    | /api/stock/{ticker}/detail?period=  | live + fundamentals + history + financials  |
+| GET    | /api/stock/{ticker}/detail?period=  | live + fundamentals + history + financials (parallel-fetched) |
+| GET    | /api/markets                        | market configs (TW/US): currency, timezone, hours, holidays |
+| POST   | /api/markets/{code}/holidays        | add a market closure (date, name?) — no redeploy |
+| DELETE | /api/markets/{code}/holidays/{date} | remove a market closure                     |
 | GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
 | POST   | /api/ai/chat                        | SSE stream: `init` → `chunk` × N → `done` (or `error`); persists final reply with `[N]` citation markers |
 | POST   | /api/ai/parse-records               | upload an image/PDF, get `{trades, dividends, notes}` back — read-only, nothing written to DB |
@@ -474,9 +528,10 @@ When you ask a question, your portfolio JSON + ticker fundamentals are sent to G
 - Your trade data lives in `backend/data/trades.db` (SQLite, on disk).
 - The DB and any `seed/` files are gitignored — never pushed to GitHub.
 - Outbound calls:
-  - **TWSE MIS** (`https://mis.twse.com.tw`) — live quotes, always.
-  - **yfinance / Yahoo Finance** — daily history + fundamentals (no auth, public).
+  - **TWSE MIS** (`https://mis.twse.com.tw`) — live TW quotes (directly when local; via your own quote relay when cloud-hosted).
+  - **Yahoo Finance** — live US quotes, daily history + fundamentals, and the USD↔TWD rate (no auth, public).
   - **FinMind** (`https://api.finmindtrade.com`) — TW monthly revenue (no auth on the free tier).
+  - **ngrok** — only if you run the optional TW quote relay; it tunnels *your* relay (quotes only, never your DB).
   - **Google AI** (`https://generativelanguage.googleapis.com`) — only when you've set `GOOGLE_AI_API_KEY` and ask a question in the Assistant.
   - **Google Search** — invoked indirectly by Gemini's `google_search` tool when grounding a reply. URLs returned are Vertex AI redirect URLs that proxy to the actual source on click.
 - No analytics, no telemetry, no third-party storage.
