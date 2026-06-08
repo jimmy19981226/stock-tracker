@@ -3891,50 +3891,32 @@ main.app {
   font-size: 12px;
 }
 
-/* Direction-aware flash when the combined net worth ticks up/down: a green/red
-   glow ring around the hero + a subtle pop on the numbers. */
-.networth-amount {
-  transition: transform 0.2s ease;
-}
+/* Direction-aware flash when the combined net worth ticks up/down — on the
+   NUMBER only (pop + colored glow on the digits), nothing on the card. */
 .networth-hero.flash-up {
-  --nw-flash: 52, 211, 153;
+  --nw-flash: 52, 211, 153; /* green */
 }
 .networth-hero.flash-down {
-  --nw-flash: 248, 113, 113;
-}
-.networth-hero.flash-up,
-.networth-hero.flash-down {
-  animation: nw-glow 0.9s ease;
+  --nw-flash: 248, 113, 113; /* red */
 }
 .networth-hero.flash-up .networth-amount,
 .networth-hero.flash-down .networth-amount {
-  animation: nw-pop 0.6s ease;
+  animation: nw-num-flash 0.9s ease;
 }
-@keyframes nw-glow {
+/* drop-shadow glows the gradient text (a text-shadow can't — the fill is
+   transparent for the gradient clip). */
+@keyframes nw-num-flash {
   0%,
   100% {
-    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.3));
+    transform: scale(1);
+    filter: none;
   }
   30% {
-    box-shadow:
-      0 0 0 1px rgba(var(--nw-flash), 0.6),
-      0 0 38px 4px rgba(var(--nw-flash), 0.42);
-  }
-}
-@keyframes nw-pop {
-  0% {
-    transform: scale(1);
-  }
-  35% {
-    transform: scale(1.045);
-  }
-  100% {
-    transform: scale(1);
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 12px rgba(var(--nw-flash), 0.75));
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .networth-hero.flash-up,
-  .networth-hero.flash-down,
   .networth-hero.flash-up .networth-amount,
   .networth-hero.flash-down .networth-amount {
     animation: none !important;
