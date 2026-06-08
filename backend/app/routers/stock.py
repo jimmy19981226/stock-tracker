@@ -10,6 +10,7 @@ Aggregates everything the detail UI needs in one call:
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timezone
 from typing import Literal
 
@@ -57,11 +58,19 @@ def stock_detail(
     }
 
     # --- fundamentals + history + financials (yfinance/FinMind, cached) ---
-    fundamentals = stock_info.get_fundamentals(ticker)
-    history = stock_info.get_history(ticker, period)
-    taiex = stock_info.get_taiex_history(period)
-    monthly_revenue = stock_info.get_monthly_revenue(ticker, months=24)
-    quarterly_financials = stock_info.get_quarterly_financials(ticker, quarters=8)
+    # These are independent network calls; run them concurrently so the modal
+    # loads in ~the slowest single call instead of the sum of all five.
+    with ThreadPoolExecutor(max_workers=5) as _ex:
+        _f_fund = _ex.submit(stock_info.get_fundamentals, ticker)
+        _f_hist = _ex.submit(stock_info.get_history, ticker, period)
+        _f_taiex = _ex.submit(stock_info.get_taiex_history, period)
+        _f_rev = _ex.submit(stock_info.get_monthly_revenue, ticker, months=24)
+        _f_fin = _ex.submit(stock_info.get_quarterly_financials, ticker, quarters=8)
+        fundamentals = _f_fund.result()
+        history = _f_hist.result()
+        taiex = _f_taiex.result()
+        monthly_revenue = _f_rev.result()
+        quarterly_financials = _f_fin.result()
 
     # --- position state from user's trades ---
     trades = db.query(Trade).filter(Trade.ticker == ticker).order_by(Trade.trade_date).all()

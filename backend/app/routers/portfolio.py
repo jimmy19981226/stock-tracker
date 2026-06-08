@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -5,6 +7,13 @@ from ..database import Dividend, Trade, get_db
 from ..services import fx, portfolio, quotes
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
+
+# Ticker -> name almost never changes, but get_names used to fetch live quotes
+# for EVERY ticker ever traded (incl. closed positions) on every 5s poll. Cache
+# the result so that heavy fetch happens at most once per TTL (keyed by the
+# ticker set, so a newly-added ticker still refreshes immediately).
+_NAMES_TTL_SECONDS = 600.0
+_names_cache: dict = {"key": None, "at": 0.0, "value": {}}
 
 
 @router.get("/holdings")
@@ -74,14 +83,28 @@ def get_names(db: Session = Depends(get_db)):
     Pulled from the live quote service (TWSE MIS for TW)."""
     trade_tickers = {t for (t,) in db.query(Trade.ticker).distinct()}
     dividend_tickers = {t for (t,) in db.query(Dividend.ticker).distinct()}
-    all_tickers = sorted(trade_tickers | dividend_tickers)
+    all_tickers = tuple(sorted(trade_tickers | dividend_tickers))
     if not all_tickers:
         return {}
+
+    now = time.time()
+    cached = _names_cache
+    if (
+        cached["key"] == all_tickers
+        and cached["value"]
+        and now - cached["at"] < _NAMES_TTL_SECONDS
+    ):
+        return cached["value"]
+
     quote_map = quotes.get_quotes(all_tickers)
-    return {
+    names = {
         t: (quote_map[t].name if t in quote_map and quote_map[t].name else "")
         for t in all_tickers
     }
+    # Only cache once we actually have names (don't pin a failed/empty fetch).
+    if any(names.values()):
+        _names_cache.update({"key": all_tickers, "at": now, "value": names})
+    return names
 
 
 @router.get("/quote/{ticker}")

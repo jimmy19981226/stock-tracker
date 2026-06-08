@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   api,
   type CurrencySummary,
@@ -22,6 +22,10 @@ const MARKETS: { code: MarketCode; label: string; flag: string; currency: string
 export function Overview({ onEnter }: Props) {
   const [data, setData] = useState<PortfolioOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Direction-aware flash when the combined net worth ticks up/down.
+  const [flash, setFlash] = useState<"up" | "down" | null>(null);
+  const prevTwd = useRef<number | null>(null);
+  const flashTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,10 +33,17 @@ export function Overview({ onEnter }: Props) {
       api
         .getOverview()
         .then((d) => {
-          if (!cancelled) {
-            setData(d);
-            setError(null);
+          if (cancelled) return;
+          const cur = d.combined.twd;
+          const prev = prevTwd.current;
+          if (cur != null && prev != null && cur !== prev) {
+            setFlash(cur > prev ? "up" : "down");
+            window.clearTimeout(flashTimer.current);
+            flashTimer.current = window.setTimeout(() => setFlash(null), 900);
           }
+          if (cur != null) prevTwd.current = cur;
+          setData(d);
+          setError(null);
         })
         .catch((e) => {
           if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
@@ -42,6 +53,7 @@ export function Overview({ onEnter }: Props) {
     return () => {
       cancelled = true;
       clearInterval(id);
+      window.clearTimeout(flashTimer.current);
     };
   }, []);
 
@@ -50,7 +62,7 @@ export function Overview({ onEnter }: Props) {
 
   return (
     <div className="overview">
-      <div className="networth-hero panel">
+      <div className={`networth-hero panel${flash ? ` flash-${flash}` : ""}`}>
         <div className="networth-label">Combined net worth</div>
         <div className="networth-values">
           <div className="networth-amount">
