@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Holding } from "../api";
 import { fmtMoney, fmtNumber, fmtPct, plClass } from "../format";
 import { FillerRows } from "./PageFiller";
+import { FlashValue } from "./FlashValue";
 import { Pagination } from "./Pagination";
 
 interface Props {
@@ -98,11 +99,19 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
                   </td>
                   <td>{fmtNumber(h.shares, 4)}</td>
                   <td>{fmtMoney(h.avg_cost, currency)}</td>
-                  <td>{fmtMoney(h.current_price, currency)}</td>
+                  <td>
+                    <FlashValue value={h.current_price}>
+                      {fmtMoney(h.current_price, currency)}
+                    </FlashValue>
+                  </td>
                   <td className={plClass(h.today_change_pct)}>
                     {fmtPct(h.today_change_pct)}
                   </td>
-                  <td>{fmtMoney(h.market_value, currency)}</td>
+                  <td>
+                    <FlashValue value={h.market_value}>
+                      {fmtMoney(h.market_value, currency)}
+                    </FlashValue>
+                  </td>
                   <td className={plClass(h.unrealized_pl)}>
                     {fmtMoney(h.unrealized_pl, currency)}
                   </td>

@@ -6,6 +6,7 @@ import {
   type PortfolioOverview,
 } from "../api";
 import { fmtMoney, fmtPct, plClass } from "../format";
+import { FlashValue } from "./FlashValue";
 
 interface Props {
   onEnter: (market: MarketCode) => void;
@@ -119,7 +120,9 @@ export function Overview({ onEnter }: Props) {
               {hasPositions ? (
                 <>
                   <div className="market-card-value">
-                    {fmtMoney(s!.total_value, m.currency)}
+                    <FlashValue value={s!.total_value}>
+                      {fmtMoney(s!.total_value, m.currency)}
+                    </FlashValue>
                   </div>
                   <div className="market-card-stats">
                     <div className="mcs">

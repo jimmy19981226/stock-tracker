@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { CurrencySummary } from "../api";
 import { fmtMoney, fmtPct, plClass } from "../format";
+import { FlashValue } from "./FlashValue";
 
 interface Props {
   summaries: CurrencySummary[];
@@ -73,13 +74,19 @@ export function PortfolioSummary({ summaries }: Props) {
             <div className="summary-card" data-agent="summary-total-return">
               <div className="label">Total Return</div>
               <div className={`value ${plClass(totalReturn)}`}>
-                {fmtMoney(totalReturn, s.currency)}
+                <FlashValue value={totalReturn}>
+                  {fmtMoney(totalReturn, s.currency)}
+                </FlashValue>
               </div>
               <div className="sub muted">Realized + dividends + unrealized</div>
             </div>
             <div className="summary-card" data-agent="summary-market-value">
               <div className="label">Market Value</div>
-              <div className="value">{fmtMoney(s.total_value, s.currency)}</div>
+              <div className="value">
+                <FlashValue value={s.total_value}>
+                  {fmtMoney(s.total_value, s.currency)}
+                </FlashValue>
+              </div>
               <div className="sub muted">
                 Cost: {fmtMoney(s.total_cost, s.currency)}
               </div>
@@ -87,7 +94,9 @@ export function PortfolioSummary({ summaries }: Props) {
             <div className="summary-card" data-agent="summary-unrealized">
               <div className="label">Unrealized P/L</div>
               <div className={`value ${plClass(s.total_pl)}`}>
-                {fmtMoney(s.total_pl, s.currency)}
+                <FlashValue value={s.total_pl}>
+                  {fmtMoney(s.total_pl, s.currency)}
+                </FlashValue>
               </div>
               <div className={`sub ${plClass(s.total_pl_pct)}`}>
                 {fmtPct(s.total_pl_pct)}
@@ -110,7 +119,9 @@ export function PortfolioSummary({ summaries }: Props) {
             <div className="summary-card" data-agent="summary-today">
               <div className="label">Today</div>
               <div className={`value ${plClass(s.today_pl)}`}>
-                {fmtMoney(s.today_pl, s.currency)}
+                <FlashValue value={s.today_pl}>
+                  {fmtMoney(s.today_pl, s.currency)}
+                </FlashValue>
               </div>
               <div className={`sub ${plClass(s.today_pl_pct)}`}>
                 {fmtPct(s.today_pl_pct)}

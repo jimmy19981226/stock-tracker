@@ -3941,6 +3941,39 @@ main.app {
   }
 }
 
+/* Generic per-value tick flash (<FlashValue>) — used on every live number:
+   market cards, summary totals, and individual holding prices/values. */
+.tick-up,
+.tick-down {
+  border-radius: 6px;
+  padding: 0 4px;
+  margin: 0 -4px;
+  animation: tick-flash 0.9s ease;
+}
+.tick-up {
+  --tick: 52, 211, 153; /* green */
+}
+.tick-down {
+  --tick: 248, 113, 113; /* red */
+}
+@keyframes tick-flash {
+  0%,
+  100% {
+    background-color: rgba(var(--tick), 0);
+    box-shadow: none;
+  }
+  22% {
+    background-color: rgba(var(--tick), 0.22);
+    box-shadow: 0 0 14px rgba(var(--tick), 0.5);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tick-up,
+  .tick-down {
+    animation: none !important;
+  }
+}
+
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
