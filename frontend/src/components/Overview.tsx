@@ -143,6 +143,12 @@ export function Overview({ onEnter }: Props) {
                         {fmtMoney(s!.total_earned, m.currency)}
                       </span>
                     </div>
+                    <div className="mcs">
+                      <span className="mcs-label muted">{s!.year} earned</span>
+                      <span className={`mcs-value ${plClass(s!.year_earned)}`}>
+                        {fmtMoney(s!.year_earned, m.currency)}
+                      </span>
+                    </div>
                   </div>
                 </>
               ) : (

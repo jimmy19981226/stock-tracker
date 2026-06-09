@@ -59,6 +59,8 @@ export interface CurrencySummary {
   realized_pl: number;
   dividends: number;
   total_earned: number;
+  year_earned: number;
+  year: number;
   holdings_count: number;
 }
 

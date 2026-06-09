@@ -190,11 +190,27 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
         currency = quotes.currency_of(ticker_market.get(ticker) or quotes.market_of(ticker))
         realized_by_currency[currency] += st.realized_pl
 
-    # Dividend income grouped by currency (from each dividend's stored market)
+    # Current-year ("this year") realized P/L: replay trades chronologically and
+    # count only the realized delta from sells dated in the current year.
+    current_year = date.today().year
+    year_realized_by_currency: dict[str, float] = defaultdict(float)
+    yr_states: dict[str, HoldingState] = {}
+    for tr in sorted(trades, key=lambda t: (t.trade_date, t.id)):
+        st = yr_states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
+        before = st.realized_pl
+        _apply_trade(st, tr)
+        if tr.trade_date.year == current_year:
+            currency = quotes.currency_of(tr.market or quotes.market_of(tr.ticker))
+            year_realized_by_currency[currency] += st.realized_pl - before
+
+    # Dividend income grouped by currency — total and current-year.
     dividends_by_currency: dict[str, float] = defaultdict(float)
+    year_dividends_by_currency: dict[str, float] = defaultdict(float)
     for div in db.query(Dividend).all():
         currency = quotes.currency_of(div.market or quotes.market_of(div.ticker))
         dividends_by_currency[currency] += div.amount
+        if div.pay_date.year == current_year:
+            year_dividends_by_currency[currency] += div.amount
 
     all_currencies = (
         set(groups)
@@ -239,6 +255,11 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
                 "realized_pl": realized,
                 "dividends": dividends,
                 "total_earned": realized + dividends,
+                "year_earned": (
+                    year_realized_by_currency.get(currency, 0.0)
+                    + year_dividends_by_currency.get(currency, 0.0)
+                ),
+                "year": current_year,
                 "holdings_count": len(items),
             }
         )

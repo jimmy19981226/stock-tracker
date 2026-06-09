@@ -71,6 +71,13 @@ export function PortfolioSummary({ summaries }: Props) {
                 Dividends {fmtMoney(s.dividends, s.currency)}
               </div>
             </div>
+            <div className="summary-card" data-agent="summary-year-earned">
+              <div className="label">{s.year} Earned</div>
+              <div className={`value ${plClass(s.year_earned)}`}>
+                {fmtMoney(s.year_earned, s.currency)}
+              </div>
+              <div className="sub muted">Realized + dividends this year</div>
+            </div>
             <div className="summary-card" data-agent="summary-total-return">
               <div className="label">Total Return</div>
               <div className={`value ${plClass(totalReturn)}`}>
