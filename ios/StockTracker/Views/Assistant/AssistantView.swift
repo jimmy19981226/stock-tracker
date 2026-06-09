@@ -94,6 +94,41 @@ final class AssistantViewModel: ObservableObject {
         streamingText = ""
         error = nil
     }
+
+    var currentChatId: Int? { chatId }
+
+    // MARK: - Chat history
+
+    @Published var chats: [ChatSummary] = []
+    @Published var loadingChats = false
+
+    func loadChats() async {
+        loadingChats = true
+        chats = (try? await APIClient.shared.listChats()) ?? []
+        loadingChats = false
+    }
+
+    /// Open a past conversation into the transcript.
+    func openChat(_ id: Int) async {
+        guard let detail = try? await APIClient.shared.getChat(id) else { return }
+        messages = detail.messages
+        streamingText = ""
+        error = nil
+        chatId = detail.id
+    }
+
+    func deleteChat(_ id: Int) async {
+        try? await APIClient.shared.deleteChat(id)
+        chats.removeAll { $0.id == id }
+        if chatId == id { reset() }   // deleting the open chat clears the transcript
+    }
+
+    func deleteAllChats() async {
+        let ids = chats.map(\.id)
+        for id in ids { try? await APIClient.shared.deleteChat(id) }
+        chats = []
+        reset()
+    }
 }
 
 /// The AI assistant chat — a native iMessage-style transcript with a streamed
@@ -101,6 +136,7 @@ final class AssistantViewModel: ObservableObject {
 struct AssistantView: View {
     @StateObject private var vm = AssistantViewModel()
     @State private var showSettings = false
+    @State private var showHistory = false
     @State private var providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
     @FocusState private var inputFocused: Bool
 
@@ -116,6 +152,11 @@ struct AssistantView: View {
         .navigationTitle("Assistant")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { showHistory = true } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { vm.reset() } label: { Image(systemName: "square.and.pencil") }
                     .disabled(vm.messages.isEmpty && vm.streamingText.isEmpty)
@@ -127,9 +168,13 @@ struct AssistantView: View {
                 Button("Done") { inputFocused = false }
             }
         }
+        .sheet(isPresented: $showHistory) { ChatHistoryView(vm: vm) }
         .sheet(isPresented: $showSettings) { SettingsView() }
         .task { await vm.loadStatus() }
-        .onAppear { providerHasKey = AISettings.hasKey(for: AISettings.activeProvider) }
+        .onAppear {
+            providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
+            if ProcessInfo.processInfo.environment["UITEST_HISTORY"] == "1" { showHistory = true }
+        }
     }
 
     private var noKeyBanner: some View {
