@@ -6,7 +6,13 @@ A self-hosted **multi-market equities workbench** for **Taiwan + US** portfolios
 
 </div>
 
-![Dashboard](docs/screenshots/dashboard.png)
+<div align="center">
+<img src="docs/screenshots/ios-overview.png" width="250" alt="Net-worth overview" />
+&nbsp;&nbsp;
+<img src="docs/screenshots/ios-dashboard.png" width="250" alt="Portfolio dashboard" />
+&nbsp;&nbsp;
+<img src="docs/screenshots/ios-assistant.png" width="250" alt="AI assistant" />
+</div>
 
 > Built because every off-the-shelf portfolio tracker either ignores
 > dividends, charges money, or sends your trade history to a third party.
@@ -19,15 +25,7 @@ A self-hosted **multi-market equities workbench** for **Taiwan + US** portfolios
 
 ## 📱 Native iOS app
 
-A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — bottom tab bar, dark "studio" theme, Swift Charts, an animated splash, Google sign-in, multi-provider AI (OpenAI / Gemini / Claude with your own key), **Claude-style Markdown** in the assistant, and per-user data scoping. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md).
-
-<div align="center">
-<img src="docs/screenshots/ios-overview.png" width="240" alt="Net-worth overview" />
-&nbsp;
-<img src="docs/screenshots/ios-dashboard.png" width="240" alt="Portfolio dashboard" />
-&nbsp;
-<img src="docs/screenshots/ios-assistant.png" width="240" alt="AI assistant" />
-</div>
+A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — bottom tab bar, dark "studio" theme, Swift Charts, an animated splash, Google sign-in, multi-provider AI (OpenAI / Gemini / Claude with your own key), **Claude-style Markdown** in the assistant, and per-user data scoping. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md). (Screenshots at the top of this README.)
 
 ---
 
