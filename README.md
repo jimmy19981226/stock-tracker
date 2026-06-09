@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A self-hosted **multi-market equities workbench** for **Taiwan + US** portfolios — live prices, broker-matching P/L, per-stock fundamentals, monthly revenue, quarterly financials, a **combined net-worth overview** across both markets (NT$ and US$), live-value flash animations, and a streaming, **agentic** AI assistant that searches the web, cites every claim and analyzes your portfolio.
+A **native iOS app + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), and a streaming AI assistant (your choice of **OpenAI, Gemini, or Claude**) that analyzes your portfolio and can search the web.
 
 </div>
 
@@ -16,10 +16,10 @@ A self-hosted **multi-market equities workbench** for **Taiwan + US** portfolios
 
 > Built because every off-the-shelf portfolio tracker either ignores
 > dividends, charges money, or sends your trade history to a third party.
-> This one runs on your laptop, stores everything in a local SQLite file
-> (or your own Neon Postgres), and only pulls public market data — TWSE MIS
-> for Taiwan, Yahoo for US — with no broker login. The AI assistant is opt-in
-> and gated by your own key.
+> The backend runs anywhere (your machine, or a free Render + Neon deploy),
+> stores everything in SQLite or your own Neon Postgres, and only pulls public
+> market data — TWSE MIS for Taiwan, Yahoo for US — with no broker login. The AI
+> assistant is opt-in and gated by your own provider key.
 
 ---
 
@@ -33,9 +33,9 @@ A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI ba
 
 ### 🌏 Multi-market overview (TW + US)
 - **Two portfolios, one app** — Taiwan (TWD) and US (USD) holdings are tracked separately, each with their own dashboard, trades, and dividends. Market is detected from the ticker format (numeric → TW, letters → US).
-- **Overview landing page** — a TW card and a US card showing each market's value, total P/L, today's move, and total earned. Click a card to enter that portfolio; a back button + market chip return you to the overview.
+- **Overview landing page** — a TW card and a US card showing each market's value, total P/L, and today's move. Tap a card to enter that portfolio; the back button returns you to the overview.
 - **Combined net worth** — both portfolios summed into a single figure shown in **both NT$ and US$**, with the live USD↔TWD rate. The number flashes green/red as it ticks.
-- **Live-value flash** — every price-driven number (combined net worth, each market total, the in-portfolio summary cards, and individual holding price/value) flashes green on an uptick, red on a down-tick.
+- **Color-coded P&L** — gains render green, losses red, across the net worth, market cards, summary, and every holding.
 - **DB-driven market config** — trading hours, holidays, currency, and timezone for each market live in the database (`markets` + `market_holidays` tables), not hardcoded, so the open/closed status is correct per market and editable without a redeploy.
 
 ### 📊 Live portfolio dashboard
@@ -43,44 +43,32 @@ A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI ba
 - **Total Return** card — realized + dividends + unrealized, your all-in profit
 - Per-currency summary grid: market value, unrealized P/L, realized P/L, dividends, and today's move (accent-colored)
 - Unrealized P/L is **net of estimated exit costs** (sell commission + transaction tax), so it matches your broker's 損益試算 / 獲利率 rather than the gross gain
-- **Cumulative earnings chart** stacking realized P/L + dividends
-- **Unrealized P/L by position** with divergent green/red bars, sorted
-- Open positions table + allocation donut
+- **Cumulative earnings chart** (Swift Charts) stacking realized P/L + dividends
+- **Holdings list** — each position with shares, avg cost, market value, and unrealized P&L
 
-All live numbers update every 5 seconds while the Dashboard tab is visible — pauses on tab switch / minimize, resumes on return.
+Holdings/summary refresh while a portfolio is on screen — every 5 s while that market is open, 60 s otherwise.
 
-### 🔎 Per-stock detail (click any holding)
-- **Yahoo-style key stats grid**: previous close, day's range, 52-week range, market cap, P/E, EPS, beta, dividend yield, ex-dividend date, **1-year analyst target** (with consensus count)
-- **Your position card**: shares, avg cost, market value, realized + unrealized + dividends + total return (NT$ and %), yield on cost, holding period, fees paid
-- **Historical price chart** (1M / 3M / 6M / 1Y / 2Y / 5Y / All) with your buys, sells, and dividends overlaid as markers; optional **TAIEX benchmark** overlay
-- **Monthly revenue (月營收)** chart — TW-specific mandatory disclosure, 24 months in NT$ B with a YoY % line on a secondary axis
-- **Quarterly earnings (季報)** — last 8 quarters of revenue, net income, diluted EPS, plus gross / operating / net margin
-- **Activity timeline** of every trade and dividend on this ticker
+### 🔎 Per-stock detail (tap any holding)
+- **Live quote header** + key stats: previous close, day range, market cap, P/E, EPS, beta, dividend yield, 52-week range, **1-year analyst target**
+- **Your position card**: shares, avg cost, market value, realized + unrealized + dividends + total return (and %)
+- **Price-history chart** (1M / 3M / 6M / 1Y / 2Y / 5Y / All) with your buys, sells, and dividends overlaid as markers
+- The backend `/detail` endpoint also serves **monthly revenue (月營收)** and **8 quarters of financials** for any ticker — used to enrich AI answers
 
-### ✦ Agentic AI assistant
-- **Drives the UI for you** — tell it "add a buy of 10 NVDA at 120" or "open the US portfolio and show me Apple," and it executes the steps on the real interface: a floating cursor glides to each control, a spotlight highlights it, forms get typed into and submitted. Add-only by design (it never edits or deletes existing records).
-- Slide-in sidebar with persistent chat history (rename, delete, switch threads)
-- **📎 Import trades from a screenshot or PDF** — drop a brokerage screenshot, Gemini extracts every trade and dividend (Taiwan-aware: 民國 dates → Gregorian, 張 → shares × 1000, 買進/賣出 → buy/sell). You review in an editable preview card with per-row checkboxes, then commit. Nothing writes to the DB until you confirm — and the dashboard auto-refreshes the moment you do.
-- **📱 Send from your phone via QR** — opens a modal with a QR pointing to a session URL on your LAN. Scan with your phone's camera, take a photo of the statement, the desktop picks it up automatically and drops you into the same review-and-confirm preview. No AirDrop, no email, no cable.
-- **Duplicate detection** — re-uploading a screenshot you already imported flags matching rows with an amber "Already imported" badge and unchecks them by default, so a careless click can't pollute your records.
-- **Live Google Search grounding** — asks for "the latest news on 2330" and pulls fresh sources, with inline `[N]` citation chips that link directly to each domain (favicon + hostname)
-- **Real-time SSE streaming** — text flows in word-by-word with a glowing pulse cursor, fading mask gradient on the tail edge so new tokens emerge from soft mist
-- **"Searched the web · N sources · Xs"** thought-strip above each grounded reply; click to expand and see the actual queries Gemini ran
-- Sees your **live portfolio + per-stock fundamentals on every holding**, and auto-detects ticker mentions to enrich context with monthly revenue + quarterly margins
-- Markdown rendering: tables, bold, italics, lists, code blocks
-- **Stop button** mid-generation; partial response is persisted with an "interrupted" tag
-- **In-app modal** confirmations everywhere — chat delete, trade delete, dividend delete, CSV replace-all (no native browser dialogs)
-- **Rotating capability tagline** on the welcome screen — cycles through what the AI can actually do (analyze, search, import, scan from phone), personalized to your biggest holding
-- Personalized, reshuffleable suggestion cards covering portfolio, news, and market context — based on your top holdings
+### ✦ AI assistant
+- **Choose your model** — OpenAI, Google Gemini, or Anthropic Claude, each with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server).
+- **Streaming replies** rendered as **Claude-style Markdown** — headings, bold, lists, code blocks, blockquotes — with an animated typing indicator.
+- **Portfolio-aware** — every chat sends your live holdings + light fundamentals; mention a ticker and its monthly revenue + quarterly margins are attached so the model answers with real numbers.
+- **Web-search grounding (Gemini)** — ask for the latest news and Gemini searches the web, with inline `[N]` citations linking to each source.
+- **Chat history** — past conversations are saved; reopen one, delete with a swipe, or clear them all.
 
 ### 🛠 Trade & dividend management
-- **One unified CSV** for trades and dividends with `kind` column
-- Append OR replace import modes; "Last export" timestamp
-- **Inline edit** on every row (click Edit, fields become inputs)
-- Filter by ticker, type, status (open/closed), date range with presets
-- **FIFO open/closed status** computed per trade
-- Pagination 10 / 20 / 50 / 100 per page
-- Auto-seed from `backend/data/seed/portfolio.csv` on first boot
+- Add, edit, and delete **trades** (buy/sell) and **dividends**, scoped per market (TW / US)
+- **FIFO open/closed status** computed per trade; weighted-average cost basis
+- Backend **CSV import/export** endpoints (one unified file for trades + dividends) and auto-seed from `backend/data/seed/portfolio.csv` on first boot
+
+### 🔐 Accounts & data
+- **Google sign-in** (login only) via the native OAuth flow — or continue as a guest
+- **Per-user data scoping** — each signed-in account sees only its own trades, dividends, and chats; un-authenticated requests fall back to a shared "legacy" bucket
 
 ---
 
@@ -109,41 +97,39 @@ All market data flows through standardised public endpoints (TWSE MIS, Yahoo, Fi
 
 ```mermaid
 flowchart LR
-  subgraph Browser
-    UI[React + Vite UI<br/>polls every 5s]
+  subgraph iPhone["iPhone — native SwiftUI app"]
+    UI[Overview · Dashboard · Trades<br/>Dividends · Stock detail · Assistant]
   end
-  subgraph Phone["Phone (same Wi-Fi)"]
-    PhonePage[Mobile upload page<br/>scans QR, picks photo]
-  end
-  subgraph Backend["FastAPI :8011"]
+  subgraph Backend["FastAPI"]
     Trades["/api/trades · /api/dividends"]
     Portfolio["/api/portfolio/*<br/>holdings · overview · summary"]
     Markets["/api/markets<br/>DB-driven config"]
     Stock["/api/stock/:ticker/detail"]
     Data["/api/data/*"]
-    AI["/api/ai/*<br/>chat · agentic planner"]
-    Mobile["/api/mobile/sessions/*<br/>/m/upload/:token"]
+    AI["/api/ai/*<br/>chat (OpenAI/Gemini/Claude)"]
+    Auth["auth — verify Google ID token<br/>per-user scoping"]
     Quotes["tw_quotes · yahoo_quotes<br/>5s cache (TW + US)"]
     SInfo["stock_info.py — 1h fundamentals · 6h financials"]
-    DB[("trades.db / Neon<br/>trades · markets · chats")]
+    DB[("trades.db / Neon<br/>trades · markets · chats (per user)")]
   end
+  Google[("Google Sign-In<br/>OAuth — login only")]
   TWSE[("TWSE MIS<br/>live TW · ~5s")]
   Relay["quote relay (TW IP)<br/>via ngrok — cloud hop"]
   YLive[("Yahoo<br/>live US quotes + FX")]
   YF[("yfinance<br/>history · fundamentals")]
   FM[("FinMind<br/>monthly revenue")]
-  Gemini[("Google Gemini 2.5 Flash<br/>SSE streaming · vision · opt-in")]
+  LLM[("OpenAI · Gemini · Anthropic<br/>user's own key · SSE streaming")]
   GSearch[("Google Search<br/>via Gemini grounding")]
 
-  UI -- "fetch /api/*" --> Trades
+  UI -- "fetch /api/* (Bearer token)" --> Trades
   UI --> Portfolio
   UI --> Markets
   UI --> Stock
   UI --> Data
   UI -- "SSE stream" --> AI
-  UI -- "create + poll" --> Mobile
-  PhonePage -- "GET upload page" --> Mobile
-  PhonePage -- "POST file" --> Mobile
+  UI -- "sign in" --> Google
+  Trades --> Auth
+  AI --> Auth
   Trades --> DB
   Data --> DB
   Portfolio --> DB
@@ -153,9 +139,8 @@ flowchart LR
   Stock --> SInfo
   AI --> DB
   AI --> SInfo
-  AI -- "chat + vision parse" --> Gemini
-  Mobile -- "vision parse" --> Gemini
-  Gemini -- "google_search tool" --> GSearch
+  AI -- "chat (user key)" --> LLM
+  LLM -- "google_search (Gemini)" --> GSearch
   Quotes --> TWSE
   Quotes -. "cloud only" .-> Relay
   Relay --> TWSE
@@ -219,12 +204,8 @@ python -m uvicorn app.main:app --reload --port 8011
 
 API docs: <http://127.0.0.1:8011/docs>
 
-> **Want to use the QR phone-upload feature?** Start uvicorn with
-> `--host 0.0.0.0` instead, and allow inbound port 8011 through Windows
-> Firewall — your phone needs to reach the backend over your Wi-Fi:
-> ```powershell
-> python -m uvicorn app.main:app --reload --port 8011 --host 0.0.0.0
-> ```
+> To reach the backend from a physical iPhone on your Wi-Fi, start uvicorn with
+> `--host 0.0.0.0` and set the app's backend URL (Settings) to your Mac's LAN IP.
 
 ### iOS app
 
@@ -253,13 +234,9 @@ The app auto-detects it (routing through `psycopg`) and falls back to SQLite whe
 
 ### AI assistant (optional)
 
-Copy `backend/.env.example` → `backend/.env`, paste your free Gemini API key from <https://aistudio.google.com/apikey>:
+In the app's **Settings → AI Assistant**, pick a provider (OpenAI / Gemini / Claude) and paste **your own API key** — it's stored in the iOS Keychain and sent per request.
 
-```
-GOOGLE_AI_API_KEY=AIza...
-```
-
-Restart the backend. The ✦ Assistant button now opens a chat panel instead of the setup hint.
+Optionally set a server-side Gemini key so the app can use Gemini with no per-user key: copy `backend/.env.example` → `backend/.env`, add `GOOGLE_AI_API_KEY=AIza...` (free key at <https://aistudio.google.com/apikey>), and restart the backend.
 
 ### Deploy to the cloud (optional)
 
@@ -311,12 +288,7 @@ returns the Chinese name (台積電) and bid/ask/volume; Yahoo returns the Engli
 
 ### Live data flow
 
-The Dashboard tab polls `/api/portfolio/{holdings,summary,earnings-history,names}` every 5 s while it's the active view AND the browser tab is visible (the Overview polls its own summary every 15 s). The server-side quote caches (~5 s) absorb duplicate calls, and `names` is cached ~10 min so the poll never re-fetches quotes for closed positions. Live numbers **flash green/red** as they tick.
-
-The header shows two pills, **scoped to the market you're viewing**:
-
-- **● TW OPEN / US OPEN** (green, pulsing) during that market's hours — TW 09:00–13:30 Taipei, US 09:30–16:00 New York — **● CLOSED** (grey) otherwise. Hours, holidays, and timezone come from the DB `markets` config, so it's correct per market and editable without a redeploy.
-- **● LIVE** (green, pulsing) appears whenever the polling loop is active. Disappears the moment you switch tabs, minimize, or navigate away.
+While a portfolio is on screen the app polls `/api/portfolio/{holdings,summary}` — every **5 s** while that market is open, **60 s** otherwise — and pauses when you leave the screen. Server-side quote caches (~5 s) absorb duplicate calls, and `names` is cached ~10 min so closed positions aren't re-fetched. Each market's open/closed status comes from the DB `markets` config (TW 09:00–13:30 Taipei, US 09:30–16:00 New York), editable without a redeploy.
 
 Outside market hours MIS rolls `y` (yesterday's close) over to today's close, but the parser caches the last good quote per ticker and uses bid/ask midpoint / `o` (today's open) as fallbacks — so the TODAY column doesn't collapse to 0 % between trades.
 
@@ -324,7 +296,7 @@ Outside market hours MIS rolls `y` (yesterday's close) over to today's close, bu
 
 ## CSV import / export
 
-The app uses **one unified CSV** for both trades and dividends. The **Data** tab has Export and Import buttons.
+The backend uses **one unified CSV** for both trades and dividends, via the `/api/data/export` and `/api/data/import` endpoints.
 
 Each row's `kind` column tells the backend whether it's a trade or a dividend:
 
@@ -374,7 +346,7 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | POST   | /api/markets/{code}/holidays        | add a market closure (date, name?) — no redeploy |
 | DELETE | /api/markets/{code}/holidays/{date} | remove a market closure                     |
 | GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
-| POST   | /api/ai/chat                        | SSE stream: `init` → `chunk` × N → `done` (or `error`); persists final reply with `[N]` citation markers |
+| POST   | /api/ai/chat                        | SSE stream (`init`→`chunk`→`done`); provider via `X-AI-Provider`/`X-AI-Key` (OpenAI / Gemini / Claude) |
 | POST   | /api/ai/parse-records               | upload an image/PDF, get `{trades, dividends, notes}` back — read-only, nothing written to DB |
 | GET    | /api/ai/chats                       | list saved conversations, newest first      |
 | GET    | /api/ai/chats/{id}                  | fetch one conversation with all messages    |
@@ -390,7 +362,7 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 
 ## AI assistant
 
-The **✦ Assistant** button in the header opens a slide-in sidebar with natural-language Q&A over your portfolio, powered by Google Gemini. Gated by an API key — without one the sidebar shows setup instructions and the rest of the app works normally.
+The **Assistant** tab gives natural-language Q&A over your portfolio. Pick your provider — **OpenAI, Gemini, or Claude** — and use your own key. Gemini adds live Google-Search grounding with citations; all providers stream and render Markdown.
 
 ### What it knows
 
@@ -403,29 +375,26 @@ This means questions like *"is 2330's gross margin improving?"* or *"compare 233
 
 ### Streaming + citations
 
-- Backend uses `client.models.generate_content_stream` and emits Server-Sent Events: `init` → `chunk` (per token) → `done` (canonical content with `[N]` markers + Sources block).
-- Frontend consumes the SSE via `fetch` + `ReadableStream`, appends deltas to a placeholder message in real time, and swaps in the canonical version when the stream ends — so citations always settle on stable byte offsets from `grounding_supports`.
-- A trailing pulse-logo cursor follows the streamed text; a soft fade-mask gradient on the bottom edge of the response makes new tokens emerge from soft transparency rather than popping in.
-- The "Searched the web · N sources · X.Xs" header is parsed from a hidden `<!--meta:...-->` JSON prefix the backend embeds at persist time; expandable to reveal the exact `web_search_queries` Gemini issued.
+- The backend streams Server-Sent Events: `init` → `chunk` (per token) → `done` (canonical content; Gemini adds `[N]` markers + a Sources block). It routes by `X-AI-Provider` / `X-AI-Key`; Gemini can fall back to the server's `GOOGLE_AI_API_KEY`.
+- The iOS app consumes the stream with `URLSession.bytes`, renders partial **Markdown** live with an animated typing indicator, then swaps in the final content. Gemini citation source URLs are shortened to their domain.
 
 ### Persistent chat history
 
-- The first user message becomes the chat title (auto-truncated, can be renamed).
-- Click **☰** in the sidebar header to see all saved chats with title, message count, and relative time. Click a row to switch into it.
-- Hover any row for ✏ rename and 🗑 delete.
-- Click **+** to start a fresh chat without losing your history.
-- The most recently viewed chat is restored automatically when you reopen the sidebar.
+- The first user message becomes the chat title (auto-truncated).
+- Tap the **history** button (top-left of the Assistant) for all saved chats with title, message count, and date. Tap a row to reopen it.
+- **Swipe** a row to delete it, or use the **trash** button to clear them all.
+- Tap **✎** (top-right) to start a fresh chat without losing your history.
 
 ### What it can / can't do
 
-- ✅ Answer questions from your local data + per-ticker fundamentals + live web search results.
-- ✅ Cite every web-sourced claim with a clickable inline pill chip and a domain label.
-- ✅ Stream responses token-by-token over SSE; **Stop** to interrupt (partial reply is saved).
+- ✅ Answer questions from your local data + per-ticker fundamentals (and, with Gemini, live web search).
+- ✅ With Gemini, cite every web-sourced claim with a clickable inline link to its source.
+- ✅ Stream responses token-by-token over SSE.
 - ❌ Won't give buy/sell recommendations or price predictions, even when relaying analyst opinions found via search — those are framed as observations, never advice.
 
 ### Privacy tradeoff
 
-When you ask a question, your portfolio JSON + ticker fundamentals are sent to Google's API for inference, and Gemini may issue Google Search queries on your behalf. TWSE MIS quotes still happen locally. If you don't want any data going to Google, leave `GOOGLE_AI_API_KEY` unset and the assistant stays disabled — the rest of the app continues working.
+When you ask a question, your portfolio JSON + ticker fundamentals are sent to your chosen provider (OpenAI / Gemini / Anthropic) for inference, using **your own key**; with Gemini it may also issue Google Search queries. Market quotes still happen on your backend. The assistant is entirely opt-in — with no provider key set it's disabled and the rest of the app works normally.
 
 > **Free tier note:** Google may use your prompts to improve their models on the free Gemini API tier. Switch to billing-enabled Vertex AI / Cloud if that's a dealbreaker.
 
