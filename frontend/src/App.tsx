@@ -209,7 +209,12 @@ export default function App() {
             </span>
             <span className="brand-text">AI Stock Studio</span>
           </h1>
-          <MarketStatus market={statusMarket} />
+          {market === null ? (
+            // On the Overview we show both markets, so show both statuses.
+            markets.map((m) => <MarketStatus key={m.code} market={m} />)
+          ) : (
+            <MarketStatus market={statusMarket} />
+          )}
           {polling && (
             <span
               className="live-indicator"
