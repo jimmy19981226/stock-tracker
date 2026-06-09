@@ -17,6 +17,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from ..auth import get_current_user
 from ..database import Dividend, Trade, get_db
 from ..services import quotes, stock_info
 from ..services.portfolio import compute_states, estimate_exit_cost
@@ -32,6 +33,7 @@ def stock_detail(
     ticker: str,
     period: PeriodLiteral = Query("1y"),
     db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
 ):
     ticker = ticker.strip().upper()
     if not ticker:
@@ -73,14 +75,20 @@ def stock_detail(
         quarterly_financials = _f_fin.result()
 
     # --- position state from user's trades ---
-    trades = db.query(Trade).filter(Trade.ticker == ticker).order_by(Trade.trade_date).all()
+    trades = (
+        db.query(Trade)
+        .filter(Trade.ticker == ticker, Trade.user_id == user)
+        .order_by(Trade.trade_date)
+        .all()
+    )
     dividends = (
         db.query(Dividend)
-        .filter(Dividend.ticker == ticker)
+        .filter(Dividend.ticker == ticker, Dividend.user_id == user)
         .order_by(Dividend.pay_date)
         .all()
     )
-    states = compute_states(db.query(Trade).all())  # full FIFO state across all tickers
+    # full FIFO state across all tickers (scoped to this user)
+    states = compute_states(db.query(Trade).filter(Trade.user_id == user).all())
     st = states.get(ticker)
 
     position: dict | None = None

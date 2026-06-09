@@ -93,19 +93,24 @@ def compute_states(trades: Iterable[Trade]) -> dict[str, HoldingState]:
     return states
 
 
-def _ticker_markets(db: Session) -> dict[str, str]:
+def _ticker_markets(db: Session, user_id: str) -> dict[str, str]:
     """Map each ticker the user has traded to its stored market ("TW"/"US").
 
     The stored market is authoritative (it respects a user's explicit pick in
     the form); fall back to inferring from the ticker format if absent."""
     out: dict[str, str] = {}
-    for ticker, market in db.query(Trade.ticker, Trade.market).distinct():
+    rows = (
+        db.query(Trade.ticker, Trade.market)
+        .filter(Trade.user_id == user_id)
+        .distinct()
+    )
+    for ticker, market in rows:
         out[ticker] = market or quotes.market_of(ticker)
     return out
 
 
-def build_holdings(db: Session) -> list[dict]:
-    trades = db.query(Trade).all()
+def build_holdings(db: Session, user_id: str) -> list[dict]:
+    trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     states = compute_states(trades)
     ticker_market = {t.ticker: (t.market or quotes.market_of(t.ticker)) for t in trades}
 
@@ -175,14 +180,14 @@ def build_holdings(db: Session) -> list[dict]:
     return out
 
 
-def summarize(holdings: list[dict], db: Session) -> list[dict]:
+def summarize(holdings: list[dict], db: Session, user_id: str) -> list[dict]:
     """Group holdings by currency and produce a summary per currency."""
     groups: dict[str, list[dict]] = defaultdict(list)
     for h in holdings:
         groups[h["currency"]].append(h)
 
     # Realized P/L from all trades (closed positions too)
-    trades = db.query(Trade).all()
+    trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     states = compute_states(trades)
     ticker_market = {t.ticker: (t.market or quotes.market_of(t.ticker)) for t in trades}
     realized_by_currency: dict[str, float] = defaultdict(float)
@@ -206,7 +211,7 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
     # Dividend income grouped by currency — total and current-year.
     dividends_by_currency: dict[str, float] = defaultdict(float)
     year_dividends_by_currency: dict[str, float] = defaultdict(float)
-    for div in db.query(Dividend).all():
+    for div in db.query(Dividend).filter(Dividend.user_id == user_id).all():
         currency = quotes.currency_of(div.market or quotes.market_of(div.ticker))
         dividends_by_currency[currency] += div.amount
         if div.pay_date.year == current_year:
@@ -270,7 +275,7 @@ def summarize(holdings: list[dict], db: Session) -> list[dict]:
     return summaries
 
 
-def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]]:
+def build_realized_history(db: Session, user_id: str, days: int = 180) -> dict[str, list[dict]]:
     """Daily cumulative realized P/L per currency.
 
     Walks trades chronologically and accumulates the realized P/L delta from
@@ -279,7 +284,10 @@ def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]
     """
     end = date.today()
     start = end - timedelta(days=days)
-    trades = sorted(db.query(Trade).all(), key=lambda t: (t.trade_date, t.id))
+    trades = sorted(
+        db.query(Trade).filter(Trade.user_id == user_id).all(),
+        key=lambda t: (t.trade_date, t.id),
+    )
     if not trades:
         return {}
 
@@ -322,7 +330,7 @@ def build_realized_history(db: Session, days: int = 180) -> dict[str, list[dict]
     return dict(daily)
 
 
-def build_earnings_history(db: Session, days: int = 180) -> dict[str, list[dict]]:
+def build_earnings_history(db: Session, user_id: str, days: int = 180) -> dict[str, list[dict]]:
     """Daily cumulative realized P/L, dividends, and total earned per currency.
 
     Walks both trades and dividends chronologically, accumulating per-currency
@@ -332,9 +340,13 @@ def build_earnings_history(db: Session, days: int = 180) -> dict[str, list[dict]
     end = date.today()
     start = end - timedelta(days=days)
 
-    trades = sorted(db.query(Trade).all(), key=lambda t: (t.trade_date, t.id))
+    trades = sorted(
+        db.query(Trade).filter(Trade.user_id == user_id).all(),
+        key=lambda t: (t.trade_date, t.id),
+    )
     dividends = sorted(
-        db.query(Dividend).all(), key=lambda d: (d.pay_date, d.id)
+        db.query(Dividend).filter(Dividend.user_id == user_id).all(),
+        key=lambda d: (d.pay_date, d.id),
     )
     if not trades and not dividends:
         return {}

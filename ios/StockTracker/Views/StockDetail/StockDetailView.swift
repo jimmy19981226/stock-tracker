@@ -1,0 +1,284 @@
+import SwiftUI
+import Charts
+
+/// Full-screen stock detail pushed from a holding row: live quote, price chart
+/// with the user's buy/sell markers, their position, and key fundamentals.
+struct StockDetailView: View {
+    let ticker: String
+    let market: MarketCode
+
+    @State private var detail: StockDetail?
+    @State private var period: HistoryPeriod = .oneYear
+    @State private var loading = true
+    @State private var error: String?
+
+    private var currency: String {
+        detail?.fundamentals.currency ?? market.currencyCode
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                if loading && detail == nil {
+                    ProgressView().padding(.top, 60)
+                } else if let error, detail == nil {
+                    ErrorBanner(message: error) { Task { await load() } }
+                } else if let detail {
+                    PriceHeader(detail: detail, currency: currency)
+                    ChartCard(detail: detail, period: $period, currency: currency)
+                    if let pos = detail.position {
+                        PositionCard(position: pos, currency: currency,
+                                     yieldOnCost: detail.yieldOnCost)
+                    }
+                    FundamentalsCard(f: detail.fundamentals, currency: currency)
+                }
+            }
+            .padding(16)
+        }
+        .screenBackground()
+        .navigationTitle(ticker)
+        .navigationBarTitleDisplayMode(.inline)
+        .task(id: period) { await load() }
+    }
+
+    private func load() async {
+        loading = true
+        do {
+            detail = try await APIClient.shared.getStockDetail(ticker, period: period)
+            error = nil
+        } catch {
+            self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+        loading = false
+    }
+}
+
+// MARK: - Header
+
+private struct PriceHeader: View {
+    let detail: StockDetail
+    let currency: String
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(detail.name)
+                    .font(.headline)
+                    .foregroundStyle(Theme.primaryText)
+                Text(detail.symbol)
+                    .font(.caption)
+                    .foregroundStyle(Theme.secondaryText)
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(Fmt.money(detail.live.price, currency: currency))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundStyle(Theme.primaryText)
+                    PLBadge(value: detail.live.todayChange, pct: detail.live.todayChangePct,
+                            currency: currency)
+                }
+                HStack(spacing: 16) {
+                    miniStat("Open", detail.live.dayOpen)
+                    miniStat("High", detail.live.dayHigh)
+                    miniStat("Low", detail.live.dayLow)
+                    miniStat("Prev", detail.live.previousClose)
+                }
+            }
+        }
+    }
+
+    private func miniStat(_ label: String, _ value: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label).font(.caption2).foregroundStyle(Theme.mutedText)
+            Text(Fmt.number(value)).font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.secondaryText)
+        }
+    }
+}
+
+// MARK: - Chart
+
+private struct ChartCard: View {
+    let detail: StockDetail
+    @Binding var period: HistoryPeriod
+    let currency: String
+
+    private struct Bar: Identifiable {
+        let id = UUID()
+        let date: Date
+        let close: Double
+    }
+    private struct Marker: Identifiable {
+        let id = UUID()
+        let date: Date
+        let buy: Bool
+    }
+
+    private func parse(_ s: String) -> Date? {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
+        return f.date(from: String(s.prefix(10)))
+    }
+
+    private var bars: [Bar] {
+        detail.history.compactMap { b in
+            guard let d = parse(b.date), let c = b.close else { return nil }
+            return Bar(date: d, close: c)
+        }
+    }
+
+    private var markers: [Marker] {
+        detail.trades.compactMap { t in
+            guard let d = parse(t.date) else { return nil }
+            return Marker(date: d, buy: t.type == .buy)
+        }
+    }
+
+    private var up: Bool {
+        guard let first = bars.first?.close, let last = bars.last?.close else { return true }
+        return last >= first
+    }
+
+    var body: some View {
+        Card {
+            VStack(spacing: 12) {
+                Picker("Period", selection: $period) {
+                    ForEach(HistoryPeriod.allCases) { p in Text(p.label).tag(p) }
+                }
+                .pickerStyle(.segmented)
+
+                if bars.count < 2 {
+                    EmptyState(icon: "chart.xyaxis.line", title: "No price history")
+                } else {
+                    let color = up ? Theme.positive : Theme.negative
+                    Chart {
+                        ForEach(bars) { bar in
+                            LineMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
+                                .interpolationMethod(.monotone)
+                                .foregroundStyle(color)
+                            AreaMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
+                                .interpolationMethod(.monotone)
+                                .foregroundStyle(
+                                    LinearGradient(colors: [color.opacity(0.25), .clear],
+                                                   startPoint: .top, endPoint: .bottom)
+                                )
+                        }
+                        ForEach(markers) { m in
+                            PointMark(x: .value("Date", m.date), y: .value("Close", priceAt(m.date)))
+                                .symbol {
+                                    Image(systemName: m.buy ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(m.buy ? Theme.positive : Theme.negative)
+                                }
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisGridLine().foregroundStyle(Theme.stroke)
+                            AxisValueLabel {
+                                if let v = value.as(Double.self) {
+                                    Text(Fmt.compact(v)).font(.caption2)
+                                        .foregroundStyle(Theme.mutedText)
+                                }
+                            }
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                            AxisGridLine().foregroundStyle(Theme.stroke)
+                            AxisValueLabel(format: .dateTime.month(.abbreviated))
+                                .foregroundStyle(Theme.mutedText)
+                        }
+                    }
+                    .frame(height: 200)
+                }
+            }
+        }
+    }
+
+    /// Nearest closing price to a trade date, so the marker sits on the line.
+    private func priceAt(_ date: Date) -> Double {
+        bars.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) })?.close ?? 0
+    }
+}
+
+// MARK: - Position
+
+private struct PositionCard: View {
+    let position: StockDetailPosition
+    let currency: String
+    let yieldOnCost: Double?
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader("Your position")
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
+                    StatBlock(label: "Shares", value: Fmt.shares(position.shares))
+                    StatBlock(label: "Avg cost",
+                              value: Fmt.money(position.avgCost, currency: currency),
+                              alignment: .trailing)
+                    StatBlock(label: "Market value",
+                              value: Fmt.money(position.marketValue, currency: currency, digits: 0))
+                    StatBlock(label: "Unrealized",
+                              value: Fmt.signedMoney(position.unrealizedPl, currency: currency),
+                              valueColor: Theme.pl(position.unrealizedPl),
+                              alignment: .trailing)
+                    StatBlock(label: "Realized",
+                              value: Fmt.signedMoney(position.realizedPl, currency: currency),
+                              valueColor: Theme.pl(position.realizedPl))
+                    StatBlock(label: "Dividends",
+                              value: Fmt.money(position.dividendsReceived, currency: currency),
+                              alignment: .trailing)
+                    StatBlock(label: "Total return",
+                              value: Fmt.signedMoney(position.totalReturn, currency: currency),
+                              valueColor: Theme.pl(position.totalReturn))
+                    StatBlock(label: "Return %",
+                              value: Fmt.pct(position.totalReturnPct),
+                              valueColor: Theme.pl(position.totalReturnPct),
+                              alignment: .trailing)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Fundamentals
+
+private struct FundamentalsCard: View {
+    let f: StockDetailFundamentals
+    let currency: String
+
+    private var rows: [(String, String)] {
+        var r: [(String, String)] = []
+        if let v = f.marketCap { r.append(("Market cap", Fmt.compact(v))) }
+        if let v = f.pe { r.append(("P/E", Fmt.number(v))) }
+        if let v = f.forwardPe { r.append(("Fwd P/E", Fmt.number(v))) }
+        if let v = f.eps { r.append(("EPS", Fmt.number(v))) }
+        if let v = f.dividendYield { r.append(("Div yield", Fmt.pct(v * 100))) }
+        if let v = f.beta { r.append(("Beta", Fmt.number(v))) }
+        if let v = f.priceToBook { r.append(("P/B", Fmt.number(v))) }
+        if let v = f.fiftyTwoWeekHigh { r.append(("52w high", Fmt.number(v))) }
+        if let v = f.fiftyTwoWeekLow { r.append(("52w low", Fmt.number(v))) }
+        if let v = f.averageVolume { r.append(("Avg vol", Fmt.compact(v))) }
+        return r
+    }
+
+    var body: some View {
+        if rows.isEmpty { EmptyView() } else {
+            Card {
+                VStack(alignment: .leading, spacing: 14) {
+                    SectionHeader("Fundamentals")
+                    if let sector = f.sector {
+                        Text(sector + (f.industry.map { " · \($0)" } ?? ""))
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
+                            StatBlock(label: row.0, value: row.1,
+                                      alignment: idx.isMultiple(of: 2) ? .leading : .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

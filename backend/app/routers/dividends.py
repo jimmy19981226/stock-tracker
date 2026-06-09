@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from ..auth import get_current_user
 from ..database import Dividend, get_db
 from ..schemas import DividendCreate, DividendOut
 from ..services import quotes
@@ -26,8 +27,9 @@ def _to_out(d: Dividend) -> DividendOut:
 def list_dividends(
     market: str | None = Query(None),
     db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
 ):
-    q = db.query(Dividend)
+    q = db.query(Dividend).filter(Dividend.user_id == user)
     if market:
         q = q.filter(Dividend.market == market.upper())
     rows = q.order_by(Dividend.pay_date.desc(), Dividend.id.desc()).all()
@@ -35,7 +37,11 @@ def list_dividends(
 
 
 @router.post("", response_model=DividendOut, status_code=status.HTTP_201_CREATED)
-def create_dividend(payload: DividendCreate, db: Session = Depends(get_db)):
+def create_dividend(
+    payload: DividendCreate,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
     ticker = payload.ticker.strip().upper()
     d = Dividend(
         ticker=ticker,
@@ -43,6 +49,7 @@ def create_dividend(payload: DividendCreate, db: Session = Depends(get_db)):
         pay_date=payload.pay_date,
         notes=payload.notes,
         market=payload.market or quotes.market_of(ticker),
+        user_id=user,
     )
     db.add(d)
     db.commit()
@@ -52,9 +59,16 @@ def create_dividend(payload: DividendCreate, db: Session = Depends(get_db)):
 
 @router.put("/{dividend_id}", response_model=DividendOut)
 def update_dividend(
-    dividend_id: int, payload: DividendCreate, db: Session = Depends(get_db)
+    dividend_id: int,
+    payload: DividendCreate,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
 ):
-    d = db.query(Dividend).filter(Dividend.id == dividend_id).first()
+    d = (
+        db.query(Dividend)
+        .filter(Dividend.id == dividend_id, Dividend.user_id == user)
+        .first()
+    )
     if not d:
         raise HTTPException(status_code=404, detail="Dividend not found")
     d.ticker = payload.ticker.strip().upper()
@@ -68,8 +82,16 @@ def update_dividend(
 
 
 @router.delete("/{dividend_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_dividend(dividend_id: int, db: Session = Depends(get_db)):
-    d = db.query(Dividend).filter(Dividend.id == dividend_id).first()
+def delete_dividend(
+    dividend_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    d = (
+        db.query(Dividend)
+        .filter(Dividend.id == dividend_id, Dividend.user_id == user)
+        .first()
+    )
     if not d:
         raise HTTPException(status_code=404, detail="Dividend not found")
     db.delete(d)

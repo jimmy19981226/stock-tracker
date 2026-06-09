@@ -22,11 +22,12 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from ..auth import get_current_user
 from ..database import Chat, ChatMessage, Dividend, SessionLocal, Trade, get_db
 from ..services import portfolio, quotes, stock_info
 
@@ -88,8 +89,13 @@ def ai_status():
 
 
 @router.get("/chats", response_model=list[ChatSummary])
-def list_chats(db: Session = Depends(get_db)):
-    chats = db.query(Chat).order_by(Chat.updated_at.desc()).all()
+def list_chats(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
+    chats = (
+        db.query(Chat)
+        .filter(Chat.user_id == user)
+        .order_by(Chat.updated_at.desc())
+        .all()
+    )
     return [
         ChatSummary(
             id=c.id,
@@ -103,9 +109,9 @@ def list_chats(db: Session = Depends(get_db)):
 
 
 @router.get("/chats/{chat_id}", response_model=ChatDetail)
-def get_chat(chat_id: int, db: Session = Depends(get_db)):
+def get_chat(chat_id: int, db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     chat = db.get(Chat, chat_id)
-    if chat is None:
+    if chat is None or chat.user_id != user:
         raise HTTPException(status_code=404, detail="Chat not found")
     return ChatDetail(
         id=chat.id,
@@ -117,9 +123,9 @@ def get_chat(chat_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/chats/{chat_id}", response_model=ChatSummary)
-def rename_chat(chat_id: int, body: ChatRename, db: Session = Depends(get_db)):
+def rename_chat(chat_id: int, body: ChatRename, db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     chat = db.get(Chat, chat_id)
-    if chat is None:
+    if chat is None or chat.user_id != user:
         raise HTTPException(status_code=404, detail="Chat not found")
     chat.title = body.title.strip()[:MAX_TITLE_LEN]
     db.commit()
@@ -134,50 +140,49 @@ def rename_chat(chat_id: int, body: ChatRename, db: Session = Depends(get_db)):
 
 
 @router.delete("/chats/{chat_id}", status_code=204)
-def delete_chat(chat_id: int, db: Session = Depends(get_db)):
+def delete_chat(chat_id: int, db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     chat = db.get(Chat, chat_id)
-    if chat is None:
+    if chat is None or chat.user_id != user:
         raise HTTPException(status_code=404, detail="Chat not found")
     db.delete(chat)
     db.commit()
 
 
 @router.post("/chat")
-def chat(req: ChatRequest):
+def chat(
+    req: ChatRequest,
+    x_ai_provider: str = Header(default="gemini"),
+    x_ai_key: str | None = Header(default=None),
+    user: str = Depends(get_current_user),
+):
     """Stream the assistant's reply as Server-Sent Events.
 
-    Event payloads (each is one ``data: {json}\\n\\n`` block):
+    The provider (``X-AI-Provider``: ``gemini`` | ``openai`` | ``claude``) and the
+    user's own key (``X-AI-Key``) come from the app's AI settings. Gemini may fall
+    back to the server's ``GOOGLE_AI_API_KEY`` env var; OpenAI/Claude require the
+    user's key. All providers emit the same SSE protocol:
+
     - ``init``  → ``{chat_id, title}`` (sent once before generation begins)
     - ``chunk`` → ``{delta}`` (raw text chunk as the model emits it)
-    - ``done``  → ``{content, queries, duration_ms}`` (final canonical content
-      with inline ``[N]`` markers + Sources block; replaces the streamed
-      deltas; the persisted DB value is also this final content)
+    - ``done``  → ``{content, queries, duration_ms}`` (final canonical content;
+      Gemini adds inline ``[N]`` markers + a Sources block, others return plain text)
     - ``error`` → ``{detail}``
-
-    Each chunk's ``delta`` is the raw text the model emitted in that step;
-    the ``done`` event ships the full content with grounding-metadata-derived
-    inline citation markers and a trailing Sources list, which is what gets
-    persisted. Frontend swaps the streamed buffer for ``done.content``.
     """
-    api_key = os.environ.get("GOOGLE_AI_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "GOOGLE_AI_API_KEY environment variable is not set. "
-                "Get a free key at https://aistudio.google.com/apikey "
-                "and start the backend with the variable set."
-            ),
-        )
+    provider = (x_ai_provider or "gemini").strip().lower()
+    if provider not in ("gemini", "openai", "claude"):
+        provider = "gemini"
 
-    try:
-        from google import genai
-        from google.genai import types
-    except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="google-genai not installed. Run `pip install -r requirements.txt`.",
-        )
+    # User-supplied key wins; Gemini can fall back to the server env var.
+    api_key = (x_ai_key or "").strip() or (
+        os.environ.get("GOOGLE_AI_API_KEY") if provider == "gemini" else None
+    )
+    if not api_key:
+        hints = {
+            "gemini": "Add a Google Gemini key (aistudio.google.com/apikey) in the app's AI settings.",
+            "openai": "Add your OpenAI API key (platform.openai.com/api-keys) in the app's AI settings.",
+            "claude": "Add your Anthropic API key (console.anthropic.com) in the app's AI settings.",
+        }
+        raise HTTPException(status_code=503, detail=hints[provider])
 
     user_text = req.message.strip()
     if not user_text:
@@ -187,12 +192,12 @@ def chat(req: ChatRequest):
     # Done synchronously so the user message survives even if streaming aborts.
     with SessionLocal() as db:
         if req.chat_id is None:
-            chat_obj = Chat(title=_derive_title(user_text))
+            chat_obj = Chat(title=_derive_title(user_text), user_id=user)
             db.add(chat_obj)
             db.flush()
         else:
             chat_obj = db.get(Chat, req.chat_id)
-            if chat_obj is None:
+            if chat_obj is None or chat_obj.user_id != user:
                 raise HTTPException(status_code=404, detail="Chat not found")
             if chat_obj.title == "New chat" and not chat_obj.messages:
                 chat_obj.title = _derive_title(user_text)
@@ -205,19 +210,12 @@ def chat(req: ChatRequest):
             for m in list(chat_obj.messages)[-MAX_HISTORY_TURNS:]
         ]
         focus_tickers = _detect_tickers([c for _, c in history_msgs])[:3]
-        portfolio_context = _build_context(db, focus_tickers=focus_tickers)
+        portfolio_context = _build_context(db, user, focus_tickers=focus_tickers)
         chat_id = chat_obj.id
         chat_title = chat_obj.title
         db.commit()
 
     system_prompt = _system_prompt(portfolio_context)
-    contents = [
-        types.Content(
-            role="user" if role == "user" else "model",
-            parts=[types.Part(text=content)],
-        )
-        for role, content in history_msgs
-    ]
 
     def event_stream():
         accumulated_text = ""
@@ -253,48 +251,71 @@ def chat(req: ChatRequest):
         try:
             yield sse({"type": "init", "chat_id": chat_id, "title": chat_title})
 
-            client = genai.Client(api_key=api_key)
-            stream_iter = client.models.generate_content_stream(
-                model=DEFAULT_MODEL,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=0.4,
-                    max_output_tokens=1500,
-                    tools=[types.Tool(google_search=types.GoogleSearch())],
-                ),
-                contents=contents,
-            )
-
-            for chunk in stream_iter:
-                last_chunk = chunk
-                delta = getattr(chunk, "text", None) or ""
-                if delta:
-                    accumulated_text += delta
-                    yield sse({"type": "chunk", "delta": delta})
-
-            # Apply grounding metadata to the assembled text. Byte indices in
-            # ``grounding_supports`` are positions in the cumulative response,
-            # which is exactly what ``accumulated_text`` is.
-            meta = None
-            try:
-                cands = getattr(last_chunk, "candidates", None) or []
-                if cands:
-                    meta = getattr(cands[0], "grounding_metadata", None)
-            except Exception:
-                meta = None
-
-            final_text, sources_block = _apply_grounding_text(
-                accumulated_text or "(no response)", meta
-            )
-            if sources_block:
-                final_text = final_text.rstrip() + "\n\n" + sources_block
-
             queries: list[str] = []
-            try:
-                if meta is not None:
-                    queries = list(getattr(meta, "web_search_queries", None) or [])
-            except Exception:
-                queries = []
+
+            if provider == "gemini":
+                from google import genai
+                from google.genai import types
+
+                contents = [
+                    types.Content(
+                        role="user" if role == "user" else "model",
+                        parts=[types.Part(text=content)],
+                    )
+                    for role, content in history_msgs
+                ]
+                client = genai.Client(api_key=api_key)
+                stream_iter = client.models.generate_content_stream(
+                    model=DEFAULT_MODEL,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_prompt,
+                        temperature=0.4,
+                        max_output_tokens=1500,
+                        tools=[types.Tool(google_search=types.GoogleSearch())],
+                    ),
+                    contents=contents,
+                )
+
+                for chunk in stream_iter:
+                    last_chunk = chunk
+                    delta = getattr(chunk, "text", None) or ""
+                    if delta:
+                        accumulated_text += delta
+                        yield sse({"type": "chunk", "delta": delta})
+
+                # Apply grounding metadata to the assembled text. Byte indices in
+                # ``grounding_supports`` are positions in the cumulative response,
+                # which is exactly what ``accumulated_text`` is.
+                meta = None
+                try:
+                    cands = getattr(last_chunk, "candidates", None) or []
+                    if cands:
+                        meta = getattr(cands[0], "grounding_metadata", None)
+                except Exception:
+                    meta = None
+
+                final_text, sources_block = _apply_grounding_text(
+                    accumulated_text or "(no response)", meta
+                )
+                if sources_block:
+                    final_text = final_text.rstrip() + "\n\n" + sources_block
+
+                try:
+                    if meta is not None:
+                        queries = list(getattr(meta, "web_search_queries", None) or [])
+                except Exception:
+                    queries = []
+            else:
+                # OpenAI / Claude — plain text streaming, no web grounding.
+                from ..services import ai_providers
+
+                for delta in ai_providers.stream(
+                    provider, api_key, None, system_prompt, history_msgs
+                ):
+                    if delta:
+                        accumulated_text += delta
+                        yield sse({"type": "chunk", "delta": delta})
+                final_text = accumulated_text or "(no response)"
 
             elapsed_ms = int((time.time() - start_ts) * 1000)
             meta_header = json.dumps(
@@ -393,11 +414,11 @@ _AGENT_SCHEMA: dict = {
 }
 
 
-def _agent_context(db: Session) -> str:
+def _agent_context(db: Session, user_id: str) -> str:
     """Compact holdings list so the planner can resolve 'my biggest position',
     pick real tickers, and know what exists. Kept tiny (no fundamentals)."""
     try:
-        holdings = portfolio.build_holdings(db)
+        holdings = portfolio.build_holdings(db, user_id)
     except Exception:
         holdings = []
     rows = [
@@ -478,7 +499,7 @@ def _agent_prompt(context_json: str, view: str | None, today: str) -> str:
 
 
 @router.post("/agent")
-def agent_plan(req: AgentRequest):
+def agent_plan(req: AgentRequest, user: str = Depends(get_current_user)):
     """Plan a UI-driving action sequence for the agentic assistant.
 
     Returns ``{mode, reply, steps}``. ``mode == "chat"`` (with empty steps)
@@ -511,7 +532,7 @@ def agent_plan(req: AgentRequest):
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     with SessionLocal() as db:
-        context_json = _agent_context(db)
+        context_json = _agent_context(db, user)
 
     today = datetime.now(_TAIPEI).date().isoformat()
     system_prompt = _agent_prompt(context_json, req.view, today)
@@ -919,14 +940,14 @@ def _detect_tickers(texts: list[str]) -> list[str]:
     return seen
 
 
-def _build_context(db: Session, focus_tickers: list[str] | None = None) -> str:
+def _build_context(db: Session, user_id: str, focus_tickers: list[str] | None = None) -> str:
     """Compact portfolio snapshot for the LLM. Includes summary, holdings
     (with light fundamentals attached), trades and dividends. For any
     ``focus_tickers`` (typically the ticker the user is asking about),
     also includes monthly revenue and quarterly financials so the model
     can answer trend / growth questions without hallucinating."""
-    holdings = portfolio.build_holdings(db)
-    summary = portfolio.summarize(holdings, db)
+    holdings = portfolio.build_holdings(db, user_id)
+    summary = portfolio.summarize(holdings, db, user_id)
 
     # Light fundamentals on every holding — small enough to send always.
     light_keys = (
@@ -974,11 +995,13 @@ def _build_context(db: Session, focus_tickers: list[str] | None = None) -> str:
 
     trades = (
         db.query(Trade)
+        .filter(Trade.user_id == user_id)
         .order_by(Trade.trade_date.desc(), Trade.id.desc())
         .all()
     )
     dividends = (
         db.query(Dividend)
+        .filter(Dividend.user_id == user_id)
         .order_by(Dividend.pay_date.desc(), Dividend.id.desc())
         .all()
     )

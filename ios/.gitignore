@@ -1,0 +1,11 @@
+# XcodeGen generates this from project.yml — regenerate with `xcodegen generate`
+StockTracker.xcodeproj/
+
+# Xcode / build artifacts
+build/
+dist/
+*.ipa
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.DS_Store

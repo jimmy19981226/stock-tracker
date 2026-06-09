@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
+from ..auth import get_current_user
 from ..database import Dividend, Metadata, Trade, get_db
 from ..services import xlsx_io
 
@@ -27,14 +28,16 @@ def _record_last_export(db: Session) -> None:
 
 
 @router.get("/export")
-def export_portfolio(db: Session = Depends(get_db)):
+def export_portfolio(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     trades = (
         db.query(Trade)
+        .filter(Trade.user_id == user)
         .order_by(Trade.trade_date.desc(), Trade.id.desc())
         .all()
     )
     dividends = (
         db.query(Dividend)
+        .filter(Dividend.user_id == user)
         .order_by(Dividend.pay_date.desc(), Dividend.id.desc())
         .all()
     )
@@ -52,6 +55,7 @@ async def import_portfolio(
     file: UploadFile = File(...),
     mode: Literal["append", "replace"] = Query("append"),
     db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
 ):
     """Import a portfolio Excel workbook.
 
@@ -69,12 +73,18 @@ async def import_portfolio(
     deleted_trades = 0
     deleted_dividends = 0
     if mode == "replace":
-        deleted_trades = db.query(Trade).delete()
-        deleted_dividends = db.query(Dividend).delete()
+        deleted_trades = (
+            db.query(Trade).filter(Trade.user_id == user).delete(synchronize_session=False)
+        )
+        deleted_dividends = (
+            db.query(Dividend).filter(Dividend.user_id == user).delete(synchronize_session=False)
+        )
 
     for t in trades:
+        t.user_id = user
         db.add(t)
     for d in dividends:
+        d.user_id = user
         db.add(d)
     db.commit()
 

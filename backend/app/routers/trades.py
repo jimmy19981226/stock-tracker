@@ -3,6 +3,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from ..auth import get_current_user
 from ..database import Trade, get_db
 from ..schemas import TradeCreate, TradeOut
 from ..services import quotes
@@ -67,8 +68,9 @@ def _to_out(t: Trade, status: str) -> dict:
 def list_trades(
     market: str | None = Query(None),
     db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
 ):
-    q = db.query(Trade)
+    q = db.query(Trade).filter(Trade.user_id == user)
     if market:
         q = q.filter(Trade.market == market.upper())
     rows = q.order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
@@ -77,7 +79,11 @@ def list_trades(
 
 
 @router.post("", response_model=TradeOut, status_code=status.HTTP_201_CREATED)
-def create_trade(payload: TradeCreate, db: Session = Depends(get_db)):
+def create_trade(
+    payload: TradeCreate,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
     ticker = payload.ticker.strip().upper()
     trade = Trade(
         type=payload.type,
@@ -88,6 +94,7 @@ def create_trade(payload: TradeCreate, db: Session = Depends(get_db)):
         fee=payload.fee,
         notes=payload.notes,
         market=payload.market or quotes.market_of(ticker),
+        user_id=user,
     )
     db.add(trade)
     db.commit()
@@ -97,9 +104,16 @@ def create_trade(payload: TradeCreate, db: Session = Depends(get_db)):
 
 @router.put("/{trade_id}", response_model=TradeOut)
 def update_trade(
-    trade_id: int, payload: TradeCreate, db: Session = Depends(get_db)
+    trade_id: int,
+    payload: TradeCreate,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
 ):
-    trade = db.query(Trade).filter(Trade.id == trade_id).first()
+    trade = (
+        db.query(Trade)
+        .filter(Trade.id == trade_id, Trade.user_id == user)
+        .first()
+    )
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
     trade.type = payload.type
@@ -116,8 +130,16 @@ def update_trade(
 
 
 @router.delete("/{trade_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_trade(trade_id: int, db: Session = Depends(get_db)):
-    trade = db.query(Trade).filter(Trade.id == trade_id).first()
+def delete_trade(
+    trade_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    trade = (
+        db.query(Trade)
+        .filter(Trade.id == trade_id, Trade.user_id == user)
+        .first()
+    )
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
     db.delete(trade)

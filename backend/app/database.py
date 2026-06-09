@@ -63,6 +63,11 @@ class Trade(Base):
     # is what backfills existing rows when the column is added by the migration.
     market: Mapped[str] = mapped_column(String(2), nullable=False, server_default="TW")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Owner. "legacy" for rows created before auth existed / by the un-authenticated
+    # web app; "google:<sub>" once a signed-in user owns them. See app/auth.py.
+    user_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="legacy", index=True
+    )
 
 
 class Dividend(Base):
@@ -75,6 +80,9 @@ class Dividend(Base):
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     market: Mapped[str] = mapped_column(String(2), nullable=False, server_default="TW")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    user_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="legacy", index=True
+    )
 
 
 class Metadata(Base):
@@ -95,6 +103,9 @@ class Chat(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(255), nullable=False, server_default="legacy", index=True
     )
 
     messages: Mapped[list["ChatMessage"]] = relationship(
@@ -237,9 +248,40 @@ def _ensure_market_column() -> None:
                 )
 
 
+def _ensure_user_id_columns() -> None:
+    """Add the ``user_id`` column to existing trades/dividends/chats tables.
+
+    Like ``_ensure_market_column``, ``create_all`` won't ALTER an existing table,
+    so a DB created before per-user scoping (the prod Neon DB) needs this. The
+    ``DEFAULT 'legacy'`` backfills every existing row to the legacy bucket, which
+    the un-authenticated web app keeps reading; a signed-in user's first request
+    then adopts those rows (see app/auth.py). Idempotent on reruns. DDL is valid
+    on both SQLite and Postgres.
+    """
+    insp = inspect(engine)
+    existing_tables = set(insp.get_table_names())
+    for table in ("trades", "dividends", "chats"):
+        if table not in existing_tables:
+            continue  # fresh DB — create_all already added the column
+        cols = {c["name"] for c in insp.get_columns(table)}
+        if "user_id" not in cols:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table} "
+                        "ADD COLUMN user_id VARCHAR(255) NOT NULL DEFAULT 'legacy'"
+                    )
+                )
+                conn.execute(
+                    text(f"CREATE INDEX IF NOT EXISTS ix_{table}_user_id "
+                         f"ON {table} (user_id)")
+                )
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_market_column()
+    _ensure_user_id_columns()
     seed_markets()
 
 
