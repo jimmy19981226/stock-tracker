@@ -2975,6 +2975,46 @@ main.app {
   filter: grayscale(0.4);
 }
 
+/* Mobile: bigger touch targets + 16px input font so iOS doesn't zoom the page
+   on focus, and safe-area padding so the composer clears the home indicator. */
+@media (max-width: 640px) {
+  .assistant-input-row {
+    gap: 6px;
+    padding: 10px 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+  }
+  .assistant-input-row input {
+    font-size: 16px;
+    height: 44px;
+    min-width: 0; /* let it shrink so the Send button always fits */
+    border-radius: 11px;
+  }
+  .assistant-input-row button[type="submit"] {
+    height: 44px;
+    font-size: 14px;
+    padding: 0 13px;
+    border-radius: 11px;
+    flex-shrink: 0;
+  }
+  .assistant-input-row .assistant-attach-btn,
+  .assistant-input-row .assistant-phone-btn {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+  }
+}
+
+/* Mobile: the trade / dividend entry forms — 16px inputs (no iOS focus-zoom)
+   and roomier touch targets. Scoped to .form-grid so table inline-edit fields
+   are untouched. */
+@media (max-width: 640px) {
+  .form-grid input,
+  .form-grid select {
+    font-size: 16px;
+    min-height: 42px;
+  }
+}
+
 /* Icon buttons in the assistant header (☰, +, ✕) and per-row actions. */
 .assistant-icon-btn {
   padding: 5px 9px !important;
