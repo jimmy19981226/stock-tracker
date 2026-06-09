@@ -1117,8 +1117,8 @@ tr:last-child td {
   /* With the label hidden, the bare ✦ was tiny — enlarge it into a clear,
      tappable icon and center it in the button. */
   header.app-header nav .assistant-toggle {
-    min-width: 44px;
-    font-size: 19px;
+    min-width: 48px;
+    font-size: 24px;
     line-height: 1;
     display: inline-flex;
     align-items: center;
