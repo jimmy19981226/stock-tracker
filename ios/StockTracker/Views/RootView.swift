@@ -6,21 +6,29 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject private var store: PortfolioStore
     @State private var portfolioPath = NavigationPath()
+    @State private var selectedTab = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack(path: $portfolioPath) {
                 OverviewView()
             }
             .tabItem {
                 Label("Portfolio", systemImage: "chart.pie.fill")
             }
+            .tag(0)
 
             NavigationStack {
                 AssistantView()
             }
             .tabItem {
                 Label("Assistant", systemImage: "sparkles")
+            }
+            .tag(1)
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.environment["UITEST_TAB"] == "assistant" {
+                selectedTab = 1
             }
         }
         .task {
