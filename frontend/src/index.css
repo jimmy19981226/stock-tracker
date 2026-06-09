@@ -1107,12 +1107,22 @@ tr:last-child td {
   header.app-header nav .assistant-toggle,
   header.app-header nav .secondary {
     flex: 0 0 auto;
-    min-width: 38px;
+    min-width: 40px;
     padding: 9px 10px;
   }
   /* Hide the "Assistant" word on phones — the ✦ icon stands in for it. */
   header.app-header nav .nav-label {
     display: none;
+  }
+  /* With the label hidden, the bare ✦ was tiny — enlarge it into a clear,
+     tappable icon and center it in the button. */
+  header.app-header nav .assistant-toggle {
+    min-width: 44px;
+    font-size: 19px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .panel {
