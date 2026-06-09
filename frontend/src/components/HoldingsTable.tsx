@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Holding } from "../api";
 import { fmtMoney, fmtNumber, fmtPct, plClass } from "../format";
 import { FillerRows } from "./PageFiller";
@@ -10,9 +10,26 @@ interface Props {
   onSelectTicker?: (ticker: string) => void;
 }
 
+/** True on phone-width screens, where holdings render as a single scrollable
+ *  card list (no pagination) — so changing pages can't shrink the document and
+ *  scroll-jump the whole page. */
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 640px)");
+    const onChange = () => setNarrow(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return narrow;
+}
+
 export function HoldingsTable({ holdings, onSelectTicker }: Props) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const narrow = useNarrow();
 
   // Drop anything without a real ticker so a transient render mid-poll
   // can't paint blank rows.
@@ -47,7 +64,10 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
         const items = [...rawItems].sort((a, b) =>
           a.ticker.localeCompare(b.ticker, undefined, { numeric: true }),
         );
-        const pageItems = items.slice((page - 1) * pageSize, page * pageSize);
+        // On phones show every card (no paging → no page-change scroll jump).
+        const pageItems = narrow
+          ? items
+          : items.slice((page - 1) * pageSize, page * pageSize);
         return (
         <div key={currency} style={{ marginBottom: 16 }}>
           <div
@@ -120,23 +140,27 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
                   </td>
                 </tr>
               ))}
-              <FillerRows
-                count={items.length > pageSize ? pageSize - pageItems.length : 0}
-                cols={8}
-              />
+              {!narrow && (
+                <FillerRows
+                  count={items.length > pageSize ? pageSize - pageItems.length : 0}
+                  cols={8}
+                />
+              )}
             </tbody>
           </table>
           </div>
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={items.length}
-            onPageChange={setPage}
-            onPageSizeChange={(s) => {
-              setPageSize(s);
-              setPage(1);
-            }}
-          />
+          {!narrow && (
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={items.length}
+              onPageChange={setPage}
+              onPageSizeChange={(s) => {
+                setPageSize(s);
+                setPage(1);
+              }}
+            />
+          )}
         </div>
         );
       })}
