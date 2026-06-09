@@ -37,6 +37,10 @@ final class AssistantViewModel: ObservableObject {
                 ```
                 weight = position_value / total_value
                 ```
+
+                **Sources:**
+                1. [https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbCdEfGhIjKlMnOpQrStUvWxYz1234567890](https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbCdEfGhIjKlMnOpQrStUvWxYz1234567890)
+                2. [cnbc.com](https://www.cnbc.com/quotes/2330-TW)
                 """),
             ]
         }
@@ -155,9 +159,16 @@ struct AssistantView: View {
                         ChatBubble(message: msg)
                     }
                     if vm.isStreaming {
-                        ChatBubble(message: ChatMessage(role: "assistant",
-                                   content: vm.streamingText.isEmpty ? "…" : vm.streamingText))
-                            .id("streaming")
+                        Group {
+                            if vm.streamingText.isEmpty {
+                                TypingIndicator()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                ChatBubble(message: ChatMessage(role: "assistant",
+                                                                content: vm.streamingText))
+                            }
+                        }
+                        .id("streaming")
                     }
                     if let error = vm.error {
                         ErrorBanner(message: error)
@@ -212,6 +223,29 @@ struct AssistantView: View {
         }
         .padding(12)
         .background(Theme.card)
+    }
+}
+
+/// Three dots bouncing in sequence while the assistant is "thinking".
+private struct TypingIndicator: View {
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 6) {
+                ForEach(0..<3, id: \.self) { i in
+                    let wave = sin(t * 6 + Double(i) * 0.7)
+                    Circle()
+                        .fill(Theme.secondaryText)
+                        .frame(width: 8, height: 8)
+                        .offset(y: -CGFloat(max(0, wave)) * 5)
+                        .opacity(0.5 + 0.5 * max(0, wave))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Theme.cardElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
     }
 }
 

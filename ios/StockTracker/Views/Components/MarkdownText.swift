@@ -132,7 +132,9 @@ struct MarkdownText: View {
 
     static func parse(_ text: String) -> [Block] {
         var blocks: [Block] = []
-        let lines = text.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+        let lines = shortenLinkLabels(text)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: "\n")
 
         var i = 0
         var paragraph: [String] = []
@@ -210,6 +212,37 @@ struct MarkdownText: View {
         }
         flushParagraph()
         return blocks
+    }
+
+    /// Replace `[label](url)` whose label is itself a long URL with the URL's
+    /// host, so source citations show "cnbc.com" instead of a giant redirect URL
+    /// that overflows the bubble. The tappable link target is preserved.
+    static func shortenLinkLabels(_ text: String) -> String {
+        let pattern = #"\[([^\]]*)\]\(([^)\s]+)\)"#
+        guard let re = try? NSRegularExpression(pattern: pattern) else { return text }
+        let ns = text as NSString
+        var result = ""
+        var last = 0
+        for m in re.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            result += ns.substring(with: NSRange(location: last, length: m.range.location - last))
+            let label = ns.substring(with: m.range(at: 1))
+            let url = ns.substring(with: m.range(at: 2))
+            let needsShorten = label.isEmpty
+                || label.lowercased().hasPrefix("http")
+                || label.count > 40
+            let display = needsShorten ? host(of: url) : label
+            result += "[\(display)](\(url))"
+            last = m.range.location + m.range.length
+        }
+        result += ns.substring(from: last)
+        return result
+    }
+
+    private static func host(of url: String) -> String {
+        var s = url
+        if let r = s.range(of: "://") { s = String(s[r.upperBound...]) }
+        if let slash = s.firstIndex(of: "/") { s = String(s[..<slash]) }
+        return s.isEmpty ? "link" : s
     }
 
     private static func headingMatch(_ line: String) -> (Int, String)? {
