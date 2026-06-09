@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A self-hosted **multi-market equities workbench** for **Taiwan + US** portfolios — live prices, broker-matching P/L, per-stock fundamentals, monthly revenue, quarterly financials, a **combined net-worth overview** across both markets (NT$ and US$), live-value flash animations, and a streaming, **agentic** AI assistant that searches the web, cites every claim, analyzes your portfolio, and can even **drive the UI for you**.
+A self-hosted **multi-market equities workbench** for **Taiwan + US** portfolios — live prices, broker-matching P/L, per-stock fundamentals, monthly revenue, quarterly financials, a **combined net-worth overview** across both markets (NT$ and US$), live-value flash animations, and a streaming, **agentic** AI assistant that searches the web, cites every claim and analyzes your portfolio.
 
 </div>
 
@@ -84,103 +84,21 @@ All live numbers update every 5 seconds while the Dashboard tab is visible — p
 
 ---
 
-## Demo
-
-### Dashboard
-
-![Dashboard](docs/screenshots/dashboard.png)
-
-The headline number (realized + dividends), live market value, today's P/L, and a cumulative earnings chart that stacks realized + dividends.
-
-### Stock detail — Yahoo-style key stats + your position
-
-![Stock detail — key stats](docs/screenshots/stock-detail-top.png)
-
-Click any open position to drill in. Key stats mirror Yahoo Finance, the position card adds your personalized P/L, return, and yield on cost.
-
-### Stock detail — price history + monthly revenue (月營收)
-
-![Stock detail — chart + monthly revenue](docs/screenshots/stock-detail-chart.png)
-
-Historical prices with your buy / sell / dividend markers, plus the Taiwan-specific monthly revenue chart with year-over-year change overlaid.
-
-### Stock detail — quarterly financials + activity timeline
-
-![Stock detail — quarterly + activity](docs/screenshots/stock-detail-financials.png)
-
-Last 8 quarters of revenue, net income, EPS, and margins. Activity timeline shows every trade + dividend on this ticker.
-
-### Unrealized P/L by position
-
-![Unrealized P/L](docs/screenshots/unrealized.png)
-
-Divergent horizontal bars sorted by P/L, color-coded green/red. Re-paints every 5 s while the dashboard is visible.
-
-### AI assistant — welcome screen
-
-![AI Assistant — welcome](docs/screenshots/assistant-welcome.png)
-
-Reshuffleable suggestion cards across **portfolio · news · market context**. Top picks are personalized to the tickers you actually own.
-
-### AI assistant — grounded search with inline citations
-
-![AI Assistant — grounded reply with citations](docs/screenshots/assistant-citations.png)
-
-Asks Gemini → Gemini calls Google Search → response streams in word-by-word with `[N]` markers replaced by purple pill chips (favicon + domain) that link straight to the source. The header strip ("Searched the web · 6 sources · 6.7s") is clickable.
-
-### AI assistant — see exactly what Gemini searched
-
-![AI Assistant — search queries expanded](docs/screenshots/assistant-meta-expanded.png)
-
-Tap the meta strip to expand the actual search queries the model ran, so you can audit where every claim came from.
-
-### AI assistant — in-app delete confirmation
-
-![AI Assistant — delete confirm modal](docs/screenshots/assistant-delete-modal.png)
-
-No native browser alerts — destructive actions use a themed in-app modal that overlays the sidebar with backdrop blur, ESC-to-cancel, and Enter-to-confirm. The same component handles trade deletes, dividend deletes, and CSV replace-all confirmations.
-
-### Agentic import — review parsed records before committing
-
-![Import preview](docs/screenshots/import-preview.png)
-
-Drop a brokerage screenshot or PDF on the 📎 button. Gemini extracts every trade and dividend into an editable preview card — each row has a checkbox, type pill, and inline-editable shares / price / date / fee. Re-uploading something you've already imported flags the matching rows with an amber **"Already imported"** badge and unchecks them by default.
-
-### Send from your phone via QR
-
-![QR upload modal](docs/screenshots/qr-upload-modal.png)
-
-Click 📱, scan the QR with your phone's camera, take a photo, and the desktop picks it up automatically. The status badge cycles **Waiting for phone… → File received → AI is reading → Ready** and the modal closes itself, dropping you into the same review-and-confirm card.
-
-### Mobile upload page
-
-![Mobile upload](docs/screenshots/mobile-upload.png)
-
-The phone-facing upload page is a self-contained, no-framework HTML page served by the backend at `/m/upload/{token}` — works over the LAN with no external assets. Tap to choose a photo or PDF (or take a fresh one), then upload — the laptop sees it within a second.
-
-### Trades — filter, paginate, edit inline
-
-![Trades](docs/screenshots/trades.png)
-
-Filter bar combining ticker search, trade type, status, and date range. Stock names show under each ticker. Pagination at the bottom; inline edit on every row.
-
----
-
 ## Tech stack
 
 ```
-Backend                                Frontend
+Backend                                iOS app (native)
 ─────────────────                      ─────────────────
-FastAPI                                Vite
-SQLAlchemy 2.0                         React 18 + TypeScript
-  · SQLite (local default)             Recharts (charts)
-  · Postgres / Neon (optional)         react-markdown (AI replies)
-TWSE MIS    (live TW quotes)           remark-gfm (tables / GFM)
-Yahoo       (live US quotes + history) Inter font
-FinMind     (TW monthly revenue)       Pure CSS (no framework)
-google-genai (Gemini AI)
-quote relay + ngrok  (cloud TW quotes)
-python-multipart · python-dotenv · psycopg
+FastAPI                                Swift + SwiftUI
+SQLAlchemy 2.0                         Swift Charts
+  · SQLite (local default)             URLSession (async/await)
+  · Postgres / Neon (optional)         Keychain (API keys)
+TWSE MIS   (live TW quotes)            ASWebAuthenticationSession (Google)
+Yahoo      (live US quotes + history)
+FinMind    (TW monthly revenue)        Multi-provider AI (your own key):
+google-genai · openai · anthropic        OpenAI / Gemini / Claude
+quote relay + ngrok (cloud TW quotes)
+python-multipart · python-dotenv · psycopg · google-auth
 ```
 
 All market data flows through standardised public endpoints (TWSE MIS, Yahoo, FinMind) — no scraping, no broker login, no paid feeds. Because TWSE MIS only answers from Taiwan IPs, a hosted backend reaches it through a small **quote relay** running on a Taiwan/home connection, exposed at a permanent **ngrok** URL (see [Real-time TW quotes in the cloud](#real-time-tw-quotes-in-the-cloud-the-relay)). US quotes from Yahoo work from anywhere.
@@ -278,34 +196,13 @@ backend/
       csv_io.py · xlsx_io.py   unified import / export
   quote_relay.py       run on a TW connection; cloud reaches MIS through it
   data/trades.db       (auto-created, gitignored)
-frontend/
-  src/
-    App.tsx            shell + Overview / per-market Dashboard / Trades / Dividends
-    api.ts             typed fetch client
-    format.ts          money / percent / date + config-driven market hours
-    index.css          premium dark theme + animated gradient mesh
-    agent/             agentic executor — floating cursor + spotlight, drives DOM
-    components/
-      Overview.tsx            landing page: TW + US cards + combined net worth
-      FlashValue.tsx          green/red flash wrapper for any live number
-      PortfolioSummary.tsx    hero + per-currency cards (sticky last-good)
-      PerformanceChart.tsx    stacked area earnings chart
-      UnrealizedChart.tsx     divergent bar chart, sorted by P/L
-      AllocationChart.tsx     donut + legend with names
-      HoldingsTable.tsx       open positions, click → StockDetail modal
-      StockDetail.tsx         per-stock modal (key stats + chart + financials)
-      TradeForm.tsx           buy/sell entry with market + live name lookup
-      TradeList.tsx           filter + paginate + inline edit + status
-      DividendForm.tsx        dividend entry with live name lookup
-      DividendList.tsx        filter + paginate + inline edit
-      DataPanel.tsx           CSV import/export + last-export tracker
-      MarketStatus.tsx        active market's open/closed pill (TW or US)
-      Pagination.tsx          page-size + page-number controls
-      AssistantPanel.tsx      Gemini chat sidebar (markdown, stop, history)
-    hooks/
-      useTickerName.ts        debounced ticker → name resolution
-tools/
-  start-relay-ngrok.ps1  one-click relay + permanent ngrok tunnel (TW quotes)
+ios/                   native SwiftUI iPhone app (see ios/README.md)
+  StockTracker/
+    App/ Config/ Networking/ Models/ Stores/ Theme/ Util/
+    Auth/              Keychain + Google sign-in (ASWebAuthSession + PKCE)
+    Views/             Overview, Dashboard, Trades, Dividends, StockDetail,
+                       Assistant (Markdown chat + history), Settings, Onboarding
+  rebuild-ipa.sh       build the sideloadable .ipa
 ```
 
 ---
@@ -329,15 +226,18 @@ API docs: <http://127.0.0.1:8011/docs>
 > python -m uvicorn app.main:app --reload --port 8011 --host 0.0.0.0
 > ```
 
-### Frontend
+### iOS app
 
-```powershell
-cd frontend
-npm install
-npm run dev
+Open the SwiftUI project in Xcode and Run, or build a sideloadable `.ipa`:
+
+```bash
+cd ios
+xcodegen generate && open StockTracker.xcodeproj   # run from Xcode, or:
+./rebuild-ipa.sh                                    # -> ios/dist/StockTracker.ipa
 ```
 
-Open <http://127.0.0.1:5173>. Vite proxies `/api/*` to the backend on `:8011`.
+The app defaults to the deployed backend (change it in the in-app Settings). See
+[`ios/README.md`](ios/README.md) and [`ios/INSTALL_ON_IPHONE.md`](ios/INSTALL_ON_IPHONE.md).
 
 ### Cloud database (optional)
 
@@ -363,20 +263,16 @@ Restart the backend. The ✦ Assistant button now opens a chat panel instead of 
 
 ### Deploy to the cloud (optional)
 
-To reach the app from your phone or any device, host the three pieces — all have free tiers:
+To reach the app from your phone or any device, host the two pieces — both have free tiers:
 
 - **Database → [Neon](https://neon.tech)** (Postgres). Create a project, copy the connection string.
 - **Backend → [Render](https://render.com)** (Web Service). The repo ships a [`render.yaml`](render.yaml)
   blueprint — point Render at the repo and set these env vars in the dashboard:
-  `DATABASE_URL` (Neon), `GOOGLE_AI_API_KEY` (optional), `FRONTEND_ORIGINS` (your Vercel URL),
+  `DATABASE_URL` (Neon), `GOOGLE_AI_API_KEY` (optional), `GOOGLE_CLIENT_ID` (for app sign-in),
   and optionally `QUOTE_RELAY_URL` + `QUOTE_RELAY_SECRET` for live TW quotes (see below).
-- **Frontend → [Vercel](https://vercel.com)** (static). Set **Root Directory** to `frontend` and add the
-  env var `VITE_API_BASE` = your Render backend URL.
 
-Deploy order: **backend first** (to get its URL) → frontend (with `VITE_API_BASE`) → then set
-`FRONTEND_ORIGINS` on the backend to the frontend's URL so CORS allows it. Note both free tiers
-"scale to zero," so the first request after idle takes ~30–60 s to wake, then it's fast. The QR
-phone-upload feature assumes a local network and won't work over the public internet.
+The iOS app points at the Render backend URL (set in the app's Settings). The free tier
+"scales to zero," so the first request after idle takes ~30–60 s to wake, then it's fast.
 
 ### Real-time TW quotes in the cloud (the relay)
 
@@ -404,7 +300,7 @@ returns the Chinese name (台積電) and bid/ask/volume; Yahoo returns the Engli
 
 - **Market detection** — a ticker's format decides its market: numeric codes (`2330`, `00919`, `00937B`) → **TW / TWD**, alphabetic symbols (`NVDA`, `BRK.B`) → **US / USD**. Each trade/dividend also carries an explicit `market` column.
 - **Ticker resolution** — bare 4-6 digit TW codes auto-suffix to `xxxx.TW`; US symbols resolve directly.
-- **Live quotes** — TW tickers go to **TWSE MIS** (batched into one HTTP call per refresh, probing both `tse_` 上市 and `otc_` 上櫃 prefixes); US tickers go to **Yahoo**. Both are cached ~5 s server-side so the 5 s frontend poll tracks the broker closely without hammering either source.
+- **Live quotes** — TW tickers go to **TWSE MIS** (batched into one HTTP call per refresh, probing both `tse_` 上市 and `otc_` 上櫃 prefixes); US tickers go to **Yahoo**. Both are cached ~5 s server-side so the 5 s client poll tracks the broker closely without hammering either source.
 - **Combined net worth** — the Overview sums both portfolios into one figure shown in NT$ **and** US$, converting with a live USD↔TWD rate (Yahoo, cached). If a market that holds positions is missing a live value, the combined total blanks rather than showing a fabricated number.
 - **Cost basis** — weighted-average. Sells reduce open cost basis proportionally and realize the difference vs. average price (minus fees).
 - **Market value** — `current_price × shares`, gross. Matches 資產市值 / 總現值 in most TW broker apps.
