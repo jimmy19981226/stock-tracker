@@ -63,7 +63,7 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
             {currency} · {items.length}
           </div>
           <div className="table-wrap">
-          <table>
+          <table className="holdings-table">
             <thead>
               <tr>
                 <th>Ticker</th>
@@ -84,7 +84,7 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
                   className={onSelectTicker ? "row-clickable" : undefined}
                   onClick={onSelectTicker ? () => onSelectTicker(h.ticker) : undefined}
                 >
-                  <td>
+                  <td data-label="Ticker">
                     <div style={{ display: "flex", flexDirection: "column" }}>
                       <strong>{h.ticker}</strong>
                       {h.name && (
@@ -97,25 +97,25 @@ export function HoldingsTable({ holdings, onSelectTicker }: Props) {
                       )}
                     </div>
                   </td>
-                  <td>{fmtNumber(h.shares, 4)}</td>
-                  <td>{fmtMoney(h.avg_cost, currency)}</td>
-                  <td>
+                  <td data-label="Shares">{fmtNumber(h.shares, 4)}</td>
+                  <td data-label="Avg Cost">{fmtMoney(h.avg_cost, currency)}</td>
+                  <td data-label="Price">
                     <FlashValue value={h.current_price}>
                       {fmtMoney(h.current_price, currency)}
                     </FlashValue>
                   </td>
-                  <td className={plClass(h.today_change_pct)}>
+                  <td data-label="Today" className={plClass(h.today_change_pct)}>
                     {fmtPct(h.today_change_pct)}
                   </td>
-                  <td>
+                  <td data-label="Market Value">
                     <FlashValue value={h.market_value}>
                       {fmtMoney(h.market_value, currency)}
                     </FlashValue>
                   </td>
-                  <td className={plClass(h.unrealized_pl)}>
+                  <td data-label="Unrealized P/L" className={plClass(h.unrealized_pl)}>
                     {fmtMoney(h.unrealized_pl, currency)}
                   </td>
-                  <td className={plClass(h.unrealized_pl_pct)}>
+                  <td data-label="Return" className={plClass(h.unrealized_pl_pct)}>
                     {fmtPct(h.unrealized_pl_pct)}
                   </td>
                 </tr>

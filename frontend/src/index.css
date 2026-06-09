@@ -3025,6 +3025,61 @@ main.app {
   }
 }
 
+/* Mobile: turn the wide Open-Positions table into stacked cards so Price /
+   Market Value / P/L are all visible without scrolling sideways. */
+@media (max-width: 640px) {
+  .holdings-table thead {
+    display: none;
+  }
+  .holdings-table,
+  .holdings-table tbody {
+    display: block;
+  }
+  .holdings-table tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel-2);
+    height: auto !important; /* override the fixed 62px data-row height */
+  }
+  .holdings-table td {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0;
+    border: none;
+    text-align: left;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .holdings-table td::before {
+    content: attr(data-label);
+    color: var(--text-2);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  /* Ticker is the full-width card header (its own label is redundant). */
+  .holdings-table td[data-label="Ticker"] {
+    grid-column: 1 / -1;
+    padding-bottom: 8px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid var(--border);
+  }
+  .holdings-table td[data-label="Ticker"]::before {
+    display: none;
+  }
+  /* Pagination filler rows would render as empty cards — hide them. */
+  .holdings-table .pager-filler {
+    display: none;
+  }
+}
+
 /* Icon buttons in the assistant header (☰, +, ✕) and per-row actions. */
 .assistant-icon-btn {
   padding: 5px 9px !important;
