@@ -271,25 +271,23 @@ struct AssistantView: View {
     }
 }
 
-/// Three dots bouncing in sequence while the assistant is "thinking".
+/// Bare inline "thinking" indicator — pulsing dots directly in the chat flow
+/// (no bubble container), the way Claude renders generation.
 private struct TypingIndicator: View {
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 ForEach(0..<3, id: \.self) { i in
-                    let wave = sin(t * 6 + Double(i) * 0.7)
+                    let phase = (sin(t * 4 - Double(i) * 0.9) + 1) / 2
                     Circle()
                         .fill(Theme.secondaryText)
-                        .frame(width: 8, height: 8)
-                        .offset(y: -CGFloat(max(0, wave)) * 5)
-                        .opacity(0.5 + 0.5 * max(0, wave))
+                        .frame(width: 7, height: 7)
+                        .scaleEffect(0.7 + 0.3 * phase)
+                        .opacity(0.35 + 0.65 * phase)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(Theme.cardElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.vertical, 6)
         }
     }
 }

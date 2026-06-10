@@ -12,7 +12,8 @@ enum PortfolioTab: String, CaseIterable, Identifiable {
 struct PortfolioView: View {
     let market: MarketCode
     @EnvironmentObject private var store: PortfolioStore
-    @State private var tab: PortfolioTab = .dashboard
+    @State private var tab: PortfolioTab =
+        ProcessInfo.processInfo.environment["UITEST_TRADE_FORM"] == "1" ? .trades : .dashboard
 
     var body: some View {
         VStack(spacing: 0) {

@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// Add or edit a dividend payment. Presented as a sheet from the dividend log.
+/// Add or edit a dividend — a custom flat sheet matching the trade form: big
+/// ticker entry, hairline-separated rows, and a full-width green CTA.
 struct DividendFormView: View {
     let market: MarketCode
     let existing: Dividend?
 
     @EnvironmentObject private var store: PortfolioStore
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focused: Bool
 
     @State private var ticker = ""
     @State private var amount = ""
@@ -23,35 +25,90 @@ struct DividendFormView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Dividend") {
-                    TextField("Ticker (e.g. \(market == .TW ? "2330" : "AAPL"))", text: $ticker)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                        .font(.system(.body, design: .rounded).weight(.semibold))
-                    LabeledContent("Amount") {
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Ticker — the hero input.
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("TICKER")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.mutedText)
+                            .tracking(0.6)
+                        TextField(market == .TW ? "2330" : "AAPL", text: $ticker)
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundStyle(Theme.primaryText)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .focused($focused)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 10)
+                    separator
+
+                    // Amount
+                    HStack {
+                        Text("Amount")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.secondaryText)
+                        Spacer()
                         TextField("0.00", text: $amount)
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                             .font(.system(.title3, design: .rounded).weight(.semibold))
+                            .foregroundStyle(Theme.positive)
+                            .frame(maxWidth: 170)
+                            .focused($focused)
                     }
-                    DatePicker("Pay date", selection: $date, displayedComponents: .date)
+                    .padding(.vertical, 14)
+                    separator
+
+                    // Pay date
+                    HStack {
+                        Text("Pay date")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.secondaryText)
+                        Spacer()
+                        DatePicker("", selection: $date, displayedComponents: .date)
+                            .labelsHidden()
+                    }
+                    .padding(.vertical, 9)
+                    separator
+
+                    // Notes
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Notes")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.secondaryText)
+                        Spacer()
+                        TextField("Optional", text: $notes, axis: .vertical)
+                            .lineLimit(1...3)
+                            .multilineTextAlignment(.trailing)
+                            .font(.system(.body, design: .rounded))
+                            .focused($focused)
+                    }
+                    .padding(.vertical, 14)
+                    separator
+
+                    if let error {
+                        Text(error)
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.negative)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 10)
+                    }
                 }
-                Section("Notes") {
-                    TextField("Optional", text: $notes, axis: .vertical)
-                        .lineLimit(1...4)
-                }
-                if let error {
-                    Section { Text(error).foregroundStyle(Theme.negative) }
-                }
+                .padding(20)
             }
-            .scrollContentBackground(.hidden)
             .background(Theme.bg.ignoresSafeArea())
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(isEdit ? "Edit Dividend" : "New Dividend")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focused = false }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -66,6 +123,11 @@ struct DividendFormView: View {
             .onAppear(perform: populate)
         }
         .presentationBackground(Theme.bg)
+        .presentationDragIndicator(.visible)
+    }
+
+    private var separator: some View {
+        Rectangle().fill(Theme.stroke).frame(height: 1)
     }
 
     private func populate() {

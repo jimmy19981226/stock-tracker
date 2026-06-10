@@ -39,6 +39,9 @@ struct TradesView: View {
         .sheet(isPresented: $showAdd) {
             TradeFormView(market: market, existing: nil)
         }
+        .onAppear {
+            if ProcessInfo.processInfo.environment["UITEST_TRADE_FORM"] == "1" { showAdd = true }
+        }
         .sheet(item: $editing) { trade in
             TradeFormView(market: market, existing: trade)
         }
