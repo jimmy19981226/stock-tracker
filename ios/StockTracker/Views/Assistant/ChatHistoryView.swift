@@ -8,13 +8,13 @@ struct ChatHistoryView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                Theme.bg.ignoresSafeArea()
+
                 if vm.loadingChats && vm.chats.isEmpty {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressView()
                 } else if vm.chats.isEmpty {
-                    EmptyState(icon: "bubble.left.and.bubble.right",
-                               title: "No conversations yet",
-                               message: "Your AI chats will show up here.")
+                    emptyState
                 } else {
                     List {
                         ForEach(vm.chats) { chat in
@@ -24,6 +24,7 @@ struct ChatHistoryView: View {
                                 row(chat)
                             }
                             .listRowBackground(Theme.card)
+                            .listRowSeparatorTint(Theme.stroke)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(role: .destructive) {
                                     Task { await vm.deleteChat(chat.id) }
@@ -37,7 +38,6 @@ struct ChatHistoryView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
-            .background(Theme.bg.ignoresSafeArea())
             .navigationTitle("Chat History")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -64,6 +64,43 @@ struct ChatHistoryView: View {
             }
             .task { await vm.loadChats() }
         }
+        .presentationBackground(Theme.bg)
+        .presentationDragIndicator(.visible)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Theme.accent.opacity(0.12))
+                    .frame(width: 84, height: 84)
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(Theme.accent)
+            }
+            VStack(spacing: 6) {
+                Text("No conversations yet")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                Text("Ask the Assistant anything about your\nportfolio and it will be saved here.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            Button {
+                dismiss()
+            } label: {
+                Text("Start a chat")
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 11)
+                    .background(Theme.accent)
+                    .clipShape(Capsule())
+            }
+            .padding(.top, 4)
+        }
+        .padding(.bottom, 40)  // optically center against the nav bar
     }
 
     private func row(_ chat: ChatSummary) -> some View {

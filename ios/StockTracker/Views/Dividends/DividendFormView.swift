@@ -40,6 +40,8 @@ struct DividendFormView: View {
                     Section { Text(error).foregroundStyle(Theme.negative) }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.bg.ignoresSafeArea())
             .navigationTitle(isEdit ? "Edit Dividend" : "New Dividend")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

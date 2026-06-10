@@ -59,6 +59,8 @@ struct TradeFormView: View {
                     Section { Text(error).foregroundStyle(Theme.negative) }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.bg.ignoresSafeArea())
             .navigationTitle(isEdit ? "Edit Trade" : "New Trade")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

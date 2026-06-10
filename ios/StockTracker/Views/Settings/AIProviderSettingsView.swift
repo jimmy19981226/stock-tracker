@@ -50,6 +50,8 @@ struct AIProviderSettingsView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.bg.ignoresSafeArea())
         .navigationTitle("AI Assistant")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {

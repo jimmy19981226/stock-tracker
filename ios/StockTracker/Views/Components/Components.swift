@@ -115,25 +115,32 @@ struct TickerBadge: View {
     }
 }
 
-/// Centered empty-state placeholder.
+/// Centered empty-state placeholder with a soft accent icon backdrop.
 struct EmptyState: View {
     let icon: String
     let title: String
     var message: String = ""
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(Theme.mutedText)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(Theme.secondaryText)
-            if !message.isEmpty {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.mutedText)
-                    .multilineTextAlignment(.center)
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Theme.accent.opacity(0.10))
+                    .frame(width: 72, height: 72)
+                Image(systemName: icon)
+                    .font(.system(size: 28))
+                    .foregroundStyle(Theme.accent)
+            }
+            VStack(spacing: 5) {
+                Text(title)
+                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                if !message.isEmpty {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
             }
         }
         .frame(maxWidth: .infinity)
