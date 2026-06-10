@@ -302,8 +302,9 @@ private struct ChatBubble: View {
             HStack {
                 Spacer(minLength: 40)
                 Text(content)
-                    .font(.subheadline)
-                    .foregroundStyle(.white)
+                    .font(.subheadline.weight(.medium))
+                    // Black text — readable on every accent style (incl. gold).
+                    .foregroundStyle(.black)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(Theme.accent)

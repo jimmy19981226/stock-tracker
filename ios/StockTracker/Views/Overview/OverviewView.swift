@@ -54,6 +54,9 @@ struct OverviewView: View {
         }
         .refreshable { await reload() }
         .task { await loadOverview() }
+        .onAppear {
+            if ProcessInfo.processInfo.environment["UITEST_SETTINGS"] == "1" { showSettings = true }
+        }
     }
 
     private func reload() async {

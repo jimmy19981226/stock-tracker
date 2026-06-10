@@ -4,8 +4,10 @@ import SwiftUI
 /// accent (#00C805), orange-red for losses (#FF5000), big bold numbers, and
 /// flat surfaces with hairline separators instead of bordered cards.
 enum Theme {
-    /// Robinhood green.
-    static let accent = Color(red: 0.0, green: 0.78, blue: 0.02)
+    /// Brand accent — follows the user-selected style (Settings → Appearance).
+    /// The root view re-creates the tree when the style changes, so static
+    /// reads of this value pick up the new color everywhere.
+    static var accent: Color { AppStyle.current.accent }
 
     // Backgrounds — pure black with subtle dark surfaces.
     static let bg = Color.black

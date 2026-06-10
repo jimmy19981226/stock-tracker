@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var googleClientID = AppConfig.googleClientID
     @State private var checking = false
     @State private var checkResult: String?
+    @AppStorage("ui.style") private var styleRaw = AppStyle.emerald.rawValue
 
     var body: some View {
         NavigationStack {
@@ -33,6 +34,38 @@ struct SettingsView: View {
                         dismiss()
                     }
                     .foregroundStyle(auth.user?.isGuest == false ? Theme.negative : Theme.accent)
+                }
+
+                Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(AppStyle.allCases) { style in
+                                VStack(spacing: 7) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(style.accent)
+                                            .frame(width: 44, height: 44)
+                                        if styleRaw == style.rawValue {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .heavy))
+                                                .foregroundStyle(.black)
+                                        }
+                                    }
+                                    Text(style.displayName)
+                                        .font(.caption2.weight(
+                                            styleRaw == style.rawValue ? .bold : .regular))
+                                        .foregroundStyle(styleRaw == style.rawValue
+                                                         ? Theme.primaryText : Theme.secondaryText)
+                                }
+                                .onTapGesture { styleRaw = style.rawValue }
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("Changes the accent color across the app. Gains stay green and losses red regardless of style.")
                 }
 
                 Section {
