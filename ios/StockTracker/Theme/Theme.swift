@@ -1,27 +1,28 @@
 import SwiftUI
 
-/// Centralized colors, spacing and reusable view styling so every screen shares
-/// one iOS-native dark "studio" look (deep navy surfaces, teal accent, the
-/// green/red P&L semantics carried over from the web app).
+/// Robinhood-style design language: true-black background, signature green
+/// accent (#00C805), orange-red for losses (#FF5000), big bold numbers, and
+/// flat surfaces with hairline separators instead of bordered cards.
 enum Theme {
-    static let accent = Color(red: 0.18, green: 0.62, blue: 0.95)
+    /// Robinhood green.
+    static let accent = Color(red: 0.0, green: 0.78, blue: 0.02)
 
-    // Backgrounds
-    static let bg = Color(red: 0.05, green: 0.06, blue: 0.09)
-    static let card = Color(red: 0.09, green: 0.10, blue: 0.14)
-    static let cardElevated = Color(red: 0.12, green: 0.14, blue: 0.19)
-    static let stroke = Color.white.opacity(0.07)
+    // Backgrounds — pure black with subtle dark surfaces.
+    static let bg = Color.black
+    static let card = Color(red: 0.07, green: 0.075, blue: 0.08)
+    static let cardElevated = Color(red: 0.11, green: 0.115, blue: 0.12)
+    static let stroke = Color.white.opacity(0.08)
 
     // Text
     static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.62)
-    static let mutedText = Color.white.opacity(0.40)
+    static let secondaryText = Color.white.opacity(0.65)
+    static let mutedText = Color.white.opacity(0.42)
 
-    // P&L semantics
-    static let positive = Color(red: 0.20, green: 0.80, blue: 0.52)
-    static let negative = Color(red: 0.98, green: 0.36, blue: 0.42)
+    // P&L semantics (Robinhood green / orange-red)
+    static let positive = Color(red: 0.0, green: 0.78, blue: 0.02)
+    static let negative = Color(red: 1.0, green: 0.31, blue: 0.0)
 
-    static let cornerRadius: CGFloat = 18
+    static let cornerRadius: CGFloat = 14
 
     /// Green when up, red when down, muted when flat/unknown.
     static func pl(_ value: Double?) -> Color {
@@ -32,7 +33,7 @@ enum Theme {
     }
 }
 
-/// A rounded "card" container used across the app for an iOS grouped-list feel.
+/// A flat dark surface (no border) — Robinhood-style section container.
 struct Card<Content: View>: View {
     var padding: CGFloat = 16
     @ViewBuilder var content: Content
@@ -43,10 +44,6 @@ struct Card<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.card)
             .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
-                    .stroke(Theme.stroke, lineWidth: 1)
-            )
     }
 }
 

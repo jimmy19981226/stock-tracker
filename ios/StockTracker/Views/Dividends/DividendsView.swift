@@ -14,23 +14,22 @@ struct DividendsView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: 0) {
                 if dividends.isEmpty {
-                    Card { EmptyState(icon: "dollarsign.circle",
-                                      title: "No dividends yet",
-                                      message: "Tap + to record a dividend payment.") }
+                    EmptyState(icon: "dollarsign.circle",
+                               title: "No dividends yet",
+                               message: "Tap + to record a dividend payment.")
                 } else {
-                    Card(padding: 14) {
-                        HStack {
-                            Text("Total received")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.secondaryText)
-                            Spacer()
-                            Text(Fmt.money(total, currency: market.currencyCode))
-                                .font(.system(.headline, design: .rounded).weight(.bold))
-                                .foregroundStyle(Theme.positive)
-                        }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Dividends received")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.secondaryText)
+                        Text(Fmt.money(total, currency: market.currencyCode))
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundStyle(Theme.positive)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 14)
                     ForEach(dividends) { div in
                         DividendRow(dividend: div, name: store.name(for: div.ticker))
                             .onTapGesture { editing = div }
@@ -70,28 +69,30 @@ private struct DividendRow: View {
     let name: String
 
     var body: some View {
-        Card(padding: 14) {
+        VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Image(systemName: "dollarsign.circle.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(Theme.positive)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(dividend.ticker)
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .font(.system(.body, design: .rounded).weight(.bold))
                         .foregroundStyle(Theme.primaryText)
-                    Text(name)
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+                    if !name.isEmpty {
+                        Text(name)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1)
+                    }
                     Text(Fmt.prettyDate(dividend.payDate))
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedText)
                 }
                 Spacer()
-                Text(Fmt.money(dividend.amount, currency: dividend.currency))
+                Text("+\(Fmt.money(dividend.amount, currency: dividend.currency))")
                     .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(Theme.positive)
             }
+            .padding(.vertical, 12)
+            Rectangle().fill(Theme.stroke).frame(height: 1)
         }
+        .contentShape(Rectangle())
     }
 }

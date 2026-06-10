@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A coloured P&L pill (green up / red down) used on cards and rows.
+/// A solid green/red price pill (Robinhood-style) used on rows and headers.
 struct PLBadge: View {
     let value: Double?
     let pct: Double?
@@ -17,12 +17,39 @@ struct PLBadge: View {
                 Text(Fmt.pct(pct))
             }
         }
+        .font(.system(.subheadline, design: .rounded).weight(.bold))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(color == Theme.mutedText ? Theme.cardElevated : color)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+/// Plain colored change line, e.g. "+NT$12,345 (+1.23%) Today".
+struct ChangeLine: View {
+    let value: Double?
+    let pct: Double?
+    var currency: String = ""
+    var suffix: String = "Today"
+
+    var body: some View {
+        let color = Theme.pl(value ?? pct)
+        HStack(spacing: 5) {
+            Image(systemName: (value ?? pct ?? 0) >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                .font(.system(size: 10, weight: .bold))
+            if let value {
+                Text(Fmt.signedMoney(value, currency: currency))
+            }
+            if let pct {
+                Text("(\(Fmt.pct(pct)))")
+            }
+            if !suffix.isEmpty {
+                Text(suffix).foregroundStyle(Theme.secondaryText)
+            }
+        }
         .font(.system(.subheadline, design: .rounded).weight(.semibold))
         .foregroundStyle(color)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(color.opacity(0.14))
-        .clipShape(Capsule())
     }
 }
 
@@ -80,11 +107,11 @@ struct TickerBadge: View {
 
     var body: some View {
         Text(initials)
-            .font(.system(size: size * 0.32, weight: .bold, design: .rounded))
-            .foregroundStyle(Theme.accent)
+            .font(.system(size: size * 0.30, weight: .bold, design: .rounded))
+            .foregroundStyle(Theme.primaryText)
             .frame(width: size, height: size)
-            .background(Theme.accent.opacity(0.16))
-            .clipShape(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous))
+            .background(Theme.cardElevated)
+            .clipShape(Circle())
     }
 }
 

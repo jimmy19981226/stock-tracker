@@ -27,49 +27,53 @@ private struct SummaryCard: View {
     let currency: String
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("PORTFOLIO VALUE")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.secondaryText)
-                        .tracking(0.6)
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
-                            .font(.system(size: 32, weight: .bold, design: .rounded))
-                            .foregroundStyle(Theme.primaryText)
-                            .minimumScaleFactor(0.6)
-                            .lineLimit(1)
-                        Spacer()
-                        PLBadge(value: summary?.todayPl, pct: summary?.todayPlPct,
-                                currency: currency, compact: true)
-                    }
-                }
-
-                Divider().overlay(Theme.stroke)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    StatBlock(label: "Total P&L",
-                              value: Fmt.signedMoney(summary?.totalPl, currency: currency),
-                              valueColor: Theme.pl(summary?.totalPl))
-                    StatBlock(label: "Return",
-                              value: Fmt.pct(summary?.totalPlPct),
-                              valueColor: Theme.pl(summary?.totalPlPct),
-                              alignment: .trailing)
-                    StatBlock(label: "Realized P&L",
-                              value: Fmt.signedMoney(summary?.realizedPl, currency: currency),
-                              valueColor: Theme.pl(summary?.realizedPl))
-                    StatBlock(label: "Dividends",
-                              value: Fmt.money(summary?.dividends, currency: currency),
-                              alignment: .trailing)
-                    StatBlock(label: "Cost basis",
-                              value: Fmt.money(summary?.totalCost, currency: currency))
-                    StatBlock(label: "This year",
-                              value: Fmt.signedMoney(summary?.yearEarned, currency: currency),
-                              valueColor: Theme.pl(summary?.yearEarned),
-                              alignment: .trailing)
-                }
+        VStack(alignment: .leading, spacing: 18) {
+            // Big bold value with a colored change line under it.
+            VStack(alignment: .leading, spacing: 5) {
+                Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .foregroundStyle(Theme.primaryText)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                ChangeLine(value: summary?.todayPl, pct: summary?.todayPlPct,
+                           currency: currency)
+                ChangeLine(value: summary?.totalPl, pct: summary?.totalPlPct,
+                           currency: currency, suffix: "All time")
             }
+
+            // Flat stat rows with hairline separators.
+            VStack(spacing: 0) {
+                statRow("Realized P&L",
+                        Fmt.signedMoney(summary?.realizedPl, currency: currency),
+                        Theme.pl(summary?.realizedPl))
+                statRow("Dividends",
+                        Fmt.money(summary?.dividends, currency: currency),
+                        Theme.primaryText)
+                statRow("Cost basis",
+                        Fmt.money(summary?.totalCost, currency: currency),
+                        Theme.primaryText)
+                statRow("Earned this year",
+                        Fmt.signedMoney(summary?.yearEarned, currency: currency),
+                        Theme.pl(summary?.yearEarned), last: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func statRow(_ label: String, _ value: String, _ color: Color,
+                         last: Bool = false) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+                Spacer()
+                Text(value)
+                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                    .foregroundStyle(color)
+            }
+            .padding(.vertical, 11)
+            if !last { Rectangle().fill(Theme.stroke).frame(height: 1) }
         }
     }
 }
@@ -86,66 +90,66 @@ private struct EarningsCard: View {
         let total: Double
     }
 
-    private var rows: [Row] {
+    // DateFormatter is expensive to build and to use — keep one shared instance.
+    private static let dayFormat: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd"
         f.timeZone = TimeZone(identifier: "UTC")
-        return points.compactMap { p in
-            guard let d = f.date(from: String(p.date.prefix(10))) else { return nil }
+        return f
+    }()
+
+    /// Parse once per body evaluation. NEVER reference this (or anything derived
+    /// from it) inside the Chart's per-point closure — Charts evaluates that
+    /// closure per data point, and a recompute here is O(points²) date parsing
+    /// on the main thread (it froze the whole app).
+    private func makeRows() -> [Row] {
+        points.compactMap { p in
+            guard let d = Self.dayFormat.date(from: String(p.date.prefix(10))) else { return nil }
             return Row(date: d, total: p.total)
         }
     }
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader("Cumulative earnings") {
-                    if let last = rows.last {
-                        Text(Fmt.signedMoney(last.total, currency: currency))
-                            .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .foregroundStyle(Theme.pl(last.total))
-                    }
-                }
+        let rows = makeRows()
+        let lineColor: Color = (rows.last?.total ?? 0) >= (rows.first?.total ?? 0)
+            ? Theme.positive : Theme.negative
 
-                if rows.count < 2 {
-                    EmptyState(icon: "chart.line.uptrend.xyaxis",
-                               title: "Not enough history yet")
-                } else {
-                    Chart(rows) { row in
-                        AreaMark(x: .value("Date", row.date), y: .value("Total", row.total))
-                            .interpolationMethod(.monotone)
-                            .foregroundStyle(
-                                LinearGradient(colors: [Theme.accent.opacity(0.35), .clear],
-                                               startPoint: .top, endPoint: .bottom)
-                            )
-                        LineMark(x: .value("Date", row.date), y: .value("Total", row.total))
-                            .interpolationMethod(.monotone)
-                            .foregroundStyle(Theme.accent)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                    }
-                    .chartYAxis {
-                        AxisMarks { value in
-                            AxisGridLine().foregroundStyle(Theme.stroke)
-                            AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(Fmt.compact(v))
-                                        .font(.caption2)
-                                        .foregroundStyle(Theme.mutedText)
-                                }
-                            }
-                        }
-                    }
-                    .chartXAxis {
-                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                            AxisGridLine().foregroundStyle(Theme.stroke)
-                            AxisValueLabel(format: .dateTime.month(.abbreviated))
-                                .foregroundStyle(Theme.mutedText)
-                        }
-                    }
-                    .frame(height: 160)
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader("Earnings") {
+                if let last = rows.last {
+                    Text(Fmt.signedMoney(last.total, currency: currency))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundStyle(Theme.pl(last.total))
                 }
             }
+
+            if rows.count < 2 {
+                EmptyState(icon: "chart.line.uptrend.xyaxis",
+                           title: "Not enough history yet")
+            } else {
+                Chart(rows) { row in
+                    LineMark(x: .value("Date", row.date), y: .value("Total", row.total))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(lineColor)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                    AreaMark(x: .value("Date", row.date), y: .value("Total", row.total))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(
+                            LinearGradient(colors: [lineColor.opacity(0.18), .clear],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                }
+                .chartYAxis(.hidden)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisValueLabel(format: .dateTime.month(.abbreviated))
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                }
+                .frame(height: 150)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -156,17 +160,18 @@ private struct HoldingsSection: View {
     let store: PortfolioStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
             SectionHeader("Holdings") {
                 Text("\(holdings.count)")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.secondaryText)
             }
+            .padding(.bottom, 4)
             if holdings.isEmpty {
-                Card { EmptyState(icon: "tray", title: "No positions",
-                                  message: "Add a trade to start tracking.") }
+                EmptyState(icon: "tray", title: "No positions",
+                           message: "Add a trade to start tracking.")
             } else {
-                VStack(spacing: 10) {
+                VStack(spacing: 0) {
                     ForEach(holdings) { h in
                         NavigationLink(value: h) {
                             HoldingRow(holding: h, name: store.name(for: h.ticker))
@@ -184,31 +189,41 @@ private struct HoldingRow: View {
     let name: String
 
     var body: some View {
-        Card(padding: 14) {
+        VStack(spacing: 0) {
             HStack(spacing: 12) {
-                TickerBadge(ticker: holding.ticker)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(holding.ticker)
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .font(.system(.body, design: .rounded).weight(.bold))
                         .foregroundStyle(Theme.primaryText)
-                    Text(name)
+                    Text("\(Fmt.shares(holding.shares)) shares")
                         .font(.caption)
                         .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
-                    Text("\(Fmt.shares(holding.shares)) sh · avg \(Fmt.money(holding.avgCost, currency: holding.currency))")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedText)
-                        .lineLimit(1)
+                    if !name.isEmpty {
+                        Text(name)
+                            .font(.caption2)
+                            .foregroundStyle(Theme.mutedText)
+                            .lineLimit(1)
+                    }
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(Fmt.money(holding.marketValue, currency: holding.currency, digits: 0))
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(Theme.primaryText)
-                    PLBadge(value: holding.unrealizedPl, pct: holding.unrealizedPlPct,
-                            currency: holding.currency, compact: true)
+                VStack(alignment: .trailing, spacing: 5) {
+                    // Solid pill = current price, colored by today's move.
+                    Text(Fmt.money(holding.currentPrice, currency: holding.currency))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Theme.pl(holding.todayChange) == Theme.mutedText
+                                    ? Theme.cardElevated : Theme.pl(holding.todayChange))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    Text(Fmt.pct(holding.unrealizedPlPct))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.pl(holding.unrealizedPlPct))
                 }
             }
+            .padding(.vertical, 12)
+            Rectangle().fill(Theme.stroke).frame(height: 1)
         }
+        .contentShape(Rectangle())
     }
 }

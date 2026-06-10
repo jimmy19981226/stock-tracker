@@ -12,11 +12,11 @@ struct TradesView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(spacing: 0) {
                 if trades.isEmpty {
-                    Card { EmptyState(icon: "arrow.left.arrow.right",
-                                      title: "No trades yet",
-                                      message: "Tap + to log your first buy or sell.") }
+                    EmptyState(icon: "arrow.left.arrow.right",
+                               title: "No trades yet",
+                               message: "Tap + to log your first buy or sell.")
                 } else {
                     ForEach(trades) { trade in
                         TradeRow(trade: trade, name: store.name(for: trade.ticker))
@@ -59,27 +59,28 @@ private struct TradeRow: View {
     private var isBuy: Bool { trade.type == .buy }
 
     var body: some View {
-        Card(padding: 14) {
+        VStack(spacing: 0) {
             HStack(spacing: 12) {
-                VStack(spacing: 2) {
-                    Image(systemName: isBuy ? "arrow.down" : "arrow.up")
-                        .font(.system(size: 13, weight: .bold))
-                    Text(isBuy ? "BUY" : "SELL")
-                        .font(.system(size: 9, weight: .heavy))
-                }
-                .foregroundStyle(isBuy ? Theme.positive : Theme.negative)
-                .frame(width: 42, height: 42)
-                .background((isBuy ? Theme.positive : Theme.negative).opacity(0.14))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(trade.ticker)
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(Theme.primaryText)
-                    Text(name)
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(trade.ticker)
+                            .font(.system(.body, design: .rounded).weight(.bold))
+                            .foregroundStyle(Theme.primaryText)
+                        Text(isBuy ? "Buy" : "Sell")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(isBuy ? Theme.positive : Theme.negative)
+                        if trade.status == .closed {
+                            Text("Closed")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Theme.mutedText)
+                        }
+                    }
+                    if !name.isEmpty {
+                        Text(name)
+                            .font(.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1)
+                    }
                     Text(Fmt.prettyDate(trade.tradeDate))
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedText)
@@ -92,13 +93,11 @@ private struct TradeRow: View {
                     Text(Fmt.money(trade.shares * trade.price, currency: trade.market.currencyCode, digits: 0))
                         .font(.caption)
                         .foregroundStyle(Theme.secondaryText)
-                    if trade.status == .closed {
-                        Text("CLOSED")
-                            .font(.system(size: 9, weight: .heavy))
-                            .foregroundStyle(Theme.mutedText)
-                    }
                 }
             }
+            .padding(.vertical, 12)
+            Rectangle().fill(Theme.stroke).frame(height: 1)
         }
+        .contentShape(Rectangle())
     }
 }

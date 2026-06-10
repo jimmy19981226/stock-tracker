@@ -7,15 +7,10 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.16, green: 0.54, blue: 0.98),
-                         Color(red: 0.05, green: 0.16, blue: 0.42)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
 
             VStack(spacing: 18) {
-                BrandMark()
+                BrandMark(stroke: Theme.accent)
                     .frame(width: 92, height: 92)
                     .scaleEffect(appear ? 1 : 0.7)
                     .opacity(appear ? 1 : 0)

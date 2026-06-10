@@ -60,29 +60,27 @@ private struct PriceHeader: View {
     let currency: String
 
     var body: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(detail.name)
-                    .font(.headline)
-                    .foregroundStyle(Theme.primaryText)
-                Text(detail.symbol)
-                    .font(.caption)
-                    .foregroundStyle(Theme.secondaryText)
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(Fmt.money(detail.live.price, currency: currency))
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundStyle(Theme.primaryText)
-                    PLBadge(value: detail.live.todayChange, pct: detail.live.todayChangePct,
-                            currency: currency)
-                }
-                HStack(spacing: 16) {
-                    miniStat("Open", detail.live.dayOpen)
-                    miniStat("High", detail.live.dayHigh)
-                    miniStat("Low", detail.live.dayLow)
-                    miniStat("Prev", detail.live.previousClose)
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(detail.name)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .foregroundStyle(Theme.secondaryText)
+            Text(Fmt.money(detail.live.price, currency: currency))
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .foregroundStyle(Theme.primaryText)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            ChangeLine(value: detail.live.todayChange, pct: detail.live.todayChangePct,
+                       currency: currency)
+
+            HStack(spacing: 18) {
+                miniStat("Open", detail.live.dayOpen)
+                miniStat("High", detail.live.dayHigh)
+                miniStat("Low", detail.live.dayLow)
+                miniStat("Prev", detail.live.previousClose)
             }
+            .padding(.top, 6)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func miniStat(_ label: String, _ value: Double?) -> some View {
@@ -110,92 +108,93 @@ private struct ChartCard: View {
         let id = UUID()
         let date: Date
         let buy: Bool
+        let price: Double   // y-position, resolved against bars up front
     }
 
-    private func parse(_ s: String) -> Date? {
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
-        return f.date(from: String(s.prefix(10)))
-    }
+    private static let dayFormat: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
 
-    private var bars: [Bar] {
+    // Parse once per body evaluation — never recompute inside Chart closures
+    // (Charts calls those per data point; recomputing here is O(n²) parsing).
+    private func makeBars() -> [Bar] {
         detail.history.compactMap { b in
-            guard let d = parse(b.date), let c = b.close else { return nil }
+            guard let d = Self.dayFormat.date(from: String(b.date.prefix(10))),
+                  let c = b.close else { return nil }
             return Bar(date: d, close: c)
         }
     }
 
-    private var markers: [Marker] {
+    private func makeMarkers(bars: [Bar]) -> [Marker] {
         detail.trades.compactMap { t in
-            guard let d = parse(t.date) else { return nil }
-            return Marker(date: d, buy: t.type == .buy)
+            guard let d = Self.dayFormat.date(from: String(t.date.prefix(10))) else { return nil }
+            // Nearest close so the marker sits on the line.
+            let y = bars.min(by: {
+                abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d))
+            })?.close ?? t.price
+            return Marker(date: d, buy: t.type == .buy, price: y)
         }
-    }
-
-    private var up: Bool {
-        guard let first = bars.first?.close, let last = bars.last?.close else { return true }
-        return last >= first
     }
 
     var body: some View {
-        Card {
-            VStack(spacing: 12) {
-                Picker("Period", selection: $period) {
-                    ForEach(HistoryPeriod.allCases) { p in Text(p.label).tag(p) }
-                }
-                .pickerStyle(.segmented)
+        let bars = makeBars()
+        let markers = makeMarkers(bars: bars)
+        let up = (bars.last?.close ?? 0) >= (bars.first?.close ?? 0)
+        let color = up ? Theme.positive : Theme.negative
 
-                if bars.count < 2 {
-                    EmptyState(icon: "chart.xyaxis.line", title: "No price history")
-                } else {
-                    let color = up ? Theme.positive : Theme.negative
-                    Chart {
-                        ForEach(bars) { bar in
-                            LineMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
-                                .interpolationMethod(.monotone)
-                                .foregroundStyle(color)
-                            AreaMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
-                                .interpolationMethod(.monotone)
-                                .foregroundStyle(
-                                    LinearGradient(colors: [color.opacity(0.25), .clear],
-                                                   startPoint: .top, endPoint: .bottom)
-                                )
-                        }
-                        ForEach(markers) { m in
-                            PointMark(x: .value("Date", m.date), y: .value("Close", priceAt(m.date)))
-                                .symbol {
-                                    Image(systemName: m.buy ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
-                                        .font(.system(size: 9))
-                                        .foregroundStyle(m.buy ? Theme.positive : Theme.negative)
-                                }
-                        }
+        VStack(spacing: 12) {
+            Picker("Period", selection: $period) {
+                ForEach(HistoryPeriod.allCases) { p in Text(p.label).tag(p) }
+            }
+            .pickerStyle(.segmented)
+
+            if bars.count < 2 {
+                EmptyState(icon: "chart.xyaxis.line", title: "No price history")
+            } else {
+                Chart {
+                    ForEach(bars) { bar in
+                        LineMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(color)
+                        AreaMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(
+                                LinearGradient(colors: [color.opacity(0.18), .clear],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
                     }
-                    .chartYAxis {
-                        AxisMarks { value in
-                            AxisGridLine().foregroundStyle(Theme.stroke)
-                            AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text(Fmt.compact(v)).font(.caption2)
-                                        .foregroundStyle(Theme.mutedText)
-                                }
+                    ForEach(markers) { m in
+                        PointMark(x: .value("Date", m.date), y: .value("Close", m.price))
+                            .symbol {
+                                Image(systemName: m.buy ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(m.buy ? Theme.positive : Theme.negative)
+                            }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let v = value.as(Double.self) {
+                                Text(Fmt.compact(v)).font(.caption2)
+                                    .foregroundStyle(Theme.mutedText)
                             }
                         }
                     }
-                    .chartXAxis {
-                        AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                            AxisGridLine().foregroundStyle(Theme.stroke)
-                            AxisValueLabel(format: .dateTime.month(.abbreviated))
-                                .foregroundStyle(Theme.mutedText)
-                        }
-                    }
-                    .frame(height: 200)
                 }
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisValueLabel(format: .dateTime.month(.abbreviated))
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                }
+                .frame(height: 220)
             }
         }
-    }
-
-    /// Nearest closing price to a trade date, so the marker sits on the line.
-    private func priceAt(_ date: Date) -> Double {
-        bars.min(by: { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) })?.close ?? 0
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
