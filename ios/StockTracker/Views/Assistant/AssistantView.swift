@@ -1,4 +1,6 @@
+import PhotosUI
 import SwiftUI
+import UIKit
 
 @MainActor
 final class AssistantViewModel: ObservableObject {
@@ -9,9 +11,35 @@ final class AssistantViewModel: ObservableObject {
     @Published var status: AiStatus?
     @Published var error: String?
 
+    // Image-import flow inside the chat: attach → parse → review card → add.
+    @Published var importImage: UIImage?
+    @Published var isParsingImport = false
+    @Published var pendingImport: ParsedRecords?
+    @Published var importTradeOn: [Bool] = []
+    @Published var importDividendOn: [Bool] = []
+    @Published var isSubmittingImport = false
+
     private var chatId: Int?
 
     init() {
+        // UI-test hook: seed a parsed-import review card to screenshot the flow.
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_IMPORT"] == "1" {
+            messages = [ChatMessage(role: "user", content: "(attached a brokerage screenshot)")]
+            pendingImport = ParsedRecords(
+                trades: [
+                    ParsedTradeRow(type: .buy, ticker: "2330", shares: 100, price: 1050,
+                                   date: "2024-11-05", fee: 50, notes: nil),
+                    ParsedTradeRow(type: .sell, ticker: "2317", shares: 500, price: 210.5,
+                                   date: "2024-11-20", fee: 45, notes: nil),
+                ],
+                dividends: [
+                    ParsedDividendRow(ticker: "0050", amount: 3200, date: "2024-12-10", notes: nil),
+                ],
+                notes: ""
+            )
+            importTradeOn = [true, true]
+            importDividendOn = [true]
+        }
         // UI-test hook: seed a sample formatted reply to screenshot the renderer.
         if ProcessInfo.processInfo.environment["UITEST_ASSISTANT_DEMO"] == "1" {
             messages = [
@@ -93,6 +121,89 @@ final class AssistantViewModel: ObservableObject {
         messages = []
         streamingText = ""
         error = nil
+        cancelImport()
+    }
+
+    // MARK: - Image import (in-chat)
+
+    func handlePickedImage(_ rawData: Data) async {
+        error = nil
+        var data = rawData
+        // Downscale large photos so the upload stays small.
+        if let img = UIImage(data: data) {
+            let maxDim: CGFloat = 2200
+            let scale = min(1, maxDim / max(img.size.width, img.size.height))
+            let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
+            let renderer = UIGraphicsImageRenderer(size: target)
+            let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: target)) }
+            importImage = resized
+            data = resized.jpegData(compressionQuality: 0.8) ?? data
+        }
+        isParsingImport = true
+        pendingImport = nil
+        do {
+            let result = try await APIClient.shared.parseRecords(imageData: data)
+            pendingImport = result
+            importTradeOn = Array(repeating: true, count: result.trades.count)
+            importDividendOn = Array(repeating: true, count: result.dividends.count)
+            if result.trades.isEmpty && result.dividends.isEmpty {
+                let note = result.notes.isEmpty
+                    ? "I couldn't find any trades or dividends in that image. Try a clearer screenshot."
+                    : result.notes
+                messages.append(ChatMessage(role: "assistant", content: note))
+                cancelImport()
+            }
+        } catch {
+            self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            cancelImport()
+        }
+        isParsingImport = false
+    }
+
+    func submitImport(store: PortfolioStore) async {
+        guard let parsed = pendingImport else { return }
+        isSubmittingImport = true
+        var added = (trades: 0, dividends: 0)
+        var failures = 0
+        for (i, row) in parsed.trades.enumerated()
+        where importTradeOn.indices.contains(i) && importTradeOn[i] {
+            let payload = TradeCreate(
+                type: row.type, ticker: row.ticker, shares: row.shares,
+                price: row.price, tradeDate: row.date, fee: row.fee ?? 0,
+                notes: row.notes, market: nil)
+            do { _ = try await APIClient.shared.createTrade(payload); added.trades += 1 }
+            catch { failures += 1 }
+        }
+        for (i, row) in parsed.dividends.enumerated()
+        where importDividendOn.indices.contains(i) && importDividendOn[i] {
+            let payload = DividendCreate(
+                ticker: row.ticker, amount: row.amount,
+                payDate: row.date, notes: row.notes, market: nil)
+            do { _ = try await APIClient.shared.createDividend(payload); added.dividends += 1 }
+            catch { failures += 1 }
+        }
+        await store.loadAll()
+
+        var summary = "✅ Added"
+        var parts: [String] = []
+        if added.trades > 0 { parts.append(" \(added.trades) trade\(added.trades == 1 ? "" : "s")") }
+        if added.dividends > 0 { parts.append(" \(added.dividends) dividend\(added.dividends == 1 ? "" : "s")") }
+        summary += parts.isEmpty ? " nothing" : parts.joined(separator: " and")
+        summary += " to your portfolio."
+        if failures > 0 { summary += " ⚠️ \(failures) row\(failures == 1 ? "" : "s") failed." }
+        messages.append(ChatMessage(role: "assistant", content: summary))
+
+        isSubmittingImport = false
+        cancelImport()
+    }
+
+    func cancelImport() {
+        importImage = nil
+        pendingImport = nil
+        importTradeOn = []
+        importDividendOn = []
+        isParsingImport = false
+        isSubmittingImport = false
     }
 
     var currentChatId: Int? { chatId }
@@ -135,9 +246,11 @@ final class AssistantViewModel: ObservableObject {
 /// reply bubble, backed by the same /api/ai/chat SSE endpoint as the web app.
 struct AssistantView: View {
     @StateObject private var vm = AssistantViewModel()
+    @EnvironmentObject private var store: PortfolioStore
     @State private var showSettings = false
     @State private var showHistory = false
     @State private var providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
+    @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
 
     var body: some View {
@@ -170,6 +283,17 @@ struct AssistantView: View {
         }
         .sheet(isPresented: $showHistory) { ChatHistoryView(vm: vm) }
         .sheet(isPresented: $showSettings) { SettingsView() }
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            photoItem = nil
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    await vm.handlePickedImage(data)
+                } else {
+                    vm.error = "Couldn't read that image"
+                }
+            }
+        }
         .task { await vm.loadStatus() }
         .onAppear {
             providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
@@ -215,6 +339,30 @@ struct AssistantView: View {
                         }
                         .id("streaming")
                     }
+
+                    // In-chat image import: attached image → parsing → review card.
+                    if let img = vm.importImage {
+                        HStack {
+                            Spacer(minLength: 60)
+                            Image(uiImage: img)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 180)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                    }
+                    if vm.isParsingImport {
+                        HStack(spacing: 10) {
+                            TypingIndicator()
+                            Text("Reading your image…")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.secondaryText)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if vm.pendingImport != nil {
+                        ImportReviewCard(vm: vm, store: store)
+                    }
                     if let error = vm.error {
                         ErrorBanner(message: error)
                     }
@@ -229,6 +377,12 @@ struct AssistantView: View {
             }
             .onChange(of: vm.streamingText) { _, _ in
                 proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            .onChange(of: vm.isParsingImport) { _, _ in
+                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+            }
+            .onChange(of: vm.pendingImport == nil) { _, _ in
+                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }
     }
@@ -251,6 +405,14 @@ struct AssistantView: View {
 
     private var inputBar: some View {
         HStack(spacing: 10) {
+            // Attach a brokerage screenshot — AI extracts trades/dividends in-chat.
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(vm.isParsingImport ? Theme.mutedText : Theme.secondaryText)
+            }
+            .disabled(vm.isParsingImport || vm.isSubmittingImport)
+
             TextField("Message", text: $vm.input, axis: .vertical)
                 .focused($inputFocused)
                 .lineLimit(1...5)
@@ -327,5 +489,123 @@ private struct ChatBubble: View {
             out = String(out[r.upperBound...])
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// Assistant-side card showing parsed trades/dividends with toggles and an
+/// Add button — the in-chat version of the import review screen.
+private struct ImportReviewCard: View {
+    @ObservedObject var vm: AssistantViewModel
+    let store: PortfolioStore
+
+    private var selectedCount: Int {
+        vm.importTradeOn.filter { $0 }.count + vm.importDividendOn.filter { $0 }.count
+    }
+
+    private var addTitle: String {
+        let t = vm.importTradeOn.filter { $0 }.count
+        let d = vm.importDividendOn.filter { $0 }.count
+        var parts: [String] = []
+        if t > 0 { parts.append("\(t) trade\(t == 1 ? "" : "s")") }
+        if d > 0 { parts.append("\(d) dividend\(d == 1 ? "" : "s")") }
+        return parts.isEmpty ? "Add" : "Add \(parts.joined(separator: " · "))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Here's what I found — untick anything that's wrong, then add:")
+                .font(.subheadline)
+                .foregroundStyle(Theme.primaryText)
+
+            if let parsed = vm.pendingImport {
+                VStack(spacing: 0) {
+                    ForEach(Array(parsed.trades.enumerated()), id: \.offset) { i, row in
+                        importRow(
+                            isOn: Binding(
+                                get: { vm.importTradeOn.indices.contains(i) ? vm.importTradeOn[i] : false },
+                                set: { if vm.importTradeOn.indices.contains(i) { vm.importTradeOn[i] = $0 } }),
+                            title: row.ticker,
+                            tag: row.type == .buy ? "Buy" : "Sell",
+                            tagColor: row.type == .buy ? Theme.positive : Theme.negative,
+                            detail: "\(Fmt.shares(row.shares)) @ \(Fmt.number(row.price))",
+                            date: row.date
+                        )
+                    }
+                    ForEach(Array(parsed.dividends.enumerated()), id: \.offset) { i, row in
+                        importRow(
+                            isOn: Binding(
+                                get: { vm.importDividendOn.indices.contains(i) ? vm.importDividendOn[i] : false },
+                                set: { if vm.importDividendOn.indices.contains(i) { vm.importDividendOn[i] = $0 } }),
+                            title: row.ticker,
+                            tag: "Dividend",
+                            tagColor: Theme.accent,
+                            detail: "+\(Fmt.number(row.amount))",
+                            date: row.date
+                        )
+                    }
+                }
+
+                if !parsed.notes.isEmpty {
+                    Text(parsed.notes)
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryText)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await vm.submitImport(store: store) }
+                } label: {
+                    Group {
+                        if vm.isSubmittingImport { ProgressView().tint(.black) }
+                        else {
+                            Text(addTitle)
+                                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        }
+                    }
+                    .foregroundStyle(selectedCount == 0 ? Theme.mutedText : .black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(selectedCount == 0 ? Theme.cardElevated : Theme.accent)
+                    .clipShape(Capsule())
+                }
+                .disabled(selectedCount == 0 || vm.isSubmittingImport)
+
+                Button("Dismiss") { vm.cancelImport() }
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
+        .padding(14)
+        .background(Theme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func importRow(isOn: Binding<Bool>, title: String, tag: String,
+                           tagColor: Color, detail: String, date: String) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Toggle("", isOn: isOn).labelsHidden()
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundStyle(Theme.primaryText)
+                        Text(tag)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(tagColor)
+                    }
+                    Text(date)
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedText)
+                }
+                Spacer()
+                Text(detail)
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(Theme.primaryText)
+            }
+            .padding(.vertical, 8)
+            Rectangle().fill(Theme.stroke).frame(height: 1)
+        }
     }
 }
