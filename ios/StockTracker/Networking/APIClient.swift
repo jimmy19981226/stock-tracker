@@ -155,6 +155,43 @@ final class APIClient {
         return try await request("/api/stock/\(enc)/detail?period=\(period.rawValue)")
     }
 
+    // MARK: - AI image import
+
+    /// Upload a brokerage screenshot/statement image; the backend's vision model
+    /// extracts trades + dividends. Read-only — nothing is written until the user
+    /// confirms each row (which then goes through the normal create endpoints).
+    func parseRecords(imageData: Data,
+                      filename: String = "upload.jpg",
+                      mimeType: String = "image/jpeg") async throws -> ParsedRecords {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var req = URLRequest(url: try url("/api/ai/parse-records"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 180  // vision parsing can take a while
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        Self.attachAuth(&req)
+
+        var body = Data()
+        body.appendString("--\(boundary)\r\n")
+        body.appendString("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+        body.appendString("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(imageData)
+        body.appendString("\r\n--\(boundary)--\r\n")
+        req.httpBody = body
+
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.transport("No response from server")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw APIError.http(http.statusCode, Self.detail(from: data, status: http.statusCode))
+        }
+        do {
+            return try decoder.decode(ParsedRecords.self, from: data)
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
+    }
+
     // MARK: - AI
 
     func getAiStatus() async throws -> AiStatus { try await request("/api/ai/status") }
@@ -214,5 +251,11 @@ final class APIClient {
                 break
             }
         }
+    }
+}
+
+private extension Data {
+    mutating func appendString(_ s: String) {
+        append(Data(s.utf8))
     }
 }

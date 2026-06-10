@@ -131,6 +131,31 @@ struct EarningsPoint: Codable, Identifiable, Hashable {
     let total: Double
 }
 
+// MARK: - AI image import (parse a brokerage screenshot into records)
+
+struct ParsedTradeRow: Codable, Hashable {
+    let type: TradeType
+    let ticker: String
+    let shares: Double
+    let price: Double
+    let date: String
+    let fee: Double?
+    let notes: String?
+}
+
+struct ParsedDividendRow: Codable, Hashable {
+    let ticker: String
+    let amount: Double
+    let date: String
+    let notes: String?
+}
+
+struct ParsedRecords: Codable {
+    let trades: [ParsedTradeRow]
+    let dividends: [ParsedDividendRow]
+    let notes: String
+}
+
 // MARK: - AI Assistant
 
 struct AiStatus: Codable {

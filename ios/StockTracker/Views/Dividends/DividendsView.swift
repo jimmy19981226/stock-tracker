@@ -5,6 +5,7 @@ struct DividendsView: View {
     @EnvironmentObject private var store: PortfolioStore
     @State private var editing: Dividend?
     @State private var showAdd = false
+    @State private var showImport = false
 
     private var dividends: [Dividend] {
         store.dividends(for: market).sorted { $0.payDate > $1.payDate }
@@ -44,9 +45,13 @@ struct DividendsView: View {
         }
         .refreshable { await store.loadAll() }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { showImport = true } label: { Image(systemName: "text.viewfinder") }
                 Button { showAdd = true } label: { Image(systemName: "plus") }
             }
+        }
+        .sheet(isPresented: $showImport) {
+            ImportRecordsView()
         }
         .sheet(isPresented: $showAdd) {
             DividendFormView(market: market, existing: nil)

@@ -5,6 +5,7 @@ struct TradesView: View {
     @EnvironmentObject private var store: PortfolioStore
     @State private var editing: Trade?
     @State private var showAdd = false
+    @State private var showImport = false
 
     private var trades: [Trade] {
         store.trades(for: market).sorted { $0.tradeDate > $1.tradeDate }
@@ -32,15 +33,20 @@ struct TradesView: View {
         }
         .refreshable { await store.loadAll() }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button { showImport = true } label: { Image(systemName: "text.viewfinder") }
                 Button { showAdd = true } label: { Image(systemName: "plus") }
             }
+        }
+        .sheet(isPresented: $showImport) {
+            ImportRecordsView()
         }
         .sheet(isPresented: $showAdd) {
             TradeFormView(market: market, existing: nil)
         }
         .onAppear {
             if ProcessInfo.processInfo.environment["UITEST_TRADE_FORM"] == "1" { showAdd = true }
+            if ProcessInfo.processInfo.environment["UITEST_IMPORT"] == "1" { showImport = true }
         }
         .sheet(item: $editing) { trade in
             TradeFormView(market: market, existing: trade)
