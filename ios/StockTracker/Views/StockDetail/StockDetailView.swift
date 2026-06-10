@@ -146,10 +146,11 @@ private struct ChartCard: View {
         let color = up ? Theme.positive : Theme.negative
 
         VStack(spacing: 12) {
-            Picker("Period", selection: $period) {
-                ForEach(HistoryPeriod.allCases) { p in Text(p.label).tag(p) }
-            }
-            .pickerStyle(.segmented)
+            UnderlineTabs(
+                tabs: HistoryPeriod.allCases.map { ($0, $0.label) },
+                selection: $period,
+                font: .system(.caption, design: .rounded).weight(.bold)
+            )
 
             if bars.count < 2 {
                 EmptyState(icon: "chart.xyaxis.line", title: "No price history")

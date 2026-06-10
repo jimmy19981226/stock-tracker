@@ -30,24 +30,45 @@ struct TradeFormView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Type", selection: $type) {
-                        Text("Buy").tag(TradeType.buy)
-                        Text("Sell").tag(TradeType.sell)
-                    }
-                    .pickerStyle(.segmented)
+                    buySellSelector
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
                 }
 
                 Section("Trade") {
                     TextField("Ticker (e.g. \(market == .TW ? "2330" : "AAPL"))", text: $ticker)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                    TextField("Shares", text: $shares)
-                        .keyboardType(.decimalPad)
-                    TextField("Price", text: $price)
-                        .keyboardType(.decimalPad)
-                    TextField("Fee (optional)", text: $fee)
-                        .keyboardType(.decimalPad)
+                        .font(.system(.body, design: .rounded).weight(.semibold))
+                    LabeledContent("Shares") {
+                        TextField("0", text: $shares)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .font(.system(.title3, design: .rounded).weight(.semibold))
+                    }
+                    LabeledContent("Price") {
+                        TextField("0.00", text: $price)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .font(.system(.title3, design: .rounded).weight(.semibold))
+                    }
+                    LabeledContent("Fee") {
+                        TextField("Optional", text: $fee)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .font(.system(.body, design: .rounded))
+                    }
                     DatePicker("Date", selection: $date, displayedComponents: .date)
+                }
+
+                if let est = estimatedTotal {
+                    Section {
+                        LabeledContent("Estimated total") {
+                            Text(Fmt.money(est, currency: market.currencyCode))
+                                .font(.system(.body, design: .rounded).weight(.bold))
+                                .foregroundStyle(type == .buy ? Theme.negative : Theme.positive)
+                        }
+                    }
                 }
 
                 Section("Notes") {
@@ -67,13 +88,47 @@ struct TradeFormView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    if saving { ProgressView() }
-                    else { Button("Save") { Task { await save() } }.disabled(!isValid) }
+            }
+            .safeAreaInset(edge: .bottom) {
+                PrimaryButton(
+                    title: isEdit ? "Save Changes" : (type == .buy ? "Buy" : "Sell"),
+                    disabled: !isValid,
+                    busy: saving
+                ) {
+                    Task { await save() }
                 }
             }
             .onAppear(perform: populate)
         }
+        .presentationBackground(Theme.bg)
+    }
+
+    /// Two-pill Buy / Sell selector — green for buy, red for sell.
+    private var buySellSelector: some View {
+        HStack(spacing: 10) {
+            selectorPill("Buy", .buy, Theme.positive)
+            selectorPill("Sell", .sell, Theme.negative)
+        }
+    }
+
+    private func selectorPill(_ label: String, _ value: TradeType, _ color: Color) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) { type = value }
+        } label: {
+            Text(label)
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .foregroundStyle(type == value ? .black : Theme.secondaryText)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(type == value ? color : Theme.cardElevated)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var estimatedTotal: Double? {
+        guard let s = Double(shares), let p = Double(price), s > 0, p > 0 else { return nil }
+        return s * p + (Double(fee) ?? 0)
     }
 
     private func populate() {

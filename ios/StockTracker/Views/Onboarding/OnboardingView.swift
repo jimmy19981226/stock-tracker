@@ -55,20 +55,20 @@ struct OnboardingView: View {
                             Image(systemName: "g.circle.fill")
                         }
                         Text("Continue with Google")
-                            .fontWeight(.semibold)
+                            .font(.system(.body, design: .rounded).weight(.bold))
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .background(.white)
+                    .padding(.vertical, 16)
+                    .background(Theme.accent)
                     .foregroundStyle(.black)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .clipShape(Capsule())
                 }
                 .disabled(auth.isSigningIn)
 
                 Button("Continue without signing in") {
                     auth.continueAsGuest()
                 }
-                .font(.subheadline)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
                 .foregroundStyle(Theme.secondaryText)
                 .padding(.top, 14)
             }

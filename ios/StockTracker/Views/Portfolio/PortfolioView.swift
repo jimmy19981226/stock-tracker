@@ -16,14 +16,11 @@ struct PortfolioView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("View", selection: $tab) {
-                ForEach(PortfolioTab.allCases) { t in
-                    Text(t.rawValue).tag(t)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            UnderlineTabs(
+                tabs: PortfolioTab.allCases.map { ($0, $0.rawValue) },
+                selection: $tab
+            )
+            .padding(.top, 6)
 
             switch tab {
             case .dashboard: DashboardView(market: market)

@@ -148,6 +148,70 @@ struct EmptyState: View {
     }
 }
 
+/// Flat text tabs with an accent underline on the selected one — replaces the
+/// stock segmented control to match the dark theme.
+struct UnderlineTabs<T: Hashable>: View {
+    let tabs: [(value: T, label: String)]
+    @Binding var selection: T
+    var font: Font = .system(.subheadline, design: .rounded).weight(.bold)
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(tabs.enumerated()), id: \.offset) { _, tab in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { selection = tab.value }
+                } label: {
+                    VStack(spacing: 8) {
+                        Text(tab.label)
+                            .font(font)
+                            .foregroundStyle(selection == tab.value ? Theme.primaryText : Theme.mutedText)
+                        Capsule()
+                            .fill(selection == tab.value ? Theme.accent : .clear)
+                            .frame(height: 3)
+                            .padding(.horizontal, 14)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.stroke).frame(height: 1)
+        }
+    }
+}
+
+/// Full-width green primary action button (bottom CTA on forms).
+struct PrimaryButton: View {
+    let title: String
+    var disabled = false
+    var busy = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if busy {
+                    ProgressView().tint(.black)
+                } else {
+                    Text(title)
+                        .font(.system(.body, design: .rounded).weight(.bold))
+                }
+            }
+            .foregroundStyle(disabled ? Theme.mutedText : .black)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 15)
+            .background(disabled ? Theme.cardElevated : Theme.accent)
+            .clipShape(Capsule())
+        }
+        .disabled(disabled || busy)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Theme.bg.opacity(0.94))
+    }
+}
+
 /// Inline error banner.
 struct ErrorBanner: View {
     let message: String

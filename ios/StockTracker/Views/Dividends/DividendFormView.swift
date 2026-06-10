@@ -28,8 +28,13 @@ struct DividendFormView: View {
                     TextField("Ticker (e.g. \(market == .TW ? "2330" : "AAPL"))", text: $ticker)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                    TextField("Amount", text: $amount)
-                        .keyboardType(.decimalPad)
+                        .font(.system(.body, design: .rounded).weight(.semibold))
+                    LabeledContent("Amount") {
+                        TextField("0.00", text: $amount)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .font(.system(.title3, design: .rounded).weight(.semibold))
+                    }
                     DatePicker("Pay date", selection: $date, displayedComponents: .date)
                 }
                 Section("Notes") {
@@ -48,13 +53,19 @@ struct DividendFormView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    if saving { ProgressView() }
-                    else { Button("Save") { Task { await save() } }.disabled(!isValid) }
+            }
+            .safeAreaInset(edge: .bottom) {
+                PrimaryButton(
+                    title: isEdit ? "Save Changes" : "Add Dividend",
+                    disabled: !isValid,
+                    busy: saving
+                ) {
+                    Task { await save() }
                 }
             }
             .onAppear(perform: populate)
         }
+        .presentationBackground(Theme.bg)
     }
 
     private func populate() {
