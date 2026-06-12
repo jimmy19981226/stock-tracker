@@ -149,9 +149,11 @@ private struct EarningsCard: View {
                                                startPoint: .top, endPoint: .bottom)
                             )
                     }
-                    // Finger scrubbing: vertical rule + dot + date/value tip.
-                    if let sel = nearestRow(to: scrubDate, in: rows) {
-                        RuleMark(x: .value("Date", sel.date))
+                    // Finger scrubbing: the rule + tip track the finger
+                    // continuously; only the dot snaps to the nearest point.
+                    if let raw = scrubDate, let sel = nearestRow(to: raw, in: rows) {
+                        let x = min(max(raw, dateRange.lowerBound), dateRange.upperBound)
+                        RuleMark(x: .value("Date", x))
                             .foregroundStyle(Theme.mutedText.opacity(0.5))
                             .lineStyle(StrokeStyle(lineWidth: 1))
                             .annotation(position: .top,

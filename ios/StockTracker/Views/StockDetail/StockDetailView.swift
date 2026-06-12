@@ -187,9 +187,12 @@ private struct ChartCard: View {
                                     .foregroundStyle(m.buy ? Theme.positive : Theme.negative)
                             }
                     }
-                    // Finger scrubbing: vertical rule + dot + date/price tip.
-                    if let sel = nearestBar(to: scrubDate, in: bars) {
-                        RuleMark(x: .value("Date", sel.date))
+                    // Finger scrubbing: the rule + tip track the finger
+                    // continuously; only the dot snaps to the nearest bar so
+                    // it sits on the line.
+                    if let raw = scrubDate, let sel = nearestBar(to: raw, in: bars) {
+                        let x = min(max(raw, dateRange.lowerBound), dateRange.upperBound)
+                        RuleMark(x: .value("Date", x))
                             .foregroundStyle(Theme.mutedText.opacity(0.5))
                             .lineStyle(StrokeStyle(lineWidth: 1))
                             .annotation(position: .top,
