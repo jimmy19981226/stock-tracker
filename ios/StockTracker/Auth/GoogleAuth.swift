@@ -26,6 +26,7 @@ enum GoogleAuthError: LocalizedError {
 
 struct GoogleIdentity {
     let idToken: String
+    let refreshToken: String?
     let sub: String
     let email: String
     let name: String
@@ -75,9 +76,9 @@ final class GoogleAuth: NSObject, ASWebAuthenticationPresentationContextProvidin
             throw GoogleAuthError.failed(err)
         }
 
-        let idToken = try await exchange(code: code, verifier: verifier,
-                                         clientID: clientID, redirectURI: redirectURI)
-        return try Self.decodeIdentity(idToken)
+        let tokens = try await exchange(code: code, verifier: verifier,
+                                        clientID: clientID, redirectURI: redirectURI)
+        return try Self.decodeIdentity(tokens.idToken, refreshToken: tokens.refreshToken)
     }
 
     // MARK: - Web session
@@ -108,19 +109,43 @@ final class GoogleAuth: NSObject, ASWebAuthenticationPresentationContextProvidin
 
     // MARK: - Token exchange
 
-    private func exchange(code: String, verifier: String,
-                          clientID: String, redirectURI: String) async throws -> String {
-        var req = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
-        req.httpMethod = "POST"
-        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let body = [
+    private func exchange(code: String, verifier: String, clientID: String,
+                          redirectURI: String) async throws -> (idToken: String, refreshToken: String?) {
+        let obj = try await Self.tokenRequest([
             "client_id": clientID,
             "code": code,
             "code_verifier": verifier,
             "grant_type": "authorization_code",
             "redirect_uri": redirectURI,
-        ].map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? "")" }
-         .joined(separator: "&")
+        ])
+        guard let idToken = obj["id_token"] as? String else {
+            throw GoogleAuthError.failed("No ID token in response")
+        }
+        return (idToken, obj["refresh_token"] as? String)
+    }
+
+    /// Trade the long-lived refresh token for a fresh ID token (Google ID
+    /// tokens expire after ~1 hour). Installed-app clients get refresh tokens
+    /// without a client secret, so this needs only the client ID.
+    nonisolated static func refreshIdToken(refreshToken: String) async throws -> String {
+        let obj = try await tokenRequest([
+            "client_id": AppConfig.googleClientID,
+            "refresh_token": refreshToken,
+            "grant_type": "refresh_token",
+        ])
+        guard let idToken = obj["id_token"] as? String else {
+            throw GoogleAuthError.failed("No ID token in refresh response")
+        }
+        return idToken
+    }
+
+    private nonisolated static func tokenRequest(_ params: [String: String]) async throws -> [String: Any] {
+        var req = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let body = params
+            .map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? "")" }
+            .joined(separator: "&")
         req.httpBody = Data(body.utf8)
 
         let (data, resp) = try await URLSession.shared.data(for: req)
@@ -129,11 +154,10 @@ final class GoogleAuth: NSObject, ASWebAuthenticationPresentationContextProvidin
             let detail = (obj?["error_description"] as? String) ?? "Token exchange failed"
             throw GoogleAuthError.failed(detail)
         }
-        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let idToken = obj["id_token"] as? String else {
-            throw GoogleAuthError.failed("No ID token in response")
+        guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw GoogleAuthError.failed("Unexpected token response")
         }
-        return idToken
+        return obj
     }
 
     // MARK: - PKCE + JWT helpers
@@ -149,7 +173,7 @@ final class GoogleAuth: NSObject, ASWebAuthenticationPresentationContextProvidin
         return Data(hash).base64URLEncoded()
     }
 
-    static func decodeIdentity(_ jwt: String) throws -> GoogleIdentity {
+    static func decodeIdentity(_ jwt: String, refreshToken: String? = nil) throws -> GoogleIdentity {
         let parts = jwt.split(separator: ".")
         guard parts.count == 3,
               let payload = Data(base64URLEncoded: String(parts[1])),
@@ -159,6 +183,7 @@ final class GoogleAuth: NSObject, ASWebAuthenticationPresentationContextProvidin
         }
         return GoogleIdentity(
             idToken: jwt,
+            refreshToken: refreshToken,
             sub: sub,
             email: obj["email"] as? String ?? "",
             name: obj["name"] as? String ?? (obj["email"] as? String ?? "Signed in"),

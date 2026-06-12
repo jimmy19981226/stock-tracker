@@ -27,7 +27,8 @@ enum AuthState: Equatable {
 /// profile is cached in UserDefaults so the app reopens already signed in.
 @MainActor
 final class AuthStore: ObservableObject {
-    static let tokenKey = "auth.idToken"
+    nonisolated static let tokenKey = "auth.idToken"
+    nonisolated static let refreshTokenKey = "auth.refreshToken"
     private static let userKey = "auth.user"
 
     @Published private(set) var state: AuthState = .loading
@@ -57,6 +58,10 @@ final class AuthStore: ObservableObject {
         do {
             let identity = try await GoogleAuth.shared.signIn()
             Keychain.set(identity.idToken, for: Self.tokenKey)
+            // Keep any previously stored refresh token if Google didn't send one.
+            if let refresh = identity.refreshToken, !refresh.isEmpty {
+                Keychain.set(refresh, for: Self.refreshTokenKey)
+            }
             let user = AuthUser(name: identity.name, email: identity.email,
                                 picture: identity.picture, provider: "google")
             persist(user)
@@ -74,6 +79,7 @@ final class AuthStore: ObservableObject {
 
     func signOut() {
         Keychain.remove(Self.tokenKey)
+        Keychain.remove(Self.refreshTokenKey)
         UserDefaults.standard.removeObject(forKey: Self.userKey)
         state = .signedOut
     }

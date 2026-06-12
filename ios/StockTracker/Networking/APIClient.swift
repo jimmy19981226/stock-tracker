@@ -28,7 +28,9 @@ final class APIClient {
 
     init() {
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = 30
+        // The free-tier Render backend spins down when idle and a cold start
+        // can take ~60s; give requests room instead of failing at 30s.
+        cfg.timeoutIntervalForRequest = 75
         cfg.waitsForConnectivity = true
         session = URLSession(configuration: cfg)
 
@@ -53,28 +55,56 @@ final class APIClient {
         var req = URLRequest(url: try url(path))
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        Self.attachAuth(&req)
         req.httpBody = body
 
-        let data: Data
-        let resp: URLResponse
-        do {
-            (data, resp) = try await session.data(for: req)
-        } catch {
-            throw APIError.transport(error.localizedDescription)
-        }
-        guard let http = resp as? HTTPURLResponse else {
-            throw APIError.transport("No response from server")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw APIError.http(http.statusCode, Self.detail(from: data, status: http.statusCode))
-        }
+        let data = try await perform(&req, retryTimeout: method == "GET")
         if T.self == EmptyResponse.self { return EmptyResponse() as! T }
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
             throw APIError.decoding(String(describing: error))
         }
+    }
+
+    /// Runs the request with auth attached. Retries once after a timeout
+    /// (idempotent GETs only — rides out the backend cold-starting) and once
+    /// after a 401 with a freshly refreshed Google token.
+    private func perform(_ req: inout URLRequest, retryTimeout: Bool) async throws -> Data {
+        await Self.attachAuth(&req)
+        var (data, http) = try await execute(req, retryTimeout: retryTimeout)
+        if http.statusCode == 401,
+           let fresh = await AuthTokenProvider.shared.refreshAfterRejection() {
+            req.setValue("Bearer \(fresh)", forHTTPHeaderField: "Authorization")
+            (data, http) = try await execute(req, retryTimeout: retryTimeout)
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            if http.statusCode == 401 {
+                throw APIError.http(401, "Your Google session expired — please sign out and back in.")
+            }
+            throw APIError.http(http.statusCode, Self.detail(from: data, status: http.statusCode))
+        }
+        return data
+    }
+
+    private func execute(_ req: URLRequest, retryTimeout: Bool) async throws -> (Data, HTTPURLResponse) {
+        do {
+            return try await dataTask(req)
+        } catch let e as URLError where retryTimeout && e.code == .timedOut {
+            do { return try await dataTask(req) }
+            catch { throw APIError.transport(error.localizedDescription) }
+        } catch let e as APIError {
+            throw e
+        } catch {
+            throw APIError.transport(error.localizedDescription)
+        }
+    }
+
+    private func dataTask(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.transport("No response from server")
+        }
+        return (data, http)
     }
 
     private func send<B: Encodable, T: Decodable>(
@@ -84,9 +114,9 @@ final class APIClient {
     }
 
     /// Attach the signed-in user's Google ID token so the backend can scope data
-    /// to that account. Harmless before the backend enforces auth.
-    private static func attachAuth(_ req: inout URLRequest) {
-        if let token = Keychain.get(AuthStore.tokenKey), !token.isEmpty {
+    /// to that account. AuthTokenProvider refreshes it first if it has expired.
+    private static func attachAuth(_ req: inout URLRequest) async {
+        if let token = await AuthTokenProvider.shared.validToken() {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
     }
@@ -168,7 +198,6 @@ final class APIClient {
         req.httpMethod = "POST"
         req.timeoutInterval = 180  // vision parsing can take a while
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        Self.attachAuth(&req)
 
         var body = Data()
         body.appendString("--\(boundary)\r\n")
@@ -178,13 +207,7 @@ final class APIClient {
         body.appendString("\r\n--\(boundary)--\r\n")
         req.httpBody = body
 
-        let (data, resp) = try await session.data(for: req)
-        guard let http = resp as? HTTPURLResponse else {
-            throw APIError.transport("No response from server")
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw APIError.http(http.statusCode, Self.detail(from: data, status: http.statusCode))
-        }
+        let data = try await perform(&req, retryTimeout: false)
         do {
             return try decoder.decode(ParsedRecords.self, from: data)
         } catch {
@@ -215,15 +238,24 @@ final class APIClient {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        Self.attachAuth(&req)
+        await Self.attachAuth(&req)
         Self.attachAIProvider(&req)
         var payload: [String: Any] = ["message": message]
         if let chatId { payload["chat_id"] = chatId }
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (bytes, resp) = try await session.bytes(for: req)
-        guard let http = resp as? HTTPURLResponse else {
+        var (bytes, resp) = try await session.bytes(for: req)
+        guard var http = resp as? HTTPURLResponse else {
             throw APIError.transport("No response from server")
+        }
+        if http.statusCode == 401,
+           let fresh = await AuthTokenProvider.shared.refreshAfterRejection() {
+            req.setValue("Bearer \(fresh)", forHTTPHeaderField: "Authorization")
+            (bytes, resp) = try await session.bytes(for: req)
+            guard let retried = resp as? HTTPURLResponse else {
+                throw APIError.transport("No response from server")
+            }
+            http = retried
         }
         guard (200..<300).contains(http.statusCode) else {
             throw APIError.http(http.statusCode, "Assistant request failed (\(http.statusCode))")
