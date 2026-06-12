@@ -235,3 +235,29 @@ struct ErrorBanner: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
+
+/// Floating tooltip shown while scrubbing a chart with a finger: the date at
+/// the touch point and the series value there.
+struct ChartScrubTip: View {
+    let date: Date
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(date, format: .dateTime.year().month(.abbreviated).day())
+                .font(.caption2)
+                .foregroundStyle(Theme.secondaryText)
+            Text(value)
+                .font(.system(.caption, design: .rounded).weight(.bold))
+                .foregroundStyle(Theme.primaryText)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Theme.cardElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1)
+        )
+    }
+}

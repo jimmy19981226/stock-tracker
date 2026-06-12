@@ -83,6 +83,7 @@ private struct SummaryCard: View {
 private struct EarningsCard: View {
     let points: [EarningsPoint]
     let currency: String
+    @State private var scrubDate: Date?
 
     private struct Row: Identifiable {
         let id = UUID()
@@ -109,6 +110,13 @@ private struct EarningsCard: View {
         }
     }
 
+    private func nearestRow(to date: Date?, in rows: [Row]) -> Row? {
+        guard let date else { return nil }
+        return rows.min(by: {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        })
+    }
+
     var body: some View {
         let rows = makeRows()
         let dateRange = (rows.first?.date ?? .now)...(rows.last?.date ?? .now)
@@ -128,18 +136,35 @@ private struct EarningsCard: View {
                 EmptyState(icon: "chart.line.uptrend.xyaxis",
                            title: "Not enough history yet")
             } else {
-                Chart(rows) { row in
-                    LineMark(x: .value("Date", row.date), y: .value("Total", row.total))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(lineColor)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                    AreaMark(x: .value("Date", row.date), y: .value("Total", row.total))
-                        .interpolationMethod(.monotone)
-                        .foregroundStyle(
-                            LinearGradient(colors: [lineColor.opacity(0.18), .clear],
-                                           startPoint: .top, endPoint: .bottom)
-                        )
+                Chart {
+                    ForEach(rows) { row in
+                        LineMark(x: .value("Date", row.date), y: .value("Total", row.total))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(lineColor)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                        AreaMark(x: .value("Date", row.date), y: .value("Total", row.total))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(
+                                LinearGradient(colors: [lineColor.opacity(0.18), .clear],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                    }
+                    // Finger scrubbing: vertical rule + dot + date/value tip.
+                    if let sel = nearestRow(to: scrubDate, in: rows) {
+                        RuleMark(x: .value("Date", sel.date))
+                            .foregroundStyle(Theme.mutedText.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1))
+                            .annotation(position: .top,
+                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                ChartScrubTip(date: sel.date,
+                                              value: Fmt.signedMoney(sel.total, currency: currency))
+                            }
+                        PointMark(x: .value("Date", sel.date), y: .value("Total", sel.total))
+                            .symbolSize(50)
+                            .foregroundStyle(lineColor)
+                    }
                 }
+                .chartXSelection(value: $scrubDate)
                 .chartYAxis(.hidden)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in

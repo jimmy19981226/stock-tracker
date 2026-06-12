@@ -98,6 +98,7 @@ private struct ChartCard: View {
     let detail: StockDetail
     @Binding var period: HistoryPeriod
     let currency: String
+    @State private var scrubDate: Date?
 
     private struct Bar: Identifiable {
         let id = UUID()
@@ -126,6 +127,13 @@ private struct ChartCard: View {
                   let c = b.close else { return nil }
             return Bar(date: d, close: c)
         }
+    }
+
+    private func nearestBar(to date: Date?, in bars: [Bar]) -> Bar? {
+        guard let date else { return nil }
+        return bars.min(by: {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        })
     }
 
     private func makeMarkers(bars: [Bar], range: ClosedRange<Date>) -> [Marker] {
@@ -179,7 +187,22 @@ private struct ChartCard: View {
                                     .foregroundStyle(m.buy ? Theme.positive : Theme.negative)
                             }
                     }
+                    // Finger scrubbing: vertical rule + dot + date/price tip.
+                    if let sel = nearestBar(to: scrubDate, in: bars) {
+                        RuleMark(x: .value("Date", sel.date))
+                            .foregroundStyle(Theme.mutedText.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1))
+                            .annotation(position: .top,
+                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                ChartScrubTip(date: sel.date,
+                                              value: Fmt.money(sel.close, currency: currency))
+                            }
+                        PointMark(x: .value("Date", sel.date), y: .value("Close", sel.close))
+                            .symbolSize(50)
+                            .foregroundStyle(color)
+                    }
                 }
+                .chartXSelection(value: $scrubDate)
                 .chartYAxis {
                     AxisMarks { value in
                         AxisValueLabel {
