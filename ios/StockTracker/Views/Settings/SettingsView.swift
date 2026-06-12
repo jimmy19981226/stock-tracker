@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("ui.style") private var styleRaw = AppStyle.emerald.rawValue
     @State private var quoteSource = QuoteSettings.source
     @State private var quoteSources: QuoteSourcesStatus?
+    @State private var deviceMISUp: Bool?
     @State private var loadingSources = false
 
     var body: some View {
@@ -100,8 +101,10 @@ struct SettingsView: View {
                         Task { await store.refreshQuietly() }
                     }
 
-                    sourceRow(name: "TWSE MIS", caption: "Real-time", info: quoteSources?.mis)
+                    sourceRow(name: "TWSE MIS", caption: "Real-time · from your backend", info: quoteSources?.mis)
                     sourceRow(name: "Yahoo Finance", caption: "Delayed ~15 min", info: quoteSources?.yahoo)
+                    sourceRow(name: "TWSE MIS", caption: "From this iPhone (diagnostic)",
+                              info: deviceMISUp.map { QuoteSourceInfo(available: $0, via: nil, realtime: true) })
 
                     if quoteSource == .mis, let mis = quoteSources?.mis, !mis.available {
                         Label("MIS isn't reachable right now — Yahoo data is shown until it is.",
@@ -112,7 +115,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Market Data")
                 } footer: {
-                    Text("TWSE MIS is real-time but only reachable from a Taiwan connection (directly or via your quote relay). Yahoo covers US stocks and fills in whenever MIS can't answer.")
+                    Text("TWSE MIS is real-time but only reachable from a Taiwan connection (directly or via your quote relay). Yahoo covers US stocks and fills in whenever MIS can't answer. The diagnostic row checks MIS from this device — if it's green while the backend row is red, MIS is up but your backend/relay can't reach it.")
                 }
 
                 Section {
@@ -205,7 +208,10 @@ struct SettingsView: View {
 
     private func loadQuoteSources() async {
         loadingSources = true
-        quoteSources = try? await APIClient.shared.getQuoteSources()
+        async let backend = try? APIClient.shared.getQuoteSources()
+        async let device = MISProbe.isUp()
+        quoteSources = await backend
+        deviceMISUp = await device
         loadingSources = false
     }
 
