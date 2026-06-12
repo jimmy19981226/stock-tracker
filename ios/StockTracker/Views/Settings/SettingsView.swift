@@ -190,7 +190,7 @@ struct SettingsView: View {
     private func loadQuoteSources() async {
         loadingSources = true
         async let backend = try? APIClient.shared.getQuoteSources()
-        async let device = MISProbe.isUp()
+        async let device = MISQuotes.isUp()
         quoteSources = await backend
         deviceMISUp = await device
         loadingSources = false

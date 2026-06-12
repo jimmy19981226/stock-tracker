@@ -42,6 +42,8 @@ struct TradeCreate: Codable {
     var market: MarketCode?
 }
 
+// Price-derived fields are `var` so PortfolioStore can overlay real-time
+// device-fetched TWSE MIS prices on top of the backend's values.
 struct Holding: Codable, Identifiable, Hashable {
     var id: String { ticker }
     let ticker: String
@@ -50,25 +52,25 @@ struct Holding: Codable, Identifiable, Hashable {
     let market: MarketCode
     let shares: Double
     let avgCost: Double
-    let currentPrice: Double?
-    let marketValue: Double?
+    var currentPrice: Double?
+    var marketValue: Double?
     let costBasis: Double
-    let exitCost: Double?
-    let unrealizedPl: Double?
-    let unrealizedPlPct: Double?
-    let todayChange: Double?
-    let todayChangePct: Double?
+    var exitCost: Double?
+    var unrealizedPl: Double?
+    var unrealizedPlPct: Double?
+    var todayChange: Double?
+    var todayChangePct: Double?
 }
 
 struct CurrencySummary: Codable, Identifiable, Hashable {
     var id: String { currency }
     let currency: String
-    let totalValue: Double?
+    var totalValue: Double?
     let totalCost: Double
-    let totalPl: Double?
-    let totalPlPct: Double?
-    let todayPl: Double?
-    let todayPlPct: Double?
+    var totalPl: Double?
+    var totalPlPct: Double?
+    var todayPl: Double?
+    var todayPlPct: Double?
     let realizedPl: Double
     let dividends: Double
     let totalEarned: Double

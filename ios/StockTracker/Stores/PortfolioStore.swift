@@ -33,10 +33,12 @@ final class PortfolioStore: ObservableObject {
             async let e = api.getEarningsHistory()
             async let n = api.getNames()
             let (tt, dd, hh, ss, ee, nn) = try await (t, d, h, s, e, n)
+            let (hh2, ss2) = await Self.applyingMIS(holdings: hh, summaries: ss,
+                                                    twOpen: isOpen(.TW))
             trades = tt
             dividends = dd
-            holdings = hh
-            summaries = ss
+            holdings = hh2
+            summaries = ss2
             earnings = ee
             names = nn
             errorMessage = nil
@@ -57,8 +59,10 @@ final class PortfolioStore: ObservableObject {
             async let h = api.getHoldings()
             async let s = api.getSummary()
             let (hh, ss) = try await (h, s)
-            holdings = hh
-            summaries = ss
+            let (hh2, ss2) = await Self.applyingMIS(holdings: hh, summaries: ss,
+                                                    twOpen: isOpen(.TW))
+            holdings = hh2
+            summaries = ss2
             lastUpdated = Date()
             errorMessage = nil
         } catch {
@@ -123,5 +127,67 @@ final class PortfolioStore: ObservableObject {
 
     func name(for ticker: String) -> String {
         names[ticker] ?? ticker
+    }
+
+    // MARK: - Device-side real-time TW prices
+
+    /// Overlay real-time TWSE MIS quotes (fetched directly by this device) on
+    /// the backend's TW rows, recomputing each holding's P&L and the TWD
+    /// summary with the backend's exact formulas (services/portfolio.py).
+    /// No-op while the TW market is closed (backend data is already final) or
+    /// when MIS doesn't answer — so the app flips between real-time and
+    /// delayed automatically on every refresh.
+    private static func applyingMIS(
+        holdings: [Holding], summaries: [CurrencySummary], twOpen: Bool
+    ) async -> ([Holding], [CurrencySummary]) {
+        guard twOpen else { return (holdings, summaries) }
+        let twTickers = holdings.filter { $0.market == .TW }.map(\.ticker)
+        guard !twTickers.isEmpty else { return (holdings, summaries) }
+        let quotes = await MISQuotes.fetch(twTickers)
+        guard !quotes.isEmpty else { return (holdings, summaries) }
+
+        var hs = holdings
+        for i in hs.indices where hs[i].market == .TW {
+            guard let q = quotes[hs[i].ticker.uppercased()] else { continue }
+            let mv = q.price * hs[i].shares
+            let exit = estimateExitCost(ticker: hs[i].ticker, marketValue: mv)
+            let unrealized = mv - hs[i].costBasis - exit
+            hs[i].currentPrice = q.price
+            hs[i].marketValue = mv
+            hs[i].exitCost = exit
+            hs[i].unrealizedPl = unrealized
+            hs[i].unrealizedPlPct = hs[i].costBasis > 0
+                ? unrealized / hs[i].costBasis * 100 : nil
+            if let pc = q.previousClose, pc > 0 {
+                hs[i].todayChange = (q.price - pc) * hs[i].shares
+                hs[i].todayChangePct = (q.price - pc) / pc * 100
+            }
+        }
+
+        var ss = summaries
+        if let idx = ss.firstIndex(where: { $0.currency == "TWD" }) {
+            let twd = hs.filter { $0.currency == "TWD" }
+            let totalValue = twd.reduce(0.0) { $0 + ($1.marketValue ?? 0) }
+            let totalPl = twd.reduce(0.0) { $0 + ($1.unrealizedPl ?? 0) }
+            let todayPl = twd.reduce(0.0) { $0 + ($1.todayChange ?? 0) }
+            ss[idx].totalValue = totalValue
+            ss[idx].totalPl = totalPl
+            ss[idx].totalPlPct = ss[idx].totalCost > 0
+                ? totalPl / ss[idx].totalCost * 100 : 0
+            ss[idx].todayPl = todayPl
+            let prevValue = totalValue - todayPl
+            ss[idx].todayPlPct = prevValue > 0 ? todayPl / prevValue * 100 : 0
+        }
+        return (hs, ss)
+    }
+
+    /// TW sell-side commission + securities transaction tax, floored to the
+    /// dollar per component — mirrors estimate_exit_cost in the backend so
+    /// unrealized P&L matches the broker's 損益試算.
+    private static func estimateExitCost(ticker: String, marketValue: Double) -> Double {
+        guard marketValue > 0 else { return 0 }
+        let t = ticker.trimmingCharacters(in: .whitespaces).uppercased()
+        let taxRate: Double = t.hasPrefix("00") ? (t.hasSuffix("B") ? 0 : 0.001) : 0.003
+        return (marketValue * 0.001425).rounded(.down) + (marketValue * taxRate).rounded(.down)
     }
 }
