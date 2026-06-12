@@ -11,6 +11,9 @@ struct SettingsView: View {
     @State private var checking = false
     @State private var checkResult: String?
     @AppStorage("ui.style") private var styleRaw = AppStyle.emerald.rawValue
+    @State private var quoteSource = QuoteSettings.source
+    @State private var quoteSources: QuoteSourcesStatus?
+    @State private var loadingSources = false
 
     var body: some View {
         NavigationStack {
@@ -87,6 +90,32 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Taiwan quotes", selection: $quoteSource) {
+                        ForEach(QuoteSource.allCases) { source in
+                            Text(source.displayName).tag(source)
+                        }
+                    }
+                    .onChange(of: quoteSource) { _, source in
+                        QuoteSettings.source = source
+                        Task { await store.refreshQuietly() }
+                    }
+
+                    sourceRow(name: "TWSE MIS", caption: "Real-time", info: quoteSources?.mis)
+                    sourceRow(name: "Yahoo Finance", caption: "Delayed ~15 min", info: quoteSources?.yahoo)
+
+                    if quoteSource == .mis, let mis = quoteSources?.mis, !mis.available {
+                        Label("MIS isn't reachable right now — Yahoo data is shown until it is.",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(Theme.negative)
+                    }
+                } header: {
+                    Text("Market Data")
+                } footer: {
+                    Text("TWSE MIS is real-time but only reachable from a Taiwan connection (directly or via your quote relay). Yahoo covers US stocks and fills in whenever MIS can't answer.")
+                }
+
+                Section {
                     TextField("123-abc.apps.googleusercontent.com", text: $googleClientID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -124,6 +153,7 @@ struct SettingsView: View {
             }
             .scrollContentBackground(.hidden)
             .background(Theme.bg.ignoresSafeArea())
+            .task { await loadQuoteSources() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -143,6 +173,40 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    /// One availability row: green/red dot, source name, freshness caption,
+    /// and the probe verdict on the right (spinner while probing).
+    private func sourceRow(name: String, caption: String, info: QuoteSourceInfo?) -> some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(info == nil ? Theme.mutedText
+                      : info!.available ? Theme.positive : Theme.negative)
+                .frame(width: 9, height: 9)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                Text(caption)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.secondaryText)
+            }
+            Spacer()
+            if loadingSources {
+                ProgressView()
+            } else if let info {
+                Text(info.available
+                     ? (info.via == "relay" ? "Available · relay"
+                        : info.via == "direct" ? "Available · direct" : "Available")
+                     : "Unavailable")
+                    .font(.caption)
+                    .foregroundStyle(info.available ? Theme.positive : Theme.negative)
+            }
+        }
+    }
+
+    private func loadQuoteSources() async {
+        loadingSources = true
+        quoteSources = try? await APIClient.shared.getQuoteSources()
+        loadingSources = false
     }
 
     private func testConnection() async {

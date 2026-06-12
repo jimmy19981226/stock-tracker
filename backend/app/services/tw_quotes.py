@@ -118,6 +118,29 @@ def _is_tw(bare: str) -> bool:
     return bool(_TICKER_RE.match(bare))
 
 
+def probe(timeout: float = 6.0) -> bool:
+    """One uncached MIS round-trip: can this process reach MIS *right now*?
+
+    Bypasses the quote caches (including the persisted last-good snapshot) so
+    the answer reflects current reachability, not history. Used by the
+    /api/quotes/sources availability endpoint.
+    """
+    params = {
+        "ex_ch": "tse_2330.tw",
+        "json": "1",
+        "delay": "0",
+        "_": str(int(time.time() * 1000)),
+    }
+    url = f"{_MIS_URL}?{urllib.parse.urlencode(params)}"
+    try:
+        req = urllib.request.Request(url, headers=_HEADERS)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return False
+    return bool(payload.get("msgArray"))
+
+
 def get_quote(ticker: str) -> QuoteData | None:
     return get_quotes([ticker]).get(ticker)
 

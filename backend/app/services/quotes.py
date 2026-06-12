@@ -8,11 +8,18 @@ format: bare 4-6 digit codes are Taiwan (TWD), letter symbols are US (USD).
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Iterable
 
 
 _TW_NUMERIC = re.compile(r"^\d{4,6}[A-Z]?$")
+
+# Per-request quote-source preference, set from the ``X-Quote-Source`` header
+# by middleware in main.py. "auto" keeps the relay → MIS → Yahoo chain; "mis"
+# is the same but signals intent (Yahoo still fills US tickers and anything
+# the real-time sources can't serve); "yahoo" skips relay/MIS entirely.
+source_preference: ContextVar[str] = ContextVar("quote_source_preference", default="auto")
 
 
 def market_of(ticker: str) -> str:
@@ -80,18 +87,20 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
 
     tickers = list(tickers)
     out: dict[str, QuoteData] = {}
+    prefer = source_preference.get()
 
-    # 1) Real-time via an out-of-cloud relay on a Taiwan connection, if one is
-    #    configured (QUOTE_RELAY_URL). This is how a cloud-hosted backend gets
-    #    live MIS prices despite TWSE blocking its IP. No-op when unset.
-    if quote_relay_client.configured():
-        out.update(quote_relay_client.get_quotes(tickers))
+    if prefer != "yahoo":
+        # 1) Real-time via an out-of-cloud relay on a Taiwan connection, if one
+        #    is configured (QUOTE_RELAY_URL). This is how a cloud-hosted backend
+        #    gets live MIS prices despite TWSE blocking its IP. No-op when unset.
+        if quote_relay_client.configured():
+            out.update(quote_relay_client.get_quotes(tickers))
 
-    # 2) Direct TWSE MIS — real-time when this process itself runs on a TW IP
-    #    (e.g. local dev); a silent no-op on an IP MIS blocks.
-    still = [t for t in tickers if t not in out]
-    if still:
-        out.update(tw_quotes.get_quotes(still))
+        # 2) Direct TWSE MIS — real-time when this process itself runs on a TW
+        #    IP (e.g. local dev); a silent no-op on an IP MIS blocks.
+        still = [t for t in tickers if t not in out]
+        if still:
+            out.update(tw_quotes.get_quotes(still))
 
     # 3) Fill anything still missing from Yahoo (delayed), keyed by bare code so
     #    "2330" and "2330.TW" share one fetch. This now covers US tickers too —

@@ -70,6 +70,7 @@ final class APIClient {
     /// (idempotent GETs only — rides out the backend cold-starting) and once
     /// after a 401 with a freshly refreshed Google token.
     private func perform(_ req: inout URLRequest, retryTimeout: Bool) async throws -> Data {
+        Self.attachQuoteSource(&req)
         await Self.attachAuth(&req)
         var (data, http) = try await execute(req, retryTimeout: retryTimeout)
         if http.statusCode == 401,
@@ -118,6 +119,15 @@ final class APIClient {
     private static func attachAuth(_ req: inout URLRequest) async {
         if let token = await AuthTokenProvider.shared.validToken() {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+    }
+
+    /// Tell the backend which quote source the user prefers (Settings →
+    /// Market Data). "auto" is the server default, so it isn't sent.
+    private static func attachQuoteSource(_ req: inout URLRequest) {
+        let source = QuoteSettings.source
+        if source != .auto {
+            req.setValue(source.rawValue, forHTTPHeaderField: "X-Quote-Source")
         }
     }
 
@@ -174,6 +184,8 @@ final class APIClient {
     func getOverview() async throws -> PortfolioOverview { try await request("/api/portfolio/overview") }
     func getNames() async throws -> [String: String] { try await request("/api/portfolio/names") }
     func getMarkets() async throws -> [MarketConfig] { try await request("/api/markets") }
+    /// Live-probes each quote source server-side; takes a few seconds.
+    func getQuoteSources() async throws -> QuoteSourcesStatus { try await request("/api/quotes/sources") }
     func getEarningsHistory(days: Int = 1825) async throws -> [String: [EarningsPoint]] {
         try await request("/api/portfolio/earnings-history?days=\(days)")
     }

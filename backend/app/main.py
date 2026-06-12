@@ -14,7 +14,8 @@ except ImportError:
     pass
 
 from .database import Dividend, SessionLocal, Trade, init_db
-from .routers import ai, data, dividends, markets, mobile, portfolio, stock, trades
+from .routers import ai, data, dividends, markets, mobile, portfolio, quotes, stock, trades
+from .services import quotes as quote_service
 from .services import xlsx_io
 
 SEED_FILE = (
@@ -37,6 +38,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _quote_source_pref(request, call_next):
+    """Apply the caller's quote-source choice (X-Quote-Source header) to this
+    request. Contextvars propagate into the threadpool running sync routes."""
+    pref = (request.headers.get("x-quote-source") or "auto").lower()
+    if pref not in ("auto", "mis", "yahoo"):
+        pref = "auto"
+    token = quote_service.source_preference.set(pref)
+    try:
+        return await call_next(request)
+    finally:
+        quote_service.source_preference.reset(token)
 
 
 @app.on_event("startup")
@@ -84,5 +99,6 @@ app.include_router(data.router)
 app.include_router(ai.router)
 app.include_router(stock.router)
 app.include_router(markets.router)
+app.include_router(quotes.router)
 app.include_router(mobile.router)
 app.include_router(mobile.page_router)

@@ -123,6 +123,18 @@ struct MarketConfig: Codable, Identifiable, Hashable {
     let holidays: [String]
 }
 
+/// Availability of one quote source, as probed live by /api/quotes/sources.
+struct QuoteSourceInfo: Codable, Hashable {
+    let available: Bool
+    let via: String?      // "relay" | "direct" | nil
+    let realtime: Bool
+}
+
+struct QuoteSourcesStatus: Codable {
+    let mis: QuoteSourceInfo
+    let yahoo: QuoteSourceInfo
+}
+
 struct EarningsPoint: Codable, Identifiable, Hashable {
     var id: String { date }
     let date: String
