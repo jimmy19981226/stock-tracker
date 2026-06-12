@@ -70,7 +70,6 @@ final class APIClient {
     /// (idempotent GETs only — rides out the backend cold-starting) and once
     /// after a 401 with a freshly refreshed Google token.
     private func perform(_ req: inout URLRequest, retryTimeout: Bool) async throws -> Data {
-        Self.attachQuoteSource(&req)
         await Self.attachAuth(&req)
         var (data, http) = try await execute(req, retryTimeout: retryTimeout)
         if http.statusCode == 401,
@@ -119,15 +118,6 @@ final class APIClient {
     private static func attachAuth(_ req: inout URLRequest) async {
         if let token = await AuthTokenProvider.shared.validToken() {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-    }
-
-    /// Tell the backend which quote source the user prefers (Settings →
-    /// Market Data). "auto" is the server default, so it isn't sent.
-    private static func attachQuoteSource(_ req: inout URLRequest) {
-        let source = QuoteSettings.source
-        if source != .auto {
-            req.setValue(source.rawValue, forHTTPHeaderField: "X-Quote-Source")
         }
     }
 

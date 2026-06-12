@@ -11,7 +11,6 @@ struct SettingsView: View {
     @State private var checking = false
     @State private var checkResult: String?
     @AppStorage("ui.style") private var styleRaw = AppStyle.emerald.rawValue
-    @State private var quoteSource = QuoteSettings.source
     @State private var quoteSources: QuoteSourcesStatus?
     @State private var deviceMISUp: Bool?
     @State private var loadingSources = false
@@ -91,31 +90,13 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("Taiwan quotes", selection: $quoteSource) {
-                        ForEach(QuoteSource.allCases) { source in
-                            Text(source.displayName).tag(source)
-                        }
-                    }
-                    .onChange(of: quoteSource) { _, source in
-                        QuoteSettings.source = source
-                        Task { await store.refreshQuietly() }
-                    }
-
-                    sourceRow(name: "TWSE MIS", caption: "Real-time · from your backend", info: quoteSources?.mis)
-                    sourceRow(name: "Yahoo Finance", caption: "Delayed ~15 min", info: quoteSources?.yahoo)
-                    sourceRow(name: "TWSE MIS", caption: "From this iPhone (diagnostic)",
+                    sourceRow(name: "TWSE MIS", caption: "Real-time",
                               info: deviceMISUp.map { QuoteSourceInfo(available: $0, via: nil, realtime: true) })
-
-                    if quoteSource == .mis, let mis = quoteSources?.mis, !mis.available {
-                        Label("MIS isn't reachable right now — Yahoo data is shown until it is.",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(Theme.negative)
-                    }
+                    sourceRow(name: "Yahoo Finance", caption: "Delayed ~15 min", info: quoteSources?.yahoo)
                 } header: {
                     Text("Market Data")
                 } footer: {
-                    Text("TWSE MIS is real-time but only reachable from a Taiwan connection (directly or via your quote relay). Yahoo covers US stocks and fills in whenever MIS can't answer. The diagnostic row checks MIS from this device — if it's green while the backend row is red, MIS is up but your backend/relay can't reach it.")
+                    Text("TWSE MIS real-time quotes are used whenever they're reachable; Yahoo covers US stocks and fills in whenever MIS can't answer.")
                 }
 
                 Section {
