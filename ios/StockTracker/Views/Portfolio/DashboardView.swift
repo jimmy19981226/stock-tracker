@@ -111,6 +111,7 @@ private struct EarningsCard: View {
 
     var body: some View {
         let rows = makeRows()
+        let dateRange = (rows.first?.date ?? .now)...(rows.last?.date ?? .now)
         let lineColor: Color = (rows.last?.total ?? 0) >= (rows.first?.total ?? 0)
             ? Theme.positive : Theme.negative
 
@@ -142,7 +143,8 @@ private struct EarningsCard: View {
                 .chartYAxis(.hidden)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                        AxisValueLabel(format: .dateTime.month(.abbreviated))
+                        AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
+                                                              to: dateRange.upperBound))
                             .foregroundStyle(Theme.mutedText)
                     }
                 }

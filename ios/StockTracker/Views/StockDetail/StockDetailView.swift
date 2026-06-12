@@ -128,9 +128,12 @@ private struct ChartCard: View {
         }
     }
 
-    private func makeMarkers(bars: [Bar]) -> [Marker] {
+    private func makeMarkers(bars: [Bar], range: ClosedRange<Date>) -> [Marker] {
         detail.trades.compactMap { t in
-            guard let d = Self.dayFormat.date(from: String(t.date.prefix(10))) else { return nil }
+            // The backend sends every trade for the ticker; drop the ones
+            // outside the charted period or they stretch the time axis.
+            guard let d = Self.dayFormat.date(from: String(t.date.prefix(10))),
+                  range.contains(d) else { return nil }
             // Nearest close so the marker sits on the line.
             let y = bars.min(by: {
                 abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d))
@@ -141,7 +144,8 @@ private struct ChartCard: View {
 
     var body: some View {
         let bars = makeBars()
-        let markers = makeMarkers(bars: bars)
+        let dateRange = (bars.first?.date ?? .now)...(bars.last?.date ?? .now)
+        let markers = makeMarkers(bars: bars, range: dateRange)
         let up = (bars.last?.close ?? 0) >= (bars.first?.close ?? 0)
         let color = up ? Theme.positive : Theme.negative
 
@@ -186,9 +190,11 @@ private struct ChartCard: View {
                         }
                     }
                 }
+                .chartXScale(domain: dateRange)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { _ in
-                        AxisValueLabel(format: .dateTime.month(.abbreviated))
+                        AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
+                                                              to: dateRange.upperBound))
                             .foregroundStyle(Theme.mutedText)
                     }
                 }

@@ -68,4 +68,15 @@ enum Fmt {
         default: return number(v, digits: 0)
         }
     }
+
+    /// Chart time-axis label format matched to the visible span: "Jun 5" for
+    /// weeks–months, "Jun" for about a year, "2025" beyond that. A fixed
+    /// month-only format repeats the same label on short ranges and drops the
+    /// year on long ones.
+    static func axisFormat(from first: Date, to last: Date) -> Date.FormatStyle {
+        let days = last.timeIntervalSince(first) / 86_400
+        if days <= 120 { return .dateTime.month(.abbreviated).day() }
+        if days <= 550 { return .dateTime.month(.abbreviated) }
+        return .dateTime.year()
+    }
 }
