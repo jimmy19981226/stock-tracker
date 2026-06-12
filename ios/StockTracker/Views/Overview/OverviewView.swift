@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 /// Landing screen: combined net worth across both markets plus a tappable card
@@ -17,6 +18,10 @@ struct OverviewView: View {
                 }
 
                 NetWorthCard(overview: overview)
+
+                TotalEarnedCard(tw: store.earnings["TWD"] ?? [],
+                                us: store.earnings["USD"] ?? [],
+                                usdTwd: overview?.fx.usdTwd)
 
                 ForEach(MarketCode.allCases) { market in
                     NavigationLink(value: market) {
@@ -98,6 +103,91 @@ private struct NetWorthCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
+    }
+}
+
+/// Combined "total earned" (realized P&L + dividends, cumulative) across both
+/// markets over time, converted to TWD at the current FX rate. The TW and US
+/// series have different date grids, so each is carried forward to the union
+/// of dates before summing. Hidden until there's enough history to draw.
+private struct TotalEarnedCard: View {
+    let tw: [EarningsPoint]
+    let us: [EarningsPoint]
+    let usdTwd: Double?
+
+    private struct Row: Identifiable {
+        let id = UUID()
+        let date: Date
+        let total: Double
+    }
+
+    private static let dayFormat: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
+
+    // Parse once per body evaluation — never inside Chart closures (those run
+    // per data point; see the EarningsCard note in DashboardView).
+    private func makeRows() -> [Row] {
+        var twByDate: [Date: Double] = [:]
+        var usByDate: [Date: Double] = [:]
+        for p in tw {
+            if let d = Self.dayFormat.date(from: String(p.date.prefix(10))) { twByDate[d] = p.total }
+        }
+        for p in us {
+            if let d = Self.dayFormat.date(from: String(p.date.prefix(10))) { usByDate[d] = p.total }
+        }
+        var lastTW = 0.0
+        var lastUS = 0.0
+        return Set(twByDate.keys).union(usByDate.keys).sorted().map { d in
+            if let t = twByDate[d] { lastTW = t }
+            if let u = usByDate[d] { lastUS = u }
+            return Row(date: d, total: lastTW + (usdTwd.map { lastUS * $0 } ?? 0))
+        }
+    }
+
+    var body: some View {
+        let rows = makeRows()
+        if rows.count >= 2 {
+            let dateRange = (rows.first?.date ?? .now)...(rows.last?.date ?? .now)
+            let lineColor: Color = (rows.last?.total ?? 0) >= (rows.first?.total ?? 0)
+                ? Theme.positive : Theme.negative
+
+            VStack(alignment: .leading, spacing: 12) {
+                SectionHeader("Total earned") {
+                    if let last = rows.last {
+                        Text(Fmt.signedMoney(last.total, currency: "TWD"))
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundStyle(Theme.pl(last.total))
+                    }
+                }
+
+                Chart(rows) { row in
+                    LineMark(x: .value("Date", row.date), y: .value("Total", row.total))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(lineColor)
+                        .lineStyle(StrokeStyle(lineWidth: 2))
+                    AreaMark(x: .value("Date", row.date), y: .value("Total", row.total))
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(
+                            LinearGradient(colors: [lineColor.opacity(0.18), .clear],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                }
+                .chartYAxis(.hidden)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
+                                                              to: dateRange.upperBound))
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                }
+                .frame(height: 150)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
