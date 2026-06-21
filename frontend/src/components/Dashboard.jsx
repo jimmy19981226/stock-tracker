@@ -101,7 +101,7 @@ export default function Dashboard({ onSignOut }) {
         <Holdings holdings={data?.holdings || []} />
 
         <footer className="updated">
-          {updatedAt && `Updated ${updatedAt.toLocaleTimeString()}`} · auto-refreshes every 30s
+          {updatedAt && `Updated ${updatedAt.toLocaleTimeString()}`} · auto-refreshes every 30s · read-only
         </footer>
       </main>
     </div>
