@@ -116,6 +116,46 @@ code {
 .kv .v { font-variant-numeric: tabular-nums; font-weight: 600; }
 .v-extra { color: var(--muted); margin-left: 8px; font-weight: 500; font-size: 12px; }
 
+/* ---- Total Return (distinct violet accent vs. the green/red rows) -------- */
+:root { --tr-accent: #a78bfa; }
+
+/* Per-market card: a highlighted band at the bottom */
+.market-total-return {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 12px -18px -18px;          /* bleed to the card edges */
+  padding: 12px 18px;
+  border-top: 1px solid rgba(167, 139, 250, 0.28);
+  background: rgba(167, 139, 250, 0.08);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.mtr-label {
+  color: var(--tr-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+.mtr-value { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 15px; }
+.mtr-pct { color: var(--muted); margin-left: 8px; font-weight: 600; font-size: 12px; }
+
+/* Hero: a pill under the net worth */
+.total-return-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 12px;
+}
+.tr-label { color: var(--tr-accent); font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; }
+.tr-value { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 18px; }
+.tr-note { color: var(--muted); font-size: 11px; }
+@media (max-width: 560px) { .tr-note { display: none; } }
+
 /* ---- Holdings ----------------------------------------------------------- */
 .holdings { display: flex; flex-direction: column; }
 .hrow {

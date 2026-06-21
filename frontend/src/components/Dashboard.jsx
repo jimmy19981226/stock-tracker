@@ -41,6 +41,15 @@ export default function Dashboard({ onSignOut }) {
   const combinedUsd = overview?.combined?.usd;
   const fx = overview?.fx?.usd_twd;
 
+  // Combined Total Return = unrealized + realized + dividends, across both
+  // markets, expressed in TWD (US leg converted at the current FX rate).
+  const twTR = marketTotalReturn(overview?.tw);
+  const usTR = marketTotalReturn(overview?.us);
+  const combinedTR =
+    twTR == null && usTR == null
+      ? null
+      : (twTR ?? 0) + (fx != null ? (usTR ?? 0) * fx : 0);
+
   // Build the combined "total earned" series across both markets in TWD.
   // (Hook must run unconditionally — keep it above any early return.)
   const earnedSeries = useMemo(() => buildEarnedSeries(data?.earnings, fx), [data?.earnings, fx]);
@@ -73,6 +82,13 @@ export default function Dashboard({ onSignOut }) {
             ≈ {money(combinedUsd, "USD")}
             {fx != null && <span className="fx">USD/TWD {fx.toFixed(2)}</span>}
           </div>
+          {combinedTR != null && (
+            <div className="total-return-badge">
+              <span className="tr-label">Total return</span>
+              <span className={`tr-value ${plClass(combinedTR)}`}>{signedMoney(combinedTR, "TWD")}</span>
+              <span className="tr-note">unrealized + realized + dividends</span>
+            </div>
+          )}
         </section>
 
         {earnedSeries.length >= 2 && (
@@ -117,6 +133,9 @@ function MarketCard({ title, currency, summary }) {
       </div>
     );
   }
+  const tr = marketTotalReturn(summary);
+  const trPct =
+    tr != null && summary.total_cost > 0 ? (tr / summary.total_cost) * 100 : null;
   return (
     <div className="card market">
       <div className="market-title">{title}</div>
@@ -127,8 +146,24 @@ function MarketCard({ title, currency, summary }) {
         <Row label="Realized" value={signedMoney(summary.realized_pl, currency)} cls={plClass(summary.realized_pl)} />
         <Row label="Dividends" value={money(summary.dividends, currency)} cls="muted" />
       </div>
+      {tr != null && (
+        <div className="market-total-return">
+          <span className="mtr-label">Total return</span>
+          <span className={`mtr-value ${plClass(tr)}`}>
+            {signedMoney(tr, currency)}
+            {trPct != null && <span className="mtr-pct">{pct(trPct)}</span>}
+          </span>
+        </div>
+      )}
     </div>
   );
+}
+
+// Total Return for one market = unrealized (total_pl) + realized + dividends.
+// The backend already sums realized + dividends into total_earned.
+function marketTotalReturn(summary) {
+  if (!summary) return null;
+  return (summary.total_pl ?? 0) + (summary.total_earned ?? 0);
 }
 
 function Row({ label, value, cls, extra }) {
