@@ -71,6 +71,35 @@ struct OverviewView: View {
 
     private func loadOverview() async {
         overview = try? await APIClient.shared.getOverview()
+        if let overview { Self.writeWidgetSnapshot(overview) }
+    }
+
+    /// Mirror the latest overview into the shared App Group so the Home Screen
+    /// widget can render it without doing its own networking/auth.
+    private static func writeWidgetSnapshot(_ o: PortfolioOverview) {
+        let fx = o.fx.usdTwd
+        let twToday = o.tw?.todayPl
+        let usToday = o.us?.todayPl
+        // Combined today's P&L in TWD (US leg converted at the current FX rate).
+        var todayTWD: Double? = nil
+        if twToday != nil || usToday != nil {
+            todayTWD = (twToday ?? 0) + (usToday ?? 0) * (fx ?? 0)
+        }
+        var todayPct: Double? = nil
+        if let net = o.combined.twd, let t = todayTWD, net - t > 0 {
+            todayPct = t / (net - t) * 100
+        }
+        WidgetSharedStore.write(PortfolioWidgetData(
+            netWorthTWD: o.combined.twd,
+            netWorthUSD: o.combined.usd,
+            todayPLTWD: todayTWD,
+            todayPLPct: todayPct,
+            twValue: o.tw?.totalValue,
+            twTodayPL: twToday,
+            usValue: o.us?.totalValue,
+            usTodayPL: usToday,
+            updatedAt: Date()
+        ))
     }
 }
 
