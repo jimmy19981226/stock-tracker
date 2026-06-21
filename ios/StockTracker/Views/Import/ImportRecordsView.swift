@@ -12,6 +12,7 @@ struct ImportRecordsView: View {
 
     private enum Phase {
         case pick
+        case compose
         case parsing
         case review
         case submitting
@@ -19,6 +20,9 @@ struct ImportRecordsView: View {
 
     @State private var phase: Phase = .pick
     @State private var photoItem: PhotosPickerItem?
+    @State private var pendingImageData: Data?
+    @State private var pendingImage: UIImage?
+    @State private var instructions = ""
     @State private var parsed: ParsedRecords?
     @State private var tradeOn: [Bool] = []
     @State private var dividendOn: [Bool] = []
@@ -30,6 +34,7 @@ struct ImportRecordsView: View {
                 Theme.bg.ignoresSafeArea()
                 switch phase {
                 case .pick: pickView
+                case .compose: composeView
                 case .parsing: parsingView
                 case .review, .submitting: reviewView
                 }
@@ -89,6 +94,63 @@ struct ImportRecordsView: View {
             }
         }
         .padding(24)
+    }
+
+    // MARK: - Compose (preview + optional note before parsing)
+
+    private var composeView: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                if let img = pendingImage {
+                    Image(uiImage: img)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 280)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.stroke))
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Add a note for the AI (optional)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.primaryText)
+                    Text("Anything the image doesn’t make obvious — the market or currency, a stock code, or which figure is per-share.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryText)
+                    TextField(
+                        "e.g. “US trade in USD” or “the 優群 row is ticker 3217”",
+                        text: $instructions,
+                        axis: .vertical
+                    )
+                    .lineLimit(2...5)
+                    .textInputAutocapitalization(.sentences)
+                    .padding(12)
+                    .background(Theme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.stroke))
+                    .foregroundStyle(Theme.primaryText)
+                }
+
+                if let error {
+                    Text(error)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.negative)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Text("Choose a different image")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            .padding(20)
+        }
+        .safeAreaInset(edge: .bottom) {
+            PrimaryButton(title: "Read with AI", disabled: pendingImageData == nil, busy: false) {
+                Task { await parse() }
+            }
+        }
     }
 
     // MARK: - Parsing
@@ -240,9 +302,10 @@ struct ImportRecordsView: View {
 
     // MARK: - Actions
 
+    /// Pick step: load + downscale the image, then move to the compose step so
+    /// the user can add a note before the AI reads it (no parsing happens yet).
     private func load(_ item: PhotosPickerItem) async {
         error = nil
-        phase = .parsing
         do {
             guard var data = try await item.loadTransferable(type: Data.self) else {
                 throw APIError.transport("Couldn't read that image")
@@ -255,16 +318,34 @@ struct ImportRecordsView: View {
                 let renderer = UIGraphicsImageRenderer(size: target)
                 let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: target)) }
                 data = resized.jpegData(compressionQuality: 0.8) ?? data
+                pendingImage = UIImage(data: data)
             }
-            let result = try await APIClient.shared.parseRecords(imageData: data)
+            pendingImageData = data
+            phase = .compose
+        } catch {
+            self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            phase = .pick
+            photoItem = nil
+        }
+    }
+
+    /// Compose step: send the image plus the user's note to the AI.
+    private func parse() async {
+        guard let data = pendingImageData else { return }
+        error = nil
+        phase = .parsing
+        do {
+            let result = try await APIClient.shared.parseRecords(
+                imageData: data, instructions: instructions
+            )
             parsed = result
             tradeOn = Array(repeating: true, count: result.trades.count)
             dividendOn = Array(repeating: true, count: result.dividends.count)
             phase = .review
         } catch {
+            // Keep the image + note so the user can tweak the note and retry.
             self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
-            phase = .pick
-            photoItem = nil
+            phase = .compose
         }
     }
 

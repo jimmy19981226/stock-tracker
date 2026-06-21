@@ -194,7 +194,8 @@ final class APIClient {
     /// confirms each row (which then goes through the normal create endpoints).
     func parseRecords(imageData: Data,
                       filename: String = "upload.jpg",
-                      mimeType: String = "image/jpeg") async throws -> ParsedRecords {
+                      mimeType: String = "image/jpeg",
+                      instructions: String = "") async throws -> ParsedRecords {
         let boundary = "Boundary-\(UUID().uuidString)"
         var req = URLRequest(url: try url("/api/ai/parse-records"))
         req.httpMethod = "POST"
@@ -202,6 +203,15 @@ final class APIClient {
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var body = Data()
+        // Optional user note, sent as a form field the backend folds into the
+        // AI prompt to disambiguate the image.
+        let note = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !note.isEmpty {
+            body.appendString("--\(boundary)\r\n")
+            body.appendString("Content-Disposition: form-data; name=\"instructions\"\r\n\r\n")
+            body.appendString(note)
+            body.appendString("\r\n")
+        }
         body.appendString("--\(boundary)\r\n")
         body.appendString("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
         body.appendString("Content-Type: \(mimeType)\r\n\r\n")

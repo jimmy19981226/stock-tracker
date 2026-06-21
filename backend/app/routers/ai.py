@@ -22,7 +22,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -663,8 +663,13 @@ _PARSE_PROMPT = (
 )
 
 
-async def run_parse_pipeline(file: UploadFile) -> dict:
+async def run_parse_pipeline(file: UploadFile, instructions: str | None = None) -> dict:
     """Validate the upload, call Gemini, return the parsed dict.
+
+    ``instructions`` is optional free-text the user typed alongside the image
+    (e.g. "this is a US trade in USD" or "the 優群 row is 3217"). It's woven
+    into the prompt as extra context — used to disambiguate, never to override
+    what's actually in the document.
 
     Raises HTTPException on any failure — caller can choose to bubble it
     (interactive request) or capture it for a session store (background
@@ -711,6 +716,20 @@ async def run_parse_pipeline(file: UploadFile) -> dict:
             detail="google-genai not installed. Run `pip install -r requirements.txt`.",
         )
 
+    # Append the user's own note (if any) as clearly-fenced extra context. We
+    # cap its length so it can't blow up the prompt, and frame it as hints so
+    # the model still trusts the document over the note for hard facts.
+    prompt_text = _PARSE_PROMPT
+    note = (instructions or "").strip()
+    if note:
+        prompt_text += (
+            "\n\nThe user added this note about the image — use it to "
+            "disambiguate or fill gaps (e.g. market, currency, a ticker the "
+            "image doesn't show), but NEVER let it override values clearly "
+            "printed in the document, and never invent rows it doesn't justify:\n"
+            f"\"\"\"\n{note[:1000]}\n\"\"\""
+        )
+
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
@@ -724,7 +743,7 @@ async def run_parse_pipeline(file: UploadFile) -> dict:
                 types.Content(
                     role="user",
                     parts=[
-                        types.Part(text=_PARSE_PROMPT),
+                        types.Part(text=prompt_text),
                         types.Part.from_bytes(data=raw, mime_type=mime),
                     ],
                 ),
@@ -756,15 +775,22 @@ async def run_parse_pipeline(file: UploadFile) -> dict:
 
 
 @router.post("/parse-records")
-async def parse_records(file: UploadFile = File(...)):
+async def parse_records(
+    file: UploadFile = File(...),
+    instructions: str = Form(""),
+):
     """Parse a brokerage screenshot/PDF into structured trade + dividend rows.
+
+    ``instructions`` is an optional free-text note the user typed alongside the
+    image to give the AI context (market/currency, a missing ticker, which
+    amount is per-share, etc.).
 
     The frontend renders the result in a preview card so the user can review
     and edit before committing. Nothing is written to the DB here — this
     endpoint is read-only on the server side; the frontend calls the existing
     POST /api/trades and POST /api/dividends to persist the confirmed rows.
     """
-    return await run_parse_pipeline(file)
+    return await run_parse_pipeline(file, instructions=instructions)
 
 
 # (cross-device QR upload lives in routers/mobile.py; it imports
