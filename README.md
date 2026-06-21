@@ -20,11 +20,11 @@ A **native iOS app + responsive web dashboard + FastAPI backend** for tracking *
 
 **Web dashboard** — read-only, any phone or computer over the internet
 
-<img src="docs/screenshots/web-dashboard.png" width="620" alt="Responsive web dashboard" />
+<img src="docs/screenshots/web-dashboard.png" width="540" alt="Responsive web dashboard" />
 
 **Home Screen widget** — net worth + today's P&L (small &amp; medium)
 
-<img src="docs/screenshots/ios-widget.png" width="540" alt="Home Screen widget" />
+<img src="docs/screenshots/ios-widget.png" width="560" alt="Home Screen widget" />
 
 </div>
 
