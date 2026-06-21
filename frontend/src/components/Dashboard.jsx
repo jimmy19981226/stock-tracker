@@ -143,9 +143,14 @@ function Row({ label, value, cls, extra }) {
   );
 }
 
+// Market display order + labels for grouping holdings.
+const MARKET_GROUPS = [
+  { code: "TW", label: "Taiwan", currency: "TWD" },
+  { code: "US", label: "US", currency: "USD" },
+];
+
 function Holdings({ holdings }) {
-  const sorted = [...holdings].sort((a, b) => (b.market_value || 0) - (a.market_value || 0));
-  if (!sorted.length) {
+  if (!holdings.length) {
     return (
       <section className="card">
         <div className="card-head"><h2>Holdings</h2></div>
@@ -153,9 +158,24 @@ function Holdings({ holdings }) {
       </section>
     );
   }
+
+  // Group by market in a fixed order (TW then US), each sorted by value desc.
+  // Any market not in MARKET_GROUPS still shows under its own raw code.
+  const knownCodes = MARKET_GROUPS.map((g) => g.code);
+  const extraCodes = [...new Set(holdings.map((h) => h.market).filter((m) => !knownCodes.includes(m)))];
+  const groups = [
+    ...MARKET_GROUPS,
+    ...extraCodes.map((code) => ({ code, label: code, currency: holdings.find((h) => h.market === code)?.currency || "" })),
+  ]
+    .map((g) => ({
+      ...g,
+      rows: holdings.filter((h) => h.market === g.code).sort((a, b) => (b.market_value || 0) - (a.market_value || 0)),
+    }))
+    .filter((g) => g.rows.length);
+
   return (
     <section className="card">
-      <div className="card-head"><h2>Holdings</h2><span className="muted">{sorted.length}</span></div>
+      <div className="card-head"><h2>Holdings</h2><span className="muted">{holdings.length}</span></div>
       <div className="holdings">
         <div className="hrow head">
           <span>Ticker</span>
@@ -163,28 +183,47 @@ function Holdings({ holdings }) {
           <span className="num">Value</span>
           <span className="num">Unrealized</span>
         </div>
-        {sorted.map((h) => (
-          <div className="hrow" key={`${h.market}-${h.ticker}`}>
-            <span className="tk">
-              <span className="tk-sym">{h.ticker}</span>
-              {h.name && <span className="tk-name">{h.name}</span>}
-              <span className="tk-sh">{shares(h.shares)} sh</span>
-            </span>
-            <span className="num">
-              {money(h.current_price, h.currency, 2)}
-              {h.today_change_pct != null && (
-                <span className={`mini ${plClass(h.today_change_pct)}`}>{pct(h.today_change_pct)}</span>
-              )}
-            </span>
-            <span className="num">{money(h.market_value, h.currency)}</span>
-            <span className={`num ${plClass(h.unrealized_pl)}`}>
-              {signedMoney(h.unrealized_pl, h.currency)}
-              {h.unrealized_pl_pct != null && <span className="mini">{pct(h.unrealized_pl_pct)}</span>}
-            </span>
-          </div>
-        ))}
+        {groups.map((g) => {
+          const groupValue = g.rows.reduce((sum, h) => sum + (h.market_value || 0), 0);
+          return (
+            <React.Fragment key={g.code}>
+              <div className="hrow group">
+                <span className="group-label">
+                  {g.label} <span className="group-count">{g.rows.length}</span>
+                </span>
+                <span className="num group-total">{money(groupValue, g.currency)}</span>
+              </div>
+              {g.rows.map((h) => (
+                <HoldingRow key={`${h.market}-${h.ticker}`} h={h} />
+              ))}
+            </React.Fragment>
+          );
+        })}
       </div>
     </section>
+  );
+}
+
+function HoldingRow({ h }) {
+  return (
+    <div className="hrow">
+      <span className="tk">
+        <span className="tk-sym">{h.ticker}</span>
+        {h.name && <span className="tk-name">{h.name}</span>}
+        <span className="tk-sh">{shares(h.shares)} sh</span>
+      </span>
+      <span className="num">
+        {money(h.current_price, h.currency, 2)}
+        {h.today_change_pct != null && (
+          <span className={`mini ${plClass(h.today_change_pct)}`}>{pct(h.today_change_pct)}</span>
+        )}
+      </span>
+      <span className="num">{money(h.market_value, h.currency)}</span>
+      <span className={`num ${plClass(h.unrealized_pl)}`}>
+        {signedMoney(h.unrealized_pl, h.currency)}
+        {h.unrealized_pl_pct != null && <span className="mini">{pct(h.unrealized_pl_pct)}</span>}
+      </span>
+    </div>
   );
 }
 

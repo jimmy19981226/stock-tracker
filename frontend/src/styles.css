@@ -129,6 +129,15 @@ code {
 }
 .hrow:last-child { border-bottom: none; }
 .hrow.head { color: var(--muted); font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--stroke); }
+.hrow.group {
+  grid-template-columns: 1fr auto;
+  padding: 14px 0 6px;
+  border-bottom: none;
+  align-items: baseline;
+}
+.group-label { font-weight: 700; font-size: 13px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--secondary); }
+.group-count { color: var(--muted); font-weight: 600; margin-left: 4px; }
+.group-total { color: var(--secondary); font-weight: 600; font-size: 13px; }
 .hrow .num { text-align: right; }
 .tk { display: flex; flex-direction: column; }
 .tk-sym { font-weight: 700; }
