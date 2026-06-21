@@ -37,6 +37,10 @@ from .ai import (
 router = APIRouter(prefix="/api/mobile", tags=["mobile"])
 
 SESSION_TTL_SECONDS = 5 * 60  # tokens self-expire 5 min after creation
+# Hard cap on live sessions. Each can hold up to PARSE_MAX_BYTES (8 MB) of
+# upload bytes in memory, so without a ceiling an attacker minting sessions +
+# uploading is an unbounded-memory DoS. 100 × 8 MB ≈ 800 MB worst case.
+MAX_LIVE_SESSIONS = 100
 PARSE_STATUS = Literal["pending", "received", "parsing", "ready", "error"]
 
 
@@ -127,6 +131,11 @@ def create_session():
     token = secrets.token_urlsafe(16)
     sess = _Session(token=token, created_at=time.time())
     with _sessions_lock:
+        if len(_sessions) >= MAX_LIVE_SESSIONS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many active upload sessions. Try again in a few minutes.",
+            )
         _sessions[token] = sess
 
     origin = _backend_origin()

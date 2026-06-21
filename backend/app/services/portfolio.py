@@ -9,7 +9,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from ..database import Dividend, Trade
-from . import quotes
+from . import fx, quotes
 
 
 # --- TW exit-cost estimate ----------------------------------------------
@@ -245,7 +245,9 @@ def summarize(holdings: list[dict], db: Session, user_id: str) -> list[dict]:
             total_pl_pct = (total_pl / total_cost * 100) if total_cost > 0 else 0.0
             today_pl = sum((h["today_change"] or 0.0) for h in items)
             prev_value = total_value - today_pl
-            today_pl_pct = (today_pl / prev_value * 100) if prev_value > 0 else 0.0
+            # None (not 0%) when there's no positive prior value to divide by,
+            # so a real today's move isn't misreported as a flat 0%.
+            today_pl_pct = (today_pl / prev_value * 100) if prev_value > 0 else None
         realized = realized_by_currency.get(currency, 0.0)
         dividends = dividends_by_currency.get(currency, 0.0)
         summaries.append(
@@ -273,6 +275,40 @@ def summarize(holdings: list[dict], db: Session, user_id: str) -> list[dict]:
     order = {"TWD": 0, "USD": 1}
     summaries.sort(key=lambda s: (order.get(s["currency"], 99), s["currency"]))
     return summaries
+
+
+def build_overview(db: Session, user_id: str) -> dict:
+    """Per-market summary cards (TW + US) plus a combined net worth in both
+    NT$ and US$. The combined figures are null when the FX rate is unavailable,
+    or while a market that holds positions has no live quote (so we never show a
+    fabricated total). Shared by the iOS overview endpoint and the web dashboard.
+    """
+    holdings = build_holdings(db, user_id)
+    summaries = summarize(holdings, db, user_id)
+    by_currency = {s["currency"]: s for s in summaries}
+    tw = by_currency.get("TWD")
+    us = by_currency.get("USD")
+
+    rate, asof = fx.get_usd_twd()
+    tw_value = tw["total_value"] if tw else None
+    us_value = us["total_value"] if us else None
+
+    combined_twd: float | None = None
+    combined_usd: float | None = None
+    tw_missing = tw is not None and tw_value is None
+    us_missing = us is not None and us_value is None
+    if rate and not tw_missing and not us_missing:
+        t = tw_value or 0.0
+        u = us_value or 0.0
+        combined_twd = t + u * rate
+        combined_usd = u + t / rate
+
+    return {
+        "tw": tw,
+        "us": us,
+        "fx": {"usd_twd": rate, "asof": asof},
+        "combined": {"twd": combined_twd, "usd": combined_usd},
+    }
 
 
 def build_realized_history(db: Session, user_id: str, days: int = 180) -> dict[str, list[dict]]:

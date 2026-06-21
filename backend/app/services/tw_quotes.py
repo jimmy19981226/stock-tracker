@@ -208,7 +208,8 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
         n = (item.get("n") or "").strip()
         z_valid = z and z != "-"
         y_valid = y and y != "-"
-        last = _last_good.get(bare)
+        with _lock:
+            last = _last_good.get(bare)
 
         # Current price priority: z (live trade) → bid/ask midpoint
         # (between trades but session active) → today's open → cached last
@@ -286,7 +287,8 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
             ask=ask,
             volume=volume if volume is not None else (last.volume if last else None),
         )
-        _last_good[bare] = q
+        with _lock:
+            _last_good[bare] = q
         fresh[bare] = q
 
     with _lock:

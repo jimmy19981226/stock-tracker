@@ -14,7 +14,18 @@ except ImportError:
     pass
 
 from .database import Dividend, SessionLocal, Trade, init_db
-from .routers import ai, data, dividends, markets, mobile, portfolio, quotes, stock, trades
+from .routers import (
+    ai,
+    data,
+    dividends,
+    markets,
+    mobile,
+    portfolio,
+    quotes,
+    stock,
+    trades,
+    webauth,
+)
 from .services import quotes as quote_service
 from .services import xlsx_io
 
@@ -102,3 +113,4 @@ app.include_router(markets.router)
 app.include_router(quotes.router)
 app.include_router(mobile.router)
 app.include_router(mobile.page_router)
+app.include_router(webauth.router)

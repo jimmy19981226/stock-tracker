@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 
 from fastapi import Header, HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from .database import Chat, Dividend, Metadata, SessionLocal, Trade
 
@@ -49,9 +50,15 @@ def _verify_google_token(token: str) -> str:
             detail="google-auth not installed on the server.",
         ) from exc
 
-    # Audience check is enforced only when GOOGLE_CLIENT_ID is configured; until
-    # then we still verify the signature, issuer and expiry.
+    # Fail closed: without GOOGLE_CLIENT_ID we cannot verify the token's
+    # audience, which would let an ID token minted for ANY other Google OAuth
+    # client be accepted here (token-confusion / impersonation). Require it.
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or None
+    if client_id is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Server auth misconfigured: GOOGLE_CLIENT_ID is not set.",
+        )
     try:
         info = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
     except Exception as exc:
@@ -64,13 +71,23 @@ def _verify_google_token(token: str) -> str:
 
 
 def _maybe_adopt_legacy(user_id: str) -> None:
-    """One-time: hand the pre-auth ``legacy`` data to the first real user."""
+    """One-time: hand the pre-auth ``legacy`` data to the first real user.
+
+    Concurrency-safe: the claim is serialized by the primary-key INSERT on the
+    ``legacy_claimed_by`` Metadata row. If two first-time users race, both stage
+    their UPDATEs, but only one INSERT of the flag can commit — the loser hits
+    IntegrityError and rolls back, so the legacy rows are adopted exactly once.
+    """
     with SessionLocal() as db:
         if db.get(Metadata, _CLAIM_FLAG) is not None:
             return
-        for model in (Trade, Dividend, Chat):
-            db.query(model).filter(model.user_id == LEGACY_USER).update(
-                {model.user_id: user_id}, synchronize_session=False
-            )
-        db.add(Metadata(key=_CLAIM_FLAG, value=user_id))
-        db.commit()
+        try:
+            for model in (Trade, Dividend, Chat):
+                db.query(model).filter(model.user_id == LEGACY_USER).update(
+                    {model.user_id: user_id}, synchronize_session=False
+                )
+            db.add(Metadata(key=_CLAIM_FLAG, value=user_id))
+            db.commit()
+        except IntegrityError:
+            # Another request won the race and claimed the legacy data first.
+            db.rollback()

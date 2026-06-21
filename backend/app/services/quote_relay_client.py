@@ -13,14 +13,19 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from threading import Lock
 from typing import Iterable
 
 from .quotes import QuoteData
 
 # Short cloud-side cache so a burst of internal calls within one poll cycle
 # doesn't make repeated round-trips to the relay; the relay itself caches MIS.
+# Sync routes run concurrently on FastAPI's threadpool, so the cache must be
+# guarded — without the lock, a concurrent read while another thread mutates
+# the dict can raise "dictionary changed size during iteration"-class errors.
 _TTL_SECONDS = 4.0
 _cache: dict[str, tuple[float, QuoteData]] = {}
+_cache_lock = Lock()
 
 
 def configured() -> bool:
@@ -69,12 +74,13 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
     now = time.time()
     out: dict[str, QuoteData] = {}
     misses: list[str] = []
-    for t in tickers:
-        c = _cache.get(t)
-        if c and now - c[0] < _TTL_SECONDS:
-            out[t] = c[1]
-        else:
-            misses.append(t)
+    with _cache_lock:
+        for t in tickers:
+            c = _cache.get(t)
+            if c and now - c[0] < _TTL_SECONDS:
+                out[t] = c[1]
+            else:
+                misses.append(t)
     if not misses:
         return out
 
@@ -99,9 +105,10 @@ def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
         return out  # relay down/slow → caller falls back to Yahoo
 
     quotes = payload.get("quotes") or {}
-    for t in misses:
-        q = _parse(quotes.get(t) or {})
-        if q is not None:
-            out[t] = q
-            _cache[t] = (now, q)
+    with _cache_lock:
+        for t in misses:
+            q = _parse(quotes.get(t) or {})
+            if q is not None:
+                out[t] = q
+                _cache[t] = (now, q)
     return out

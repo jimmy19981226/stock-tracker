@@ -2,11 +2,18 @@
 # (The React frontend is deployed separately on Vercel.)
 #
 # Deploy: Render dashboard -> New -> Blueprint -> pick this repo.
-# Then set the three env vars below in the dashboard (they're marked sync:false
+# Then set the env vars below in the dashboard (they're marked sync:false
 # so they are NOT stored in git):
-#   DATABASE_URL       your Neon connection string
-#   GOOGLE_AI_API_KEY  your Gemini key (optional; enables the AI assistant)
-#   FRONTEND_ORIGINS   your deployed frontend URL, e.g. https://your-app.vercel.app
+#   DATABASE_URL            your Neon connection string
+#   GOOGLE_AI_API_KEY       your Gemini key (optional; enables the AI assistant)
+#   FRONTEND_ORIGINS        your deployed frontend URL(s), comma-separated,
+#                           e.g. https://your-app.vercel.app
+#   GOOGLE_CLIENT_ID        your Google OAuth client ID. REQUIRED once you accept
+#                           Google sign-in — the backend verifies ID-token
+#                           audience against it; if unset, authenticated requests
+#                           return 503 (fail-closed, no token-confusion bypass).
+#   WEB_DASHBOARD_PASSWORD  password that unlocks the read-only web dashboard
+#   WEB_DASHBOARD_USER_ID   which data scope the dashboard shows (default "legacy")
 services:
   - type: web
     name: stock-tracker-api
@@ -21,4 +28,10 @@ services:
       - key: GOOGLE_AI_API_KEY
         sync: false
       - key: FRONTEND_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: WEB_DASHBOARD_PASSWORD
+        sync: false
+      - key: WEB_DASHBOARD_USER_ID
         sync: false
