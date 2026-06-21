@@ -180,11 +180,12 @@ private struct NetWorthCard: View {
                     .overlay(Capsule().stroke(trAccent.opacity(0.30), lineWidth: 1))
                     .clipShape(Capsule())
 
-                    if let d = fxDateText {
-                        Text("FX rate as of \(d)")
-                            .font(.caption2)
-                            .foregroundStyle(Theme.mutedText)
-                    }
+                    // Definition + the FX rate's as-of date.
+                    Text("Unrealized + realized + dividends"
+                         + (fxDateText.map { " · FX rate as of \($0)" } ?? ""))
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.top, 4)
             }

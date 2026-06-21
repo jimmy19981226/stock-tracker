@@ -74,11 +74,14 @@ private struct SummaryCard: View {
 
             // Distinct Total Return band.
             if let tr = totalReturn {
-                HStack {
+                HStack(spacing: 5) {
                     Text("TOTAL RETURN")
                         .font(.caption2.weight(.bold))
                         .tracking(0.5)
                         .foregroundStyle(trAccent)
+                    Text(currency)  // unit: TWD / USD
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(Theme.mutedText)
                     Spacer()
                     Text(Fmt.signedMoney(tr, currency: currency))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))

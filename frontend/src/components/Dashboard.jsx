@@ -157,7 +157,7 @@ function MarketCard({ title, currency, summary }) {
       </div>
       {tr != null && (
         <div className="market-total-return">
-          <span className="mtr-label">Total return</span>
+          <span className="mtr-label">Total return <span className="mtr-unit">{currency}</span></span>
           <span className={`mtr-value ${plClass(tr)}`}>
             {signedMoney(tr, currency)}
             {trPct != null && <span className="mtr-pct">{pct(trPct)}</span>}
