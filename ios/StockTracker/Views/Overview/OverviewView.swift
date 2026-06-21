@@ -107,6 +107,19 @@ struct OverviewView: View {
 private struct NetWorthCard: View {
     let overview: PortfolioOverview?
 
+    private let trAccent = Color(red: 0.655, green: 0.545, blue: 0.98)
+
+    /// Combined Total Return (unrealized + realized + dividends) across both
+    /// markets, in TWD (US leg converted at the current FX rate).
+    private var combinedTotalReturn: Double? {
+        guard let o = overview else { return nil }
+        let tw = o.tw.map { ($0.totalPl ?? 0) + $0.totalEarned }
+        let us = o.us.map { ($0.totalPl ?? 0) + $0.totalEarned }
+        if tw == nil && us == nil { return nil }
+        let fx = o.fx.usdTwd ?? 0
+        return (tw ?? 0) + (us ?? 0) * fx
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Investing")
@@ -128,6 +141,24 @@ private struct NetWorthCard: View {
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedText)
                 }
+            }
+
+            if let tr = combinedTotalReturn {
+                HStack(spacing: 8) {
+                    Text("TOTAL RETURN")
+                        .font(.caption2.weight(.bold))
+                        .tracking(0.5)
+                        .foregroundStyle(trAccent)
+                    Text(Fmt.signedMoney(tr, currency: "TWD"))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundStyle(Theme.pl(tr))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(trAccent.opacity(0.12))
+                .overlay(Capsule().stroke(trAccent.opacity(0.30), lineWidth: 1))
+                .clipShape(Capsule())
+                .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -26,8 +26,23 @@ private struct SummaryCard: View {
     let summary: CurrencySummary?
     let currency: String
 
+    // Violet accent so Total Return reads as a distinct category from the
+    // green/red P&L rows (mirrors the web dashboard).
+    private let trAccent = Color(red: 0.655, green: 0.545, blue: 0.98)
+
+    // Total Return = unrealized (totalPl) + realized + dividends.
+    // totalEarned already = realized + dividends (computed by the backend).
+    private var totalReturn: Double? {
+        guard let s = summary else { return nil }
+        return (s.totalPl ?? 0) + s.totalEarned
+    }
+    private var totalReturnPct: Double? {
+        guard let s = summary, let tr = totalReturn, s.totalCost > 0 else { return nil }
+        return tr / s.totalCost * 100
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             // Big bold value with a colored change line under it.
             VStack(alignment: .leading, spacing: 5) {
                 Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
@@ -55,6 +70,31 @@ private struct SummaryCard: View {
                 statRow("Earned this year",
                         Fmt.signedMoney(summary?.yearEarned, currency: currency),
                         Theme.pl(summary?.yearEarned), last: true)
+            }
+
+            // Distinct Total Return band.
+            if let tr = totalReturn {
+                HStack {
+                    Text("TOTAL RETURN")
+                        .font(.caption2.weight(.bold))
+                        .tracking(0.5)
+                        .foregroundStyle(trAccent)
+                    Spacer()
+                    Text(Fmt.signedMoney(tr, currency: currency))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundStyle(Theme.pl(tr))
+                    if let p = totalReturnPct {
+                        Text(Fmt.pct(p))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(trAccent.opacity(0.10))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .stroke(trAccent.opacity(0.30), lineWidth: 1))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
