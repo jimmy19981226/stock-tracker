@@ -209,7 +209,9 @@ struct TradeFormView: View {
     private func save() async {
         saving = true
         error = nil
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        // Match the UTC formatter used to PARSE the date when populating, so a
+        // device in a non-UTC zone doesn't shift the saved date back a day.
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
         let payload = TradeCreate(
             type: type,
             ticker: ticker.trimmingCharacters(in: .whitespaces).uppercased(),

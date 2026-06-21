@@ -26,7 +26,7 @@ enum MISQuotes {
             .filter { !$0.isEmpty }
         guard !codes.isEmpty else { return [:] }
 
-        var comps = URLComponents(string: endpoint)!
+        guard var comps = URLComponents(string: endpoint) else { return [:] }
         comps.queryItems = [
             .init(name: "ex_ch", value: codes.flatMap { ["tse_\($0).tw", "otc_\($0).tw"] }
                                             .joined(separator: "|")),
@@ -34,7 +34,8 @@ enum MISQuotes {
             .init(name: "delay", value: "0"),
             .init(name: "_", value: String(Int(Date().timeIntervalSince1970 * 1000))),
         ]
-        var req = URLRequest(url: comps.url!)
+        guard let reqURL = comps.url else { return [:] }
+        var req = URLRequest(url: reqURL)
         req.timeoutInterval = 8
         req.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
         req.setValue("https://mis.twse.com.tw/stock/index.jsp", forHTTPHeaderField: "Referer")

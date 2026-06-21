@@ -103,6 +103,12 @@ private struct NetWorthCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Investing net worth")
+        .accessibilityValue(
+            "\(Fmt.bigMoney(overview?.combined.twd, currency: "TWD")), "
+            + "about \(Fmt.bigMoney(overview?.combined.usd, currency: "USD"))"
+        )
     }
 }
 
@@ -212,6 +218,11 @@ private struct TotalEarnedCard: View {
                     }
                 }
                 .frame(height: 150)
+                .accessibilityLabel("Total earned over time")
+                .accessibilityValue(
+                    "Currently \(Fmt.signedMoney(rows.last?.total ?? 0, currency: "TWD")), "
+                    + ((rows.last?.total ?? 0) >= (rows.first?.total ?? 0) ? "trending up" : "trending down")
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

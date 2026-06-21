@@ -6,6 +6,7 @@ struct DividendsView: View {
     @State private var editing: Dividend?
     @State private var showAdd = false
     @State private var showImport = false
+    @State private var actionError: String?
 
     private var dividends: [Dividend] {
         store.dividends(for: market).sorted { $0.payDate > $1.payDate }
@@ -59,11 +60,20 @@ struct DividendsView: View {
         .sheet(item: $editing) { div in
             DividendFormView(market: market, existing: div)
         }
+        .alert("Couldn’t delete dividend", isPresented: .constant(actionError != nil)) {
+            Button("OK") { actionError = nil }
+        } message: {
+            Text(actionError ?? "")
+        }
     }
 
     private func delete(_ div: Dividend) {
         Task {
-            try? await APIClient.shared.deleteDividend(div.id)
+            do {
+                try await APIClient.shared.deleteDividend(div.id)
+            } catch {
+                actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            }
             await store.loadAll()
         }
     }
