@@ -142,7 +142,9 @@ struct DividendFormView: View {
     private func save() async {
         saving = true
         error = nil
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        // UTC to match the populate formatter — avoids shifting the saved date
+        // back a day on devices west of UTC.
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.timeZone = TimeZone(identifier: "UTC")
         let payload = DividendCreate(
             ticker: ticker.trimmingCharacters(in: .whitespaces).uppercased(),
             amount: Double(amount) ?? 0,

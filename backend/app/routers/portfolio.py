@@ -1,11 +1,12 @@
 import time
+from threading import Lock
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import Dividend, Trade, get_db
-from ..services import fx, portfolio, quotes
+from ..services import portfolio, quotes
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -15,6 +16,8 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 # ticker set, so a newly-added ticker still refreshes immediately).
 _NAMES_TTL_SECONDS = 600.0
 _names_cache: dict = {"key": None, "at": 0.0, "value": {}}
+# Guards _names_cache against concurrent read-modify-write from the threadpool.
+_names_lock = Lock()
 
 
 @router.get("/holdings")
@@ -25,37 +28,8 @@ def get_holdings(db: Session = Depends(get_db), user: str = Depends(get_current_
 @router.get("/overview")
 def get_overview(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     """Per-market summary cards (TW + US) plus a combined net worth shown in
-    both NT$ and US$. Powers the landing page. The combined figures are null
-    when the FX rate is unavailable, or while a market that holds positions has
-    no live quote (so we never show a fabricated total)."""
-    holdings = portfolio.build_holdings(db, user)
-    summaries = portfolio.summarize(holdings, db, user)
-    by_currency = {s["currency"]: s for s in summaries}
-    tw = by_currency.get("TWD")
-    us = by_currency.get("USD")
-
-    rate, asof = fx.get_usd_twd()
-    tw_value = tw["total_value"] if tw else None
-    us_value = us["total_value"] if us else None
-
-    combined_twd: float | None = None
-    combined_usd: float | None = None
-    # Only blank the combined total if a market that HAS holdings is missing a
-    # live value (transient quote outage) — an empty market just contributes 0.
-    tw_missing = tw is not None and tw_value is None
-    us_missing = us is not None and us_value is None
-    if rate and not tw_missing and not us_missing:
-        t = tw_value or 0.0
-        u = us_value or 0.0
-        combined_twd = t + u * rate
-        combined_usd = u + t / rate
-
-    return {
-        "tw": tw,
-        "us": us,
-        "fx": {"usd_twd": rate, "asof": asof},
-        "combined": {"twd": combined_twd, "usd": combined_usd},
-    }
+    both NT$ and US$. Powers the landing page."""
+    return portfolio.build_overview(db, user)
 
 
 @router.get("/summary")
@@ -93,13 +67,13 @@ def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_use
         return {}
 
     now = time.time()
-    cached = _names_cache
-    if (
-        cached["key"] == all_tickers
-        and cached["value"]
-        and now - cached["at"] < _NAMES_TTL_SECONDS
-    ):
-        return cached["value"]
+    with _names_lock:
+        if (
+            _names_cache["key"] == all_tickers
+            and _names_cache["value"]
+            and now - _names_cache["at"] < _NAMES_TTL_SECONDS
+        ):
+            return dict(_names_cache["value"])
 
     quote_map = quotes.get_quotes(all_tickers)
     names = {
@@ -108,7 +82,8 @@ def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_use
     }
     # Only cache once we actually have names (don't pin a failed/empty fetch).
     if any(names.values()):
-        _names_cache.update({"key": all_tickers, "at": now, "value": names})
+        with _names_lock:
+            _names_cache.update({"key": all_tickers, "at": now, "value": names})
     return names
 
 

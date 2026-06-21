@@ -17,6 +17,10 @@ enum Keychain {
         if status == errSecItemNotFound {
             var add = query
             add[kSecValueData as String] = data
+            // Readable after first unlock (incl. while the device is later
+            // locked) so background token refresh doesn't fail; never synced to
+            // iCloud / migrated to other devices.
+            add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
         }
         return status == errSecSuccess

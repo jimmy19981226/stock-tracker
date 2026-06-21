@@ -26,6 +26,8 @@ actor AuthTokenProvider {
     }
 
     private func refresh() async -> String? {
+        // Coalesce concurrent refreshes: every caller that arrives while a
+        // refresh is in flight awaits the SAME task and gets its result.
         if let running = refreshTask { return await running.value }
         guard let refreshToken = Keychain.get(AuthStore.refreshTokenKey),
               !refreshToken.isEmpty else { return nil }
@@ -38,7 +40,9 @@ actor AuthTokenProvider {
         }
         refreshTask = task
         let result = await task.value
-        refreshTask = nil
+        // Clear the slot only if it's still OUR task, so a newer refresh that
+        // replaced it in the meantime isn't clobbered. (Task is Equatable.)
+        if refreshTask == task { refreshTask = nil }
         return result
     }
 

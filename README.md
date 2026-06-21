@@ -27,6 +27,10 @@ A **native iOS app + FastAPI backend** for tracking **Taiwan + US** stock portfo
 
 A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — bottom tab bar, dark "studio" theme, Swift Charts, an animated splash, Google sign-in, multi-provider AI (OpenAI / Gemini / Claude with your own key), **Claude-style Markdown** in the assistant, and per-user data scoping. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md). (Screenshots at the top of this README.)
 
+## 🌐 Web dashboard (mobile + desktop)
+
+A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + Vite) lets you check the portfolio from any phone or computer over the internet — net worth, a total-earned chart, per-market cards, and live holdings. Access is gated by a single shared password (`WEB_DASHBOARD_PASSWORD`); it reads the scope set by `WEB_DASHBOARD_USER_ID` (default `legacy`). Deploy it to Vercel pointing at your Render backend — see [`frontend/README.md`](frontend/README.md).
+
 ---
 
 ## What's inside

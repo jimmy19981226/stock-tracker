@@ -15,6 +15,8 @@ LAST_EXPORT_KEY = "last_export"
 XLSX_MEDIA_TYPE = (
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+# Cap the import upload so a huge workbook can't exhaust memory.
+IMPORT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 def _record_last_export(db: Session) -> None:
@@ -65,6 +67,12 @@ async def import_portfolio(
       destructive change, and the whole operation commits once.
     """
     raw = await file.read()
+    if len(raw) > IMPORT_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({len(raw) / 1e6:.1f} MB). Max "
+            f"{IMPORT_MAX_BYTES // (1024 * 1024)} MB.",
+        )
     try:
         trades, dividends = xlsx_io.parse_portfolio_xlsx(raw)
     except ValueError as e:
@@ -72,21 +80,26 @@ async def import_portfolio(
 
     deleted_trades = 0
     deleted_dividends = 0
-    if mode == "replace":
-        deleted_trades = (
-            db.query(Trade).filter(Trade.user_id == user).delete(synchronize_session=False)
-        )
-        deleted_dividends = (
-            db.query(Dividend).filter(Dividend.user_id == user).delete(synchronize_session=False)
-        )
+    try:
+        if mode == "replace":
+            deleted_trades = (
+                db.query(Trade).filter(Trade.user_id == user).delete(synchronize_session=False)
+            )
+            deleted_dividends = (
+                db.query(Dividend).filter(Dividend.user_id == user).delete(synchronize_session=False)
+            )
 
-    for t in trades:
-        t.user_id = user
-        db.add(t)
-    for d in dividends:
-        d.user_id = user
-        db.add(d)
-    db.commit()
+        for t in trades:
+            t.user_id = user
+            db.add(t)
+        for d in dividends:
+            d.user_id = user
+            db.add(d)
+        db.commit()
+    except Exception as exc:
+        # Roll back so a failed import never leaves the deletes half-applied.
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Import failed: {exc}") from exc
 
     return {
         "mode": mode,

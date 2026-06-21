@@ -20,6 +20,9 @@ final class AssistantViewModel: ObservableObject {
     @Published var isSubmittingImport = false
 
     private var chatId: Int?
+    /// The in-flight streaming task, so a reset / teardown can cancel it and
+    /// stop late onChunk/onDone callbacks from mutating a fresh transcript.
+    private var streamTask: Task<Void, Never>?
 
     init() {
         // UI-test hook: seed a parsed-import review card to screenshot the flow.
@@ -91,38 +94,53 @@ final class AssistantViewModel: ObservableObject {
         isStreaming = true
         streamingText = ""
 
-        Task {
+        streamTask = Task { [weak self] in
+            guard let self else { return }
             do {
                 try await APIClient.shared.streamChat(
                     chatId: chatId,
                     message: text,
-                    onInit: { [weak self] id, _ in self?.chatId = id },
-                    onChunk: { [weak self] delta in self?.streamingText += delta },
+                    onInit: { [weak self] id, _ in
+                        guard let self, !Task.isCancelled else { return }
+                        self.chatId = id
+                    },
+                    onChunk: { [weak self] delta in
+                        guard let self, !Task.isCancelled else { return }
+                        self.streamingText += delta
+                    },
                     onDone: { [weak self] content, _ in
-                        guard let self else { return }
+                        guard let self, !Task.isCancelled else { return }
                         let final = content.isEmpty ? self.streamingText : content
                         self.messages.append(ChatMessage(role: "assistant", content: final))
                         self.streamingText = ""
                     }
                 )
             } catch {
-                self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
-                if !streamingText.isEmpty {
-                    messages.append(ChatMessage(role: "assistant", content: streamingText))
-                    streamingText = ""
+                // A cancelled stream is an intentional teardown, not an error.
+                if !Task.isCancelled {
+                    self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
+                    if !self.streamingText.isEmpty {
+                        self.messages.append(ChatMessage(role: "assistant", content: self.streamingText))
+                        self.streamingText = ""
+                    }
                 }
             }
-            isStreaming = false
+            if !Task.isCancelled { self.isStreaming = false }
         }
     }
 
     func reset() {
+        streamTask?.cancel()
+        streamTask = nil
         chatId = nil
         messages = []
         streamingText = ""
+        isStreaming = false
         error = nil
         cancelImport()
     }
+
+    deinit { streamTask?.cancel() }
 
     // MARK: - Image import (in-chat)
 

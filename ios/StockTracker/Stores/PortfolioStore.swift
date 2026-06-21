@@ -21,10 +21,17 @@ final class PortfolioStore: ObservableObject {
 
     private let api = APIClient.shared
     private var pollTask: Task<Void, Never>?
+    // Monotonic refresh generation. A manual loadAll() and the background poll's
+    // refreshQuietly() can be in flight at once; whichever STARTED last owns the
+    // final state. An older fetch that resolves late checks this and drops its
+    // writes instead of clobbering newer data.
+    private var refreshSeq = 0
 
     // MARK: - Loading
 
     func loadAll() async {
+        refreshSeq += 1
+        let seq = refreshSeq
         do {
             async let t = api.listTrades()
             async let d = api.listDividends()
@@ -35,6 +42,7 @@ final class PortfolioStore: ObservableObject {
             let (tt, dd, hh, ss, ee, nn) = try await (t, d, h, s, e, n)
             let (hh2, ss2) = await Self.applyingMIS(holdings: hh, summaries: ss,
                                                     twOpen: isOpen(.TW))
+            guard seq == refreshSeq else { return }  // superseded by a newer refresh
             trades = tt
             dividends = dd
             holdings = hh2
@@ -44,6 +52,7 @@ final class PortfolioStore: ObservableObject {
             errorMessage = nil
             lastUpdated = Date()
         } catch {
+            guard seq == refreshSeq else { return }
             errorMessage = (error as? APIError)?.errorDescription ?? error.localizedDescription
         }
         loading = false
@@ -55,12 +64,15 @@ final class PortfolioStore: ObservableObject {
 
     /// Pull fresh data but keep the current UI (no full-screen spinner).
     func refreshQuietly() async {
+        refreshSeq += 1
+        let seq = refreshSeq
         do {
             async let h = api.getHoldings()
             async let s = api.getSummary()
             let (hh, ss) = try await (h, s)
             let (hh2, ss2) = await Self.applyingMIS(holdings: hh, summaries: ss,
                                                     twOpen: isOpen(.TW))
+            guard seq == refreshSeq else { return }  // superseded by a newer refresh
             holdings = hh2
             summaries = ss2
             lastUpdated = Date()

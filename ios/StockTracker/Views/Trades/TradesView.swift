@@ -6,6 +6,7 @@ struct TradesView: View {
     @State private var editing: Trade?
     @State private var showAdd = false
     @State private var showImport = false
+    @State private var actionError: String?
 
     private var trades: [Trade] {
         store.trades(for: market).sorted { $0.tradeDate > $1.tradeDate }
@@ -51,11 +52,20 @@ struct TradesView: View {
         .sheet(item: $editing) { trade in
             TradeFormView(market: market, existing: trade)
         }
+        .alert("Couldn’t delete trade", isPresented: .constant(actionError != nil)) {
+            Button("OK") { actionError = nil }
+        } message: {
+            Text(actionError ?? "")
+        }
     }
 
     private func delete(_ trade: Trade) {
         Task {
-            try? await APIClient.shared.deleteTrade(trade.id)
+            do {
+                try await APIClient.shared.deleteTrade(trade.id)
+            } catch {
+                actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            }
             await store.loadAll()
         }
     }
