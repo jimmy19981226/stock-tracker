@@ -10,19 +10,21 @@ A **native iOS app + responsive web dashboard + FastAPI backend** for tracking *
 
 <div align="center">
 
-_iOS app_
+**iOS app**
 
-<img src="docs/screenshots/ios-overview.png" width="250" alt="Net-worth overview" />
-&nbsp;&nbsp;
-<img src="docs/screenshots/ios-dashboard.png" width="250" alt="Portfolio dashboard" />
-&nbsp;&nbsp;
-<img src="docs/screenshots/ios-assistant.png" width="250" alt="AI assistant" />
+<img src="docs/screenshots/ios-overview.png" width="240" alt="Net-worth overview" />
+&nbsp;
+<img src="docs/screenshots/ios-dashboard.png" width="240" alt="Portfolio dashboard" />
+&nbsp;
+<img src="docs/screenshots/ios-assistant.png" width="240" alt="AI assistant" />
 
-_Web dashboard (mobile + desktop) · Home Screen widget_
+**Web dashboard** — read-only, any phone or computer over the internet
 
-<img src="docs/screenshots/web-dashboard.png" width="380" alt="Responsive web dashboard" />
-&nbsp;&nbsp;
-<img src="docs/screenshots/ios-widget.png" width="250" alt="Home Screen widget" />
+<img src="docs/screenshots/web-dashboard.png" width="620" alt="Responsive web dashboard" />
+
+**Home Screen widget** — net worth + today's P&L (small &amp; medium)
+
+<img src="docs/screenshots/ios-widget.png" width="540" alt="Home Screen widget" />
 
 </div>
 
