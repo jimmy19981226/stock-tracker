@@ -2,16 +2,28 @@
 
 # ✦ AI Stock Studio
 
-A **native iOS app + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), and a streaming AI assistant (your choice of **OpenAI, Gemini, or Claude**) that analyzes your portfolio and can search the web.
+A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a streaming AI assistant (your choice of **OpenAI, Gemini, or Claude**) that analyzes your portfolio and can search the web.
 
 </div>
 
+**Three ways in, one backend:** a native SwiftUI **iPhone app** (with a Home Screen widget), a read-only **web dashboard** for any phone or computer over the internet, and the **FastAPI** backend they both talk to.
+
 <div align="center">
+
+_iOS app_
+
 <img src="docs/screenshots/ios-overview.png" width="250" alt="Net-worth overview" />
 &nbsp;&nbsp;
 <img src="docs/screenshots/ios-dashboard.png" width="250" alt="Portfolio dashboard" />
 &nbsp;&nbsp;
 <img src="docs/screenshots/ios-assistant.png" width="250" alt="AI assistant" />
+
+_Web dashboard (mobile + desktop) · Home Screen widget_
+
+<img src="docs/screenshots/web-dashboard.png" width="380" alt="Responsive web dashboard" />
+&nbsp;&nbsp;
+<img src="docs/screenshots/ios-widget.png" width="250" alt="Home Screen widget" />
+
 </div>
 
 > Built because every off-the-shelf portfolio tracker either ignores
@@ -27,9 +39,13 @@ A **native iOS app + FastAPI backend** for tracking **Taiwan + US** stock portfo
 
 A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — bottom tab bar, dark "studio" theme, Swift Charts, an animated splash, Google sign-in, multi-provider AI (OpenAI / Gemini / Claude with your own key), **Claude-style Markdown** in the assistant, and per-user data scoping. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md). (Screenshots at the top of this README.)
 
+## 📲 Home Screen widget
+
+A **WidgetKit** Home Screen widget (in [`ios/StockTrackerWidget/`](ios/StockTrackerWidget/)) shows your **combined net worth** and **today's gain/loss** at a glance, with a 🇹🇼 / 🇺🇸 split on the medium size. It works in **Smart Stacks**. The app writes a snapshot to a shared **App Group** (`group.com.aistockstudio.app`) on every overview refresh, so the widget renders instantly with no networking or auth of its own.
+
 ## 🌐 Web dashboard (mobile + desktop)
 
-A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + Vite) lets you check the portfolio from any phone or computer over the internet — net worth, a total-earned chart, per-market cards, and live holdings. Access is gated by a single shared password (`WEB_DASHBOARD_PASSWORD`); it reads the scope set by `WEB_DASHBOARD_USER_ID` (default `legacy`). Deploy it to Vercel pointing at your Render backend — see [`frontend/README.md`](frontend/README.md).
+A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + Vite) lets you check the portfolio from any phone or computer over the internet — net worth, an interactive total-earned chart, separate **Taiwan and US holdings cards**, and live prices. Access is gated by a single shared password (`WEB_DASHBOARD_PASSWORD`); it reads the scope set by `WEB_DASHBOARD_USER_ID` (default `legacy`). Deploy it to **Vercel** pointing at your Render backend — see [`frontend/README.md`](frontend/README.md).
 
 ---
 
@@ -69,6 +85,11 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 - Add, edit, and delete **trades** (buy/sell) and **dividends**, scoped per market (TW / US)
 - **FIFO open/closed status** computed per trade; weighted-average cost basis
 - Backend **CSV import/export** endpoints (one unified file for trades + dividends) and auto-seed from `backend/data/seed/portfolio.csv` on first boot
+- **AI image import** — snap a brokerage statement/screenshot and a vision model extracts the trades + dividends to review before saving. You can add a **free-text note** alongside the image (e.g. "US trade in USD", "the 優群 row is 3217") that the model uses to disambiguate, and it resolves a Taiwan **company name → stock code** when the document shows only the name.
+
+### 📲 Home Screen widget (iOS)
+- Small and medium **WidgetKit** widgets showing combined net worth + today's P&L, with a TW/US breakdown on medium
+- Smart-Stack compatible; fed by a shared App Group snapshot the app writes on each refresh (no networking/auth in the extension)
 
 ### 🔐 Accounts & data
 - **Google sign-in** (login only) via the native OAuth flow — or continue as a guest
@@ -82,15 +103,20 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 Backend                                iOS app (native)
 ─────────────────                      ─────────────────
 FastAPI                                Swift + SwiftUI
-SQLAlchemy 2.0                         Swift Charts
+SQLAlchemy 2.0                         Swift Charts · WidgetKit (Home Screen widget)
   · SQLite (local default)             URLSession (async/await)
-  · Postgres / Neon (optional)         Keychain (API keys)
+  · Postgres / Neon (optional)         Keychain (API keys) · App Group (widget data)
 TWSE MIS   (live TW quotes)            ASWebAuthenticationSession (Google)
 Yahoo      (live US quotes + history)
 FinMind    (TW monthly revenue)        Multi-provider AI (your own key):
 google-genai · openai · anthropic        OpenAI / Gemini / Claude
 quote relay + ngrok (cloud TW quotes)
 python-multipart · python-dotenv · psycopg · google-auth
+
+Web dashboard (read-only)
+─────────────────
+React 18 + Vite · dependency-free SVG charts · deployed on Vercel
+password-gated, stateless HMAC token → /api/web/* (scoped to one user)
 ```
 
 All market data flows through standardised public endpoints (TWSE MIS, Yahoo, FinMind) — no scraping, no broker login, no paid feeds. Because TWSE MIS only answers from Taiwan IPs, a hosted backend reaches it through a small **quote relay** running on a Taiwan/home connection, exposed at a permanent **ngrok** URL (see [Real-time TW quotes in the cloud](#real-time-tw-quotes-in-the-cloud-the-relay)). US quotes from Yahoo work from anywhere.
@@ -103,8 +129,13 @@ All market data flows through standardised public endpoints (TWSE MIS, Yahoo, Fi
 flowchart LR
   subgraph iPhone["iPhone — native SwiftUI app"]
     UI[Overview · Dashboard · Trades<br/>Dividends · Stock detail · Assistant]
+    Widget["Home Screen widget<br/>net worth · today P&L"]
+  end
+  subgraph Web["Browser — web dashboard (read-only)"]
+    WUI[net worth · chart · TW/US holdings]
   end
   subgraph Backend["FastAPI"]
+    WebAPI["/api/web/*<br/>password gate · scoped"]
     Trades["/api/trades · /api/dividends"]
     Portfolio["/api/portfolio/*<br/>holdings · overview · summary"]
     Markets["/api/markets<br/>DB-driven config"]
@@ -132,6 +163,9 @@ flowchart LR
   UI --> Data
   UI -- "SSE stream" --> AI
   UI -- "sign in" --> Google
+  UI -. "writes snapshot (App Group)" .-> Widget
+  WUI -- "password → token" --> WebAPI
+  WebAPI --> DB
   Trades --> Auth
   AI --> Auth
   Trades --> DB
@@ -170,7 +204,9 @@ backend/
       portfolio.py     holdings / overview / summary / earnings / names / quote
       markets.py       market configs + holiday add/remove (DB-driven)
       data.py          unified portfolio.csv import + export
-      ai.py            Gemini Q&A + agentic UI planner + chat history (CRUD)
+      ai.py            AI Q&A + image import (vision parse, name→code) + chat history
+      webauth.py       read-only web dashboard: password gate + /api/web/* endpoints
+      mobile.py        cross-device QR upload bridge for the AI import
       stock.py         per-stock detail (parallel live + fundamentals + financials)
     services/
       quotes.py        QuoteData + symbol resolution + TW/US market detection
@@ -190,8 +226,15 @@ ios/                   native SwiftUI iPhone app (see ios/README.md)
     App/ Config/ Networking/ Models/ Stores/ Theme/ Util/
     Auth/              Keychain + Google sign-in (ASWebAuthSession + PKCE)
     Views/             Overview, Dashboard, Trades, Dividends, StockDetail,
-                       Assistant (Markdown chat + history), Settings, Onboarding
+                       Assistant (Markdown chat + history), Import, Settings
+  StockTrackerWidget/  WidgetKit extension — net worth + today's P&L widget
+  StockTrackerShared/  snapshot model shared by app + widget (App Group)
+  project.yml          XcodeGen spec (app + widget targets, entitlements)
   rebuild-ipa.sh       build the sideloadable .ipa
+frontend/              read-only web dashboard — React + Vite, deploy to Vercel
+  src/                 api.js · App · Login · Dashboard · Sparkline
+  vercel.json          Vite framework + SPA rewrites
+  README.md            local dev + Vercel deploy + backend env vars
 ```
 
 ---
@@ -351,7 +394,7 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | DELETE | /api/markets/{code}/holidays/{date} | remove a market closure                     |
 | GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
 | POST   | /api/ai/chat                        | SSE stream (`init`→`chunk`→`done`); provider via `X-AI-Provider`/`X-AI-Key` (OpenAI / Gemini / Claude) |
-| POST   | /api/ai/parse-records               | upload an image/PDF, get `{trades, dividends, notes}` back — read-only, nothing written to DB |
+| POST   | /api/ai/parse-records               | upload an image/PDF (+ optional `instructions` note), get `{trades, dividends, notes}` back — read-only, nothing written to DB |
 | GET    | /api/ai/chats                       | list saved conversations, newest first      |
 | GET    | /api/ai/chats/{id}                  | fetch one conversation with all messages    |
 | PATCH  | /api/ai/chats/{id}                  | rename a conversation                       |
@@ -361,6 +404,9 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | DELETE | /api/mobile/sessions/{token}        | release session bytes when modal closes     |
 | POST   | /api/mobile/sessions/{token}/file   | phone uploads here from the mobile page     |
 | GET    | /m/upload/{token}                   | mobile-friendly upload HTML page (rendered by phone after QR scan) |
+| GET    | /api/web/config                     | whether the read-only web dashboard is enabled (`WEB_DASHBOARD_PASSWORD` set) |
+| POST   | /api/web/login                      | exchange the dashboard password for a stateless 12h bearer token |
+| GET    | /api/web/overview · holdings · summary · earnings-history · trades · dividends | read-only data for the web dashboard, scoped to `WEB_DASHBOARD_USER_ID` (Bearer token required) |
 
 ---
 
