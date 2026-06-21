@@ -159,8 +159,8 @@ function Holdings({ holdings }) {
     );
   }
 
-  // Group by market in a fixed order (TW then US), each sorted by value desc.
-  // Any market not in MARKET_GROUPS still shows under its own raw code.
+  // One separate card per market (TW then US), each sorted by value desc.
+  // Any market not in MARKET_GROUPS still gets its own card under its raw code.
   const knownCodes = MARKET_GROUPS.map((g) => g.code);
   const extraCodes = [...new Set(holdings.map((h) => h.market).filter((m) => !knownCodes.includes(m)))];
   const groups = [
@@ -174,33 +174,32 @@ function Holdings({ holdings }) {
     .filter((g) => g.rows.length);
 
   return (
-    <section className="card">
-      <div className="card-head"><h2>Holdings</h2><span className="muted">{holdings.length}</span></div>
-      <div className="holdings">
-        <div className="hrow head">
-          <span>Ticker</span>
-          <span className="num">Price</span>
-          <span className="num">Value</span>
-          <span className="num">Unrealized</span>
-        </div>
-        {groups.map((g) => {
-          const groupValue = g.rows.reduce((sum, h) => sum + (h.market_value || 0), 0);
-          return (
-            <React.Fragment key={g.code}>
-              <div className="hrow group">
-                <span className="group-label">
-                  {g.label} <span className="group-count">{g.rows.length}</span>
-                </span>
-                <span className="num group-total">{money(groupValue, g.currency)}</span>
+    <>
+      {groups.map((g) => {
+        const groupValue = g.rows.reduce((sum, h) => sum + (h.market_value || 0), 0);
+        return (
+          <section className="card" key={g.code}>
+            <div className="card-head">
+              <h2>{g.label} holdings</h2>
+              <span className="muted">
+                {g.rows.length} · {money(groupValue, g.currency)}
+              </span>
+            </div>
+            <div className="holdings">
+              <div className="hrow head">
+                <span>Ticker</span>
+                <span className="num">Price</span>
+                <span className="num">Value</span>
+                <span className="num">Unrealized</span>
               </div>
               {g.rows.map((h) => (
                 <HoldingRow key={`${h.market}-${h.ticker}`} h={h} />
               ))}
-            </React.Fragment>
-          );
-        })}
-      </div>
-    </section>
+            </div>
+          </section>
+        );
+      })}
+    </>
   );
 }
 
