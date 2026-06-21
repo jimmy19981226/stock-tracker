@@ -153,8 +153,12 @@ code {
 }
 .tr-label { color: var(--tr-accent); font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; }
 .tr-value { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 18px; }
+.tr-usd { color: var(--secondary); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; }
 .tr-note { color: var(--muted); font-size: 11px; }
-@media (max-width: 560px) { .tr-note { display: none; } }
+@media (max-width: 560px) {
+  .total-return-badge { flex-wrap: wrap; gap: 6px 10px; }
+  .tr-note { flex-basis: 100%; }
+}
 
 /* ---- Holdings ----------------------------------------------------------- */
 .holdings { display: flex; flex-direction: column; }

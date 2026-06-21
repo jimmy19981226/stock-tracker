@@ -119,6 +119,21 @@ private struct NetWorthCard: View {
         let fx = o.fx.usdTwd ?? 0
         return (tw ?? 0) + (us ?? 0) * fx
     }
+    private var combinedTotalReturnUsd: Double? {
+        guard let tr = combinedTotalReturn, let fx = overview?.fx.usdTwd, fx != 0 else { return nil }
+        return tr / fx
+    }
+    /// The FX rate's as-of date, formatted (e.g. "Jun 21, 2026").
+    private var fxDateText: String? {
+        guard let asof = overview?.fx.asof else { return nil }
+        let iso = DateFormatter()
+        iso.dateFormat = "yyyy-MM-dd"
+        iso.timeZone = TimeZone(identifier: "UTC")
+        guard let d = iso.date(from: String(asof.prefix(10))) else { return nil }
+        let out = DateFormatter()
+        out.dateFormat = "MMM d, yyyy"
+        return out.string(from: d)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -144,20 +159,33 @@ private struct NetWorthCard: View {
             }
 
             if let tr = combinedTotalReturn {
-                HStack(spacing: 8) {
-                    Text("TOTAL RETURN")
-                        .font(.caption2.weight(.bold))
-                        .tracking(0.5)
-                        .foregroundStyle(trAccent)
-                    Text(Fmt.signedMoney(tr, currency: "TWD"))
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(Theme.pl(tr))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text("TOTAL RETURN")
+                            .font(.caption2.weight(.bold))
+                            .tracking(0.5)
+                            .foregroundStyle(trAccent)
+                        Text(Fmt.signedMoney(tr, currency: "TWD"))
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .foregroundStyle(Theme.pl(tr))
+                        if let usd = combinedTotalReturnUsd {
+                            Text("≈ \(Fmt.signedMoney(usd, currency: "USD"))")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Theme.secondaryText)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(trAccent.opacity(0.12))
+                    .overlay(Capsule().stroke(trAccent.opacity(0.30), lineWidth: 1))
+                    .clipShape(Capsule())
+
+                    if let d = fxDateText {
+                        Text("FX rate as of \(d)")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.mutedText)
+                    }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(trAccent.opacity(0.12))
-                .overlay(Capsule().stroke(trAccent.opacity(0.30), lineWidth: 1))
-                .clipShape(Capsule())
                 .padding(.top, 4)
             }
         }

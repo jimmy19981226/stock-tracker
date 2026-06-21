@@ -49,6 +49,10 @@ export default function Dashboard({ onSignOut }) {
     twTR == null && usTR == null
       ? null
       : (twTR ?? 0) + (fx != null ? (usTR ?? 0) * fx : 0);
+  const combinedTRUsd = combinedTR != null && fx ? combinedTR / fx : null;
+  const fxAsof = overview?.fx?.asof
+    ? new Date(overview.fx.asof).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+    : null;
 
   // Build the combined "total earned" series across both markets in TWD.
   // (Hook must run unconditionally — keep it above any early return.)
@@ -86,7 +90,12 @@ export default function Dashboard({ onSignOut }) {
             <div className="total-return-badge">
               <span className="tr-label">Total return</span>
               <span className={`tr-value ${plClass(combinedTR)}`}>{signedMoney(combinedTR, "TWD")}</span>
-              <span className="tr-note">unrealized + realized + dividends</span>
+              {combinedTRUsd != null && (
+                <span className="tr-usd">≈ {signedMoney(combinedTRUsd, "USD")}</span>
+              )}
+              <span className="tr-note">
+                unrealized + realized + dividends{fxAsof ? ` · FX rate ${fxAsof}` : ""}
+              </span>
             </div>
           )}
         </section>
