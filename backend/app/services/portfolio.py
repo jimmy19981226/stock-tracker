@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Iterable
@@ -51,37 +51,58 @@ def estimate_exit_cost(ticker: str, market_value: float, market: str = "TW") -> 
 
 @dataclass
 class HoldingState:
+    """Per-ticker position tracked as FIFO lots — first-in, first-out — so
+    realized P/L matches how US brokers report cost basis on the 1099, and the
+    remaining lots give the cost basis of the shares still held.
+
+    Note: over a position's full life (bought and fully sold) FIFO and
+    weighted-average produce the SAME total realized; they differ only in how
+    profit is split between realized and still-open lots at a point in time, and
+    in which tax year a partial sale's gain lands. Total Return is unaffected.
+    """
     ticker: str
-    shares: float = 0.0
-    cost_basis: float = 0.0  # remaining cost on open shares
+    # Open lots, oldest first. Each lot is a mutable ``[shares, cost_per_share]``
+    # where any buy fee is folded into the per-share cost.
+    lots: deque = field(default_factory=deque)
     realized_pl: float = 0.0
+
+    @property
+    def shares(self) -> float:
+        return sum(lot[0] for lot in self.lots)
+
+    @property
+    def cost_basis(self) -> float:  # remaining cost on the open lots
+        return sum(lot[0] * lot[1] for lot in self.lots)
 
 
 def _apply_trade(state: HoldingState, trade: Trade) -> None:
     if trade.type == "buy":
-        state.shares += trade.shares
-        state.cost_basis += trade.shares * trade.price + trade.fee
-    elif trade.type == "sell":
-        if state.shares <= 0:
-            # Selling without an open position — record as pure realized loss/gain
-            # based on price alone (treat avg cost as 0 to avoid division errors).
-            state.realized_pl += trade.shares * trade.price - trade.fee
-            state.shares -= trade.shares
+        if trade.shares <= 0:
             return
-        avg = state.cost_basis / state.shares
-        sold = min(trade.shares, state.shares)
-        oversold = max(0.0, trade.shares - state.shares)
-        state.realized_pl += sold * (trade.price - avg) - trade.fee
-        # Shares sold beyond the open position have no cost basis — book their
-        # proceeds as pure realized gain (mirrors the no-position branch above),
-        # otherwise an over-sell silently discards that sale's P/L.
-        if oversold:
-            state.realized_pl += oversold * trade.price
-        state.cost_basis -= sold * avg
-        state.shares -= trade.shares
-        if state.shares <= 1e-9:
-            state.shares = 0.0
-            state.cost_basis = 0.0
+        cost_per_share = (trade.shares * trade.price + trade.fee) / trade.shares
+        state.lots.append([trade.shares, cost_per_share])
+        return
+
+    if trade.type == "sell":
+        qty = trade.shares
+        consumed = 0.0          # shares matched against open lots
+        consumed_cost = 0.0     # their FIFO cost basis
+        while qty > 1e-9 and state.lots:
+            lot = state.lots[0]
+            take = min(qty, lot[0])
+            consumed += take
+            consumed_cost += take * lot[1]
+            lot[0] -= take
+            qty -= take
+            if lot[0] <= 1e-9:
+                state.lots.popleft()
+        # Realized on the shares that had cost basis, less the sell fee.
+        state.realized_pl += consumed * trade.price - consumed_cost - trade.fee
+        # Over-sell: shares sold beyond the open position have no cost basis, so
+        # book their proceeds as pure realized gain (a sell-before-buy is a
+        # data-entry error, but don't silently drop its P/L).
+        if qty > 1e-9:
+            state.realized_pl += qty * trade.price
 
 
 def compute_states(trades: Iterable[Trade]) -> dict[str, HoldingState]:
@@ -114,12 +135,12 @@ def build_holdings(db: Session, user_id: str) -> list[dict]:
     states = compute_states(trades)
     ticker_market = {t.ticker: (t.market or quotes.market_of(t.ticker)) for t in trades}
 
-    open_tickers = [t for t, st in states.items() if st.shares > 0]
+    open_tickers = [t for t, st in states.items() if st.shares > 1e-9]
     quote_map = quotes.get_quotes(open_tickers)
 
     out: list[dict] = []
     for ticker, st in states.items():
-        if st.shares <= 0:
+        if st.shares <= 1e-9:
             continue
         avg_cost = st.cost_basis / st.shares if st.shares else 0.0
         quote = quote_map.get(ticker)

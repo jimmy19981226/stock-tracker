@@ -85,7 +85,7 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 
 ### 🛠 Trade & dividend management
 - Add, edit, and delete **trades** (buy/sell) and **dividends**, scoped per market (TW / US)
-- **FIFO open/closed status** computed per trade; weighted-average cost basis
+- **FIFO cost basis** — realized P/L matches how US brokers report on the 1099 (first-in, first-out); open lots give the cost basis of shares still held
 - Backend **CSV import/export** endpoints (one unified file for trades + dividends) and auto-seed from `backend/data/seed/portfolio.csv` on first boot
 - **AI image import** — snap a brokerage statement/screenshot and a vision model extracts the trades + dividends to review before saving. You can add a **free-text note** alongside the image (e.g. "US trade in USD", "the 優群 row is 3217") that the model uses to disambiguate, and it resolves a Taiwan **company name → stock code** when the document shows only the name.
 
@@ -216,7 +216,7 @@ backend/
       yahoo_quotes.py  US live quotes via Yahoo (5s cache)
       quote_relay_client.py  cloud → relay hop for TW quotes (ngrok URL)
       markets.py       DB-driven market config: currency, hours, holidays, open/closed
-      portfolio.py     avg-cost, realized P/L, daily earnings, gross MV
+      portfolio.py     FIFO cost basis, realized P/L, daily earnings, gross MV
       stock_info.py    yfinance fundamentals + history + TAIEX,
                        FinMind monthly revenue, quarterly_income_stmt
       fx.py            USD↔TWD rate (Yahoo, cached) for combined net worth
@@ -328,7 +328,7 @@ returns the Chinese name (台積電) and bid/ask/volume; Yahoo returns the Engli
 - **Ticker resolution** — bare 4-6 digit TW codes auto-suffix to `xxxx.TW`; US symbols resolve directly.
 - **Live quotes** — TW tickers go to **TWSE MIS** (batched into one HTTP call per refresh, probing both `tse_` 上市 and `otc_` 上櫃 prefixes); US tickers go to **Yahoo**. Both are cached ~5 s server-side so the 5 s client poll tracks the broker closely without hammering either source.
 - **Combined net worth** — the Overview sums both portfolios into one figure shown in NT$ **and** US$, converting with a live USD↔TWD rate (Yahoo, cached). If a market that holds positions is missing a live value, the combined total blanks rather than showing a fabricated number.
-- **Cost basis** — weighted-average. Sells reduce open cost basis proportionally and realize the difference vs. average price (minus fees).
+- **Cost basis** — FIFO (first-in, first-out), matching US broker 1099 reporting. A sell consumes the oldest lots first; realized P/L is proceeds minus those lots' cost (minus fees), and the remaining lots are the cost basis of shares still held.
 - **Market value** — `current_price × shares`, gross. Matches 資產市值 / 總現值 in most TW broker apps.
 - **Unrealized P/L** — market value − cost basis − estimated exit cost (sell commission 0.1425% + securities transaction tax: 0.3% shares / 0.1% equity ETFs / 0% bond ETFs, each floored). This nets out the cost of liquidating, so it lines up with the broker's 損益試算 / 獲利率 columns rather than the gross gain.
 - **Open vs closed status** — FIFO-matched per ticker: buys queue up; sells consume buy lots front-first; any buy lot with leftover shares is `open`, fully-consumed buys and all sells are `closed`.
