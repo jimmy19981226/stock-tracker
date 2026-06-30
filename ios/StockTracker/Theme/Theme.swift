@@ -4,10 +4,9 @@ import SwiftUI
 /// green accent (#00C805), orange-red for losses (#FF5000), big bold numbers,
 /// and flat surfaces with hairline separators instead of bordered cards.
 enum Theme {
-    /// Brand accent — follows the user-selected style (Settings → Appearance).
-    /// The root view re-creates the tree when the style changes, so static
-    /// reads of this value pick up the new color everywhere.
-    static var accent: Color { AppStyle.current.accent }
+    /// Brand accent — violet (#BF5AF2), chosen to complement the midnight-blue
+    /// gradient and aurora blooms that define the app's visual identity.
+    static let accent = Color(red: 0.75, green: 0.35, blue: 0.95)
 
     // Backgrounds — deep midnight-blue with subtle tinted dark surfaces.
     static let bg = Color(red: 0.01, green: 0.01, blue: 0.05)

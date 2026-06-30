@@ -5,9 +5,6 @@ struct StockTrackerApp: App {
     @StateObject private var store = PortfolioStore()
     @StateObject private var auth = AuthStore()
     @State private var showSplash = true
-    // Changing the style re-creates the view tree (.id below) so every static
-    // Theme.accent read re-evaluates with the new color.
-    @AppStorage("ui.style") private var styleRaw = AppStyle.emerald.rawValue
 
     var body: some Scene {
         WindowGroup {
@@ -26,7 +23,6 @@ struct StockTrackerApp: App {
                         .zIndex(1)
                 }
             }
-            .id(styleRaw)
             .environmentObject(auth)
             .tint(Theme.accent)
             .preferredColorScheme(.dark)
