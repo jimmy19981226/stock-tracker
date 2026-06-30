@@ -7,7 +7,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Theme.bg.ignoresSafeArea()
+            Theme.backgroundGradient.ignoresSafeArea()
             LinearGradient(colors: [Theme.accent.opacity(0.25), .clear],
                            startPoint: .top, endPoint: .center)
                 .ignoresSafeArea()

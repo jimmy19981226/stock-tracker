@@ -112,7 +112,7 @@ struct TradeFormView: View {
                 }
                 .padding(20)
             }
-            .background(Theme.bg.ignoresSafeArea())
+            .background(Theme.backgroundGradient.ignoresSafeArea())
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(isEdit ? "Edit Trade" : "New Trade")
             .navigationBarTitleDisplayMode(.inline)

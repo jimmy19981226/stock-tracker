@@ -271,6 +271,13 @@ struct AssistantView: View {
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
 
+    /// Short label for the currently active model, e.g. "Gemini 2.5 Flash".
+    private var activeModelLabel: String {
+        let provider = AISettings.activeProvider
+        let modelId = AISettings.selectedModel(for: provider)
+        return provider.availableModels.first { $0.id == modelId }?.label ?? modelId
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             transcript
@@ -280,9 +287,18 @@ struct AssistantView: View {
             inputBar
         }
         .screenBackground()
-        .navigationTitle("Assistant")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 1) {
+                    Text("Assistant")
+                        .font(.headline)
+                        .foregroundStyle(Theme.primaryText)
+                    Text("\(AISettings.activeProvider.displayName) · \(activeModelLabel)")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(Theme.mutedText)
+                }
+            }
             ToolbarItem(placement: .topBarLeading) {
                 Button { showHistory = true } label: {
                     Image(systemName: "clock.arrow.circlepath")

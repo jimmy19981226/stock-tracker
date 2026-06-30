@@ -7,7 +7,7 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Theme.backgroundGradient.ignoresSafeArea()
 
             VStack(spacing: 18) {
                 BrandMark(stroke: Theme.accent)

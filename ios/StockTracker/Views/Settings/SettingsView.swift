@@ -136,7 +136,7 @@ struct SettingsView: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Theme.bg.ignoresSafeArea())
+            .background(Theme.backgroundGradient.ignoresSafeArea())
             .task { await loadQuoteSources() }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

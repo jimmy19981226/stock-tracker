@@ -31,7 +31,7 @@ struct ImportRecordsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.bg.ignoresSafeArea()
+                Theme.backgroundGradient.ignoresSafeArea()
                 switch phase {
                 case .pick: pickView
                 case .compose: composeView

@@ -98,7 +98,7 @@ struct DividendFormView: View {
                 }
                 .padding(20)
             }
-            .background(Theme.bg.ignoresSafeArea())
+            .background(Theme.backgroundGradient.ignoresSafeArea())
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle(isEdit ? "Edit Dividend" : "New Dividend")
             .navigationBarTitleDisplayMode(.inline)

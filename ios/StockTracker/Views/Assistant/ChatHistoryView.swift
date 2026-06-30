@@ -9,7 +9,7 @@ struct ChatHistoryView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.bg.ignoresSafeArea()
+                Theme.backgroundGradient.ignoresSafeArea()
 
                 if vm.loadingChats && vm.chats.isEmpty {
                     ProgressView()

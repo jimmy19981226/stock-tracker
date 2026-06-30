@@ -1,26 +1,26 @@
 import SwiftUI
 
-/// Robinhood-style design language: true-black background, signature green
-/// accent (#00C805), orange-red for losses (#FF5000), big bold numbers, and
-/// flat surfaces with hairline separators instead of bordered cards.
+/// Premium dark design language: midnight-blue gradient background, signature
+/// green accent (#00C805), orange-red for losses (#FF5000), big bold numbers,
+/// and flat surfaces with hairline separators instead of bordered cards.
 enum Theme {
     /// Brand accent — follows the user-selected style (Settings → Appearance).
     /// The root view re-creates the tree when the style changes, so static
     /// reads of this value pick up the new color everywhere.
     static var accent: Color { AppStyle.current.accent }
 
-    // Backgrounds — pure black with subtle dark surfaces.
-    static let bg = Color.black
-    static let card = Color(red: 0.07, green: 0.075, blue: 0.08)
-    static let cardElevated = Color(red: 0.11, green: 0.115, blue: 0.12)
-    static let stroke = Color.white.opacity(0.08)
+    // Backgrounds — deep midnight-blue with subtle tinted dark surfaces.
+    static let bg = Color(red: 0.01, green: 0.01, blue: 0.05)
+    static let card = Color(red: 0.08, green: 0.09, blue: 0.17)
+    static let cardElevated = Color(red: 0.12, green: 0.13, blue: 0.23)
+    static let stroke = Color.white.opacity(0.10)
 
     // Text
     static let primaryText = Color.white
     static let secondaryText = Color.white.opacity(0.65)
     static let mutedText = Color.white.opacity(0.42)
 
-    // P&L semantics (Robinhood green / orange-red)
+    // P&L semantics (green / orange-red)
     static let positive = Color(red: 0.0, green: 0.78, blue: 0.02)
     static let negative = Color(red: 1.0, green: 0.31, blue: 0.0)
 
@@ -33,9 +33,45 @@ enum Theme {
         if v < 0 { return negative }
         return secondaryText
     }
+
+    /// The base gradient used by screenBackground() — exposed so overlays
+    /// (e.g. sheet presentations) can match the app background.
+    static var backgroundGradient: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.06, blue: 0.16),
+                    Color(red: 0.02, green: 0.02, blue: 0.09),
+                    Color(red: 0.01, green: 0.00, blue: 0.05),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // Subtle indigo aurora bloom at the top-right corner.
+            RadialGradient(
+                colors: [
+                    Color(red: 0.38, green: 0.18, blue: 0.68).opacity(0.22),
+                    .clear,
+                ],
+                center: UnitPoint(x: 0.88, y: 0.04),
+                startRadius: 0,
+                endRadius: 380
+            )
+            // Softer teal counter-glow at the bottom-left for depth.
+            RadialGradient(
+                colors: [
+                    Color(red: 0.04, green: 0.38, blue: 0.52).opacity(0.12),
+                    .clear,
+                ],
+                center: UnitPoint(x: 0.08, y: 0.90),
+                startRadius: 0,
+                endRadius: 300
+            )
+        }
+    }
 }
 
-/// A flat dark surface (no border) — Robinhood-style section container.
+/// A flat dark surface (no border) — section container.
 struct Card<Content: View>: View {
     var padding: CGFloat = 16
     @ViewBuilder var content: Content
@@ -50,8 +86,10 @@ struct Card<Content: View>: View {
 }
 
 extension View {
-    /// Standard screen background for every tab.
+    /// Standard screen background — midnight-blue gradient with aurora blooms.
     func screenBackground() -> some View {
-        self.background(Theme.bg.ignoresSafeArea())
+        self.background(
+            Theme.backgroundGradient.ignoresSafeArea()
+        )
     }
 }
