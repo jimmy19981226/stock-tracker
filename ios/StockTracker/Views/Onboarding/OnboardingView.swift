@@ -29,7 +29,7 @@ struct OnboardingView: View {
 
                 VStack(alignment: .leading, spacing: 14) {
                     feature("chart.line.uptrend.xyaxis", "Live holdings, P&L and dividends")
-                    feature("wand.and.sparkles", "Ask AI about your portfolio")
+                    feature("ai-icon", "Ask AI about your portfolio")
                     feature("lock.shield", "Signed in with your Google account")
                 }
                 .padding(.top, 36)
@@ -78,10 +78,20 @@ struct OnboardingView: View {
 
     private func feature(_ icon: String, _ text: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.accent)
-                .frame(width: 26)
+            Group {
+                // "ai-icon" is a custom asset; everything else is an SF Symbol.
+                if icon == "ai-icon" {
+                    Image(icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 17, weight: .semibold))
+                }
+            }
+            .foregroundStyle(Theme.accent)
+            .frame(width: 26)
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(Theme.primaryText)
