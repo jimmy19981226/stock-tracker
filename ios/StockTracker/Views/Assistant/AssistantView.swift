@@ -423,10 +423,8 @@ struct AssistantView: View {
 
     private var welcome: some View {
         VStack(spacing: 12) {
-            Image("ai-icon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 52, height: 52)
+            Image(systemName: "wand.and.sparkles")
+                .font(.system(size: 44))
                 .foregroundStyle(Theme.accent)
             Text("Ask about your portfolio")
                 .font(.title3.weight(.semibold))
