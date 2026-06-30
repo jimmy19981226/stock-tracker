@@ -7,9 +7,20 @@ struct DividendsView: View {
     @State private var showAdd = false
     @State private var showImport = false
     @State private var actionError: String?
+    @State private var selectedYear: Int? = nil
+
+    private var allDividends: [Dividend] {
+        store.dividends(for: market).sorted { $0.payDate > $1.payDate }
+    }
+
+    private var availableYears: [Int] {
+        let years = allDividends.compactMap { Int($0.payDate.prefix(4)) }
+        return Array(Set(years)).sorted(by: >)
+    }
 
     private var dividends: [Dividend] {
-        store.dividends(for: market).sorted { $0.payDate > $1.payDate }
+        guard let year = selectedYear else { return allDividends }
+        return allDividends.filter { $0.payDate.hasPrefix(String(year)) }
     }
 
     private var total: Double { dividends.reduce(0) { $0 + $1.amount } }
@@ -19,11 +30,11 @@ struct DividendsView: View {
             LazyVStack(spacing: 0) {
                 if dividends.isEmpty {
                     EmptyState(icon: "dollarsign.circle",
-                               title: "No dividends yet",
-                               message: "Tap + to record a dividend payment.")
+                               title: selectedYear != nil ? "No dividends in \(selectedYear!)" : "No dividends yet",
+                               message: selectedYear != nil ? "Try a different year or 'All'." : "Tap + to record a dividend payment.")
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Dividends received")
+                        Text(selectedYear != nil ? "Dividends received in \(selectedYear!)" : "Dividends received")
                             .font(.subheadline)
                             .foregroundStyle(Theme.secondaryText)
                         Text(Fmt.money(total, currency: market.currencyCode))
@@ -47,6 +58,31 @@ struct DividendsView: View {
         .refreshable { await store.loadAll() }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
+                if !availableYears.isEmpty {
+                    Menu {
+                        Button {
+                            selectedYear = nil
+                        } label: {
+                            HStack {
+                                Text("All time")
+                                if selectedYear == nil { Image(systemName: "checkmark") }
+                            }
+                        }
+                        ForEach(availableYears, id: \.self) { year in
+                            Button {
+                                selectedYear = year
+                            } label: {
+                                HStack {
+                                    Text(String(year))
+                                    if selectedYear == year { Image(systemName: "checkmark") }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(selectedYear.map { String($0) } ?? "All", systemImage: "calendar")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                }
                 Button { showImport = true } label: { Image(systemName: "text.viewfinder") }
                 Button { showAdd = true } label: { Image(systemName: "plus") }
             }
@@ -60,7 +96,7 @@ struct DividendsView: View {
         .sheet(item: $editing) { div in
             DividendFormView(market: market, existing: div)
         }
-        .alert("Couldn’t delete dividend", isPresented: .constant(actionError != nil)) {
+        .alert("Couldn't delete dividend", isPresented: .constant(actionError != nil)) {
             Button("OK") { actionError = nil }
         } message: {
             Text(actionError ?? "")
