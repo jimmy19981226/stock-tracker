@@ -4,9 +4,8 @@ import SwiftUI
 /// green accent (#00C805), orange-red for losses (#FF5000), big bold numbers,
 /// and flat surfaces with hairline separators instead of bordered cards.
 enum Theme {
-    /// Brand accent — violet (#BF5AF2), chosen to complement the midnight-blue
-    /// gradient and aurora blooms that define the app's visual identity.
-    static let accent = Color(red: 0.75, green: 0.35, blue: 0.95)
+    /// Brand accent — ocean blue (#0A84FF), crisp against the midnight-blue gradient.
+    static let accent = Color(red: 0.04, green: 0.52, blue: 1.00)
 
     // Backgrounds — deep midnight-blue with subtle tinted dark surfaces.
     static let bg = Color(red: 0.01, green: 0.01, blue: 0.05)
@@ -46,20 +45,20 @@ enum Theme {
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            // Subtle indigo aurora bloom at the top-right corner.
+            // Bright ocean-blue bloom at the top-right corner.
             RadialGradient(
                 colors: [
-                    Color(red: 0.38, green: 0.18, blue: 0.68).opacity(0.22),
+                    Color(red: 0.04, green: 0.40, blue: 0.90).opacity(0.22),
                     .clear,
                 ],
                 center: UnitPoint(x: 0.88, y: 0.04),
                 startRadius: 0,
                 endRadius: 380
             )
-            // Softer teal counter-glow at the bottom-left for depth.
+            // Softer cyan counter-glow at the bottom-left for depth.
             RadialGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.38, blue: 0.52).opacity(0.12),
+                    Color(red: 0.04, green: 0.55, blue: 0.75).opacity(0.12),
                     .clear,
                 ],
                 center: UnitPoint(x: 0.08, y: 0.90),
