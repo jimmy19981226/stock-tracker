@@ -43,7 +43,7 @@ struct SettingsView: View {
                         AIProviderSettingsView()
                     } label: {
                         HStack {
-                            Label("AI Assistant", systemImage: "brain.head.profile")
+                            Label("AI Assistant", systemImage: "wand.and.sparkles")
                             Spacer()
                             Text(AISettings.activeProvider.displayName)
                                 .font(.caption)

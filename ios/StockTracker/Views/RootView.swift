@@ -22,7 +22,7 @@ struct RootView: View {
                 AssistantView()
             }
             .tabItem {
-                Label("Assistant", systemImage: "brain.head.profile")
+                Label("Assistant", systemImage: "wand.and.sparkles")
             }
             .tag(1)
         }
