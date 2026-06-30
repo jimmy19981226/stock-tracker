@@ -121,7 +121,7 @@ final class APIClient {
         }
     }
 
-    /// Attach the user's chosen AI provider + their own API key (Keychain) so the
+    /// Attach the user's chosen AI provider, API key, and selected model so the
     /// backend routes the chat to OpenAI / Gemini / Claude on their behalf.
     private static func attachAIProvider(_ req: inout URLRequest) {
         let p = AISettings.activeProvider
@@ -129,6 +129,7 @@ final class APIClient {
         if let key = AISettings.apiKey(for: p), !key.isEmpty {
             req.setValue(key, forHTTPHeaderField: "X-AI-Key")
         }
+        req.setValue(AISettings.selectedModel(for: p), forHTTPHeaderField: "X-AI-Model")
     }
 
     private static func detail(from data: Data, status: Int) -> String {

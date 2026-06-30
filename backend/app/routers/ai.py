@@ -153,14 +153,17 @@ def chat(
     req: ChatRequest,
     x_ai_provider: str = Header(default="gemini"),
     x_ai_key: str | None = Header(default=None),
+    x_ai_model: str | None = Header(default=None),
     user: str = Depends(get_current_user),
 ):
     """Stream the assistant's reply as Server-Sent Events.
 
-    The provider (``X-AI-Provider``: ``gemini`` | ``openai`` | ``claude``) and the
-    user's own key (``X-AI-Key``) come from the app's AI settings. Gemini may fall
-    back to the server's ``GOOGLE_AI_API_KEY`` env var; OpenAI/Claude require the
-    user's key. All providers emit the same SSE protocol:
+    The provider (``X-AI-Provider``: ``gemini`` | ``openai`` | ``claude``), the
+    user's own key (``X-AI-Key``), and the requested model (``X-AI-Model``) come
+    from the app's AI settings. Gemini may fall back to the server's
+    ``GOOGLE_AI_API_KEY`` env var; OpenAI/Claude require the user's key. When
+    ``X-AI-Model`` is omitted, each provider's default model is used. All
+    providers emit the same SSE protocol:
 
     - ``init``  → ``{chat_id, title}`` (sent once before generation begins)
     - ``chunk`` → ``{delta}`` (raw text chunk as the model emits it)
@@ -266,7 +269,7 @@ def chat(
                 ]
                 client = genai.Client(api_key=api_key)
                 stream_iter = client.models.generate_content_stream(
-                    model=DEFAULT_MODEL,
+                    model=(x_ai_model or "").strip() or DEFAULT_MODEL,
                     config=types.GenerateContentConfig(
                         system_instruction=system_prompt,
                         temperature=0.4,
@@ -309,8 +312,9 @@ def chat(
                 # OpenAI / Claude — plain text streaming, no web grounding.
                 from ..services import ai_providers
 
+                chosen_model = (x_ai_model or "").strip() or None
                 for delta in ai_providers.stream(
-                    provider, api_key, None, system_prompt, history_msgs
+                    provider, api_key, chosen_model, system_prompt, history_msgs
                 ):
                     if delta:
                         accumulated_text += delta
