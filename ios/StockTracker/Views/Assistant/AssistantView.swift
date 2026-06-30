@@ -423,7 +423,7 @@ struct AssistantView: View {
 
     private var welcome: some View {
         VStack(spacing: 12) {
-            Image(systemName: "sparkles")
+            Image(systemName: "brain.head.profile")
                 .font(.system(size: 44))
                 .foregroundStyle(Theme.accent)
             Text("Ask about your portfolio")

@@ -29,7 +29,7 @@ struct OnboardingView: View {
 
                 VStack(alignment: .leading, spacing: 14) {
                     feature("chart.line.uptrend.xyaxis", "Live holdings, P&L and dividends")
-                    feature("sparkles", "Ask AI about your portfolio")
+                    feature("brain.head.profile", "Ask AI about your portfolio")
                     feature("lock.shield", "Signed in with your Google account")
                 }
                 .padding(.top, 36)

@@ -43,7 +43,7 @@ struct SettingsView: View {
                         AIProviderSettingsView()
                     } label: {
                         HStack {
-                            Label("AI Assistant", systemImage: "sparkles")
+                            Label("AI Assistant", systemImage: "brain.head.profile")
                             Spacer()
                             Text(AISettings.activeProvider.displayName)
                                 .font(.caption)
@@ -57,13 +57,16 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    sourceRow(name: "TWSE MIS", caption: "Real-time",
+                    sourceRow(name: "TWSE MIS",
+                              covers: "Real-time · Taiwan stocks",
                               info: deviceMISUp.map { QuoteSourceInfo(available: $0, via: nil, realtime: true) })
-                    sourceRow(name: "Yahoo Finance", caption: "Delayed ~15 min", info: quoteSources?.yahoo)
+                    sourceRow(name: "Yahoo Finance",
+                              covers: "Delayed · US stocks + TW fallback",
+                              info: quoteSources?.yahoo)
                 } header: {
                     Text("Market Data")
                 } footer: {
-                    Text("TWSE MIS real-time quotes are used whenever they're reachable; Yahoo covers US stocks and fills in whenever MIS can't answer.")
+                    Text("TWSE MIS serves real-time Taiwan quotes when reachable. Yahoo Finance covers US stocks at all times and fills in for Taiwan when MIS is unavailable.")
                 }
 
                 Section {
@@ -126,9 +129,9 @@ struct SettingsView: View {
         }
     }
 
-    /// One availability row: green/red dot, source name, freshness caption,
-    /// and the probe verdict on the right (spinner while probing).
-    private func sourceRow(name: String, caption: String, info: QuoteSourceInfo?) -> some View {
+    /// One market-data source row: status dot, name + what it covers, and
+    /// live probe verdict on the right — "In use" when active, "Unavailable" when not.
+    private func sourceRow(name: String, covers: String, info: QuoteSourceInfo?) -> some View {
         HStack(spacing: 10) {
             Circle()
                 .fill(info == nil ? Theme.mutedText
@@ -136,7 +139,7 @@ struct SettingsView: View {
                 .frame(width: 9, height: 9)
             VStack(alignment: .leading, spacing: 1) {
                 Text(name)
-                Text(caption)
+                Text(covers)
                     .font(.caption2)
                     .foregroundStyle(Theme.secondaryText)
             }
@@ -144,11 +147,9 @@ struct SettingsView: View {
             if loadingSources {
                 ProgressView()
             } else if let info {
-                Text(info.available
-                     ? (info.via == "relay" ? "Available · relay"
-                        : info.via == "direct" ? "Available · direct" : "Available")
-                     : "Unavailable")
-                    .font(.caption)
+                let viaSuffix = info.via.map { " · \($0)" } ?? ""
+                Text(info.available ? "In use\(viaSuffix)" : "Unavailable")
+                    .font(.caption.weight(info.available ? .medium : .regular))
                     .foregroundStyle(info.available ? Theme.positive : Theme.negative)
             }
         }
