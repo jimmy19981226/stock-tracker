@@ -263,7 +263,8 @@ final class AssistantViewModel: ObservableObject {
 /// The AI assistant chat — a native iMessage-style transcript with a streamed
 /// reply bubble, backed by the same /api/ai/chat SSE endpoint as the web app.
 struct AssistantView: View {
-    @StateObject private var vm = AssistantViewModel()
+    // Owned by RootView so streaming + transcript survive leaving this page.
+    @ObservedObject var vm: AssistantViewModel
     @EnvironmentObject private var store: PortfolioStore
     @State private var showSettings = false
     @State private var showHistory = false

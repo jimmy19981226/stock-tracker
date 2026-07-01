@@ -6,6 +6,8 @@ import SwiftUI
 struct TradeFormView: View {
     let market: MarketCode
     let existing: Trade?
+    /// Pre-fills the ticker when adding from a stock's detail page.
+    var prefillTicker: String? = nil
 
     @EnvironmentObject private var store: PortfolioStore
     @Environment(\.dismiss) private var dismiss
@@ -191,7 +193,10 @@ struct TradeFormView: View {
     }
 
     private func populate() {
-        guard let t = existing else { return }
+        guard let t = existing else {
+            if let pre = prefillTicker { ticker = pre }
+            return
+        }
         type = t.type
         ticker = t.ticker
         shares = trimmed(t.shares)

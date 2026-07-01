@@ -5,6 +5,8 @@ import SwiftUI
 struct DividendFormView: View {
     let market: MarketCode
     let existing: Dividend?
+    /// Pre-fills the ticker when adding from a stock's detail page.
+    var prefillTicker: String? = nil
 
     @EnvironmentObject private var store: PortfolioStore
     @Environment(\.dismiss) private var dismiss
@@ -131,7 +133,10 @@ struct DividendFormView: View {
     }
 
     private func populate() {
-        guard let d = existing else { return }
+        guard let d = existing else {
+            if let pre = prefillTicker { ticker = pre }
+            return
+        }
         ticker = d.ticker
         amount = d.amount == d.amount.rounded() ? String(Int(d.amount)) : String(d.amount)
         notes = d.notes ?? ""

@@ -7,6 +7,9 @@ struct RootView: View {
     @EnvironmentObject private var store: PortfolioStore
     @State private var portfolioPath = NavigationPath()
     @State private var selectedTab = 0
+    // App-scoped so an in-flight AI reply keeps streaming while the user
+    // browses other tabs/pages, and the transcript is there on return.
+    @StateObject private var assistantVM = AssistantViewModel()
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -19,7 +22,7 @@ struct RootView: View {
             .tag(0)
 
             NavigationStack {
-                AssistantView()
+                AssistantView(vm: assistantVM)
             }
             .tabItem {
                 Label("Assistant", systemImage: "sparkles")

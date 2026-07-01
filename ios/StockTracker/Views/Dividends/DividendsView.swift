@@ -34,7 +34,9 @@ struct DividendsView: View {
                                message: selectedYear != nil ? "Try a different year or 'All'." : "Tap + to record a dividend payment.")
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(selectedYear != nil ? "Dividends received in \(selectedYear!)" : "Dividends received")
+                        // String(year) — interpolating the Int directly makes Text
+                        // localize it with a thousands comma ("2,026").
+                        Text(selectedYear != nil ? "Dividends received in \(String(selectedYear!))" : "Dividends received")
                             .font(.subheadline)
                             .foregroundStyle(Theme.secondaryText)
                         Text(Fmt.money(total, currency: market.currencyCode))

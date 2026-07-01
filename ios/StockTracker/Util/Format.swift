@@ -31,10 +31,10 @@ enum Fmt {
         return "\(sign)\(String(format: "%.2f", v))%"
     }
 
-    static func signedMoney(_ value: Double?, currency: String) -> String {
+    static func signedMoney(_ value: Double?, currency: String, digits: Int = 2) -> String {
         guard let v = value, !v.isNaN else { return "—" }
         let sign = v > 0 ? "+" : ""
-        return "\(sign)\(money(v, currency: currency))"
+        return "\(sign)\(money(v, currency: currency, digits: digits))"
     }
 
     /// Big "net worth" style number — thousands separators, no decimals.

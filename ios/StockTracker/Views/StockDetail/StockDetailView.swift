@@ -7,20 +7,37 @@ struct StockDetailView: View {
     let ticker: String
     let market: MarketCode
 
+    @EnvironmentObject private var store: PortfolioStore
     @State private var detail: StockDetail?
     @State private var period: HistoryPeriod = .oneYear
     @State private var loading = true
     @State private var error: String?
 
+    // Manage this stock's records right from the detail page.
+    @State private var showAddTrade = false
+    @State private var showAddDividend = false
+    @State private var editingTrade: Trade?
+    @State private var editingDividend: Dividend?
+    @State private var pendingDelete: RecordDelete?
+    @State private var actionError: String?
+
     private var currency: String {
         detail?.fundamentals.currency ?? market.currencyCode
+    }
+
+    private var myTrades: [Trade] {
+        store.trades(for: market).filter { $0.ticker == ticker }
+    }
+
+    private var myDividends: [Dividend] {
+        store.dividends(for: market).filter { $0.ticker == ticker }
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 if loading && detail == nil {
-                    ProgressView().padding(.top, 60)
+                    LoadingSkeleton()
                 } else if let error, detail == nil {
                     ErrorBanner(message: error) { Task { await load() } }
                 } else if let detail {
@@ -30,6 +47,12 @@ struct StockDetailView: View {
                         PositionCard(position: pos, currency: currency,
                                      yieldOnCost: detail.yieldOnCost)
                     }
+                    RecordsCard(trades: myTrades, dividends: myDividends,
+                                currency: currency,
+                                onEditTrade: { editingTrade = $0 },
+                                onEditDividend: { editingDividend = $0 },
+                                onDeleteTrade: { pendingDelete = .trade($0) },
+                                onDeleteDividend: { pendingDelete = .dividend($0) })
                     FundamentalsCard(f: detail.fundamentals, currency: currency)
                 }
             }
@@ -38,6 +61,50 @@ struct StockDetailView: View {
         .screenBackground()
         .navigationTitle(ticker)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { showAddTrade = true } label: {
+                        Label("Add trade", systemImage: "arrow.left.arrow.right")
+                    }
+                    Button { showAddDividend = true } label: {
+                        Label("Add dividend", systemImage: "dollarsign.circle")
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showAddTrade, onDismiss: reload) {
+            TradeFormView(market: market, existing: nil, prefillTicker: ticker)
+        }
+        .sheet(isPresented: $showAddDividend, onDismiss: reload) {
+            DividendFormView(market: market, existing: nil, prefillTicker: ticker)
+        }
+        .sheet(item: $editingTrade, onDismiss: reload) { trade in
+            TradeFormView(market: market, existing: trade)
+        }
+        .sheet(item: $editingDividend, onDismiss: reload) { div in
+            DividendFormView(market: market, existing: div)
+        }
+        .confirmationDialog(
+            "Delete this record?",
+            isPresented: Binding(get: { pendingDelete != nil },
+                                 set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { record in
+            Button("Delete", role: .destructive) {
+                Task { await performDelete(record) }
+            }
+        } message: { record in
+            Text(record.summary)
+        }
+        .alert("Couldn't delete record", isPresented: .constant(actionError != nil)) {
+            Button("OK") { actionError = nil }
+        } message: {
+            Text(actionError ?? "")
+        }
         .task(id: period) { await load() }
     }
 
@@ -50,6 +117,229 @@ struct StockDetailView: View {
             self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
         }
         loading = false
+    }
+
+    /// After a form sheet closes: the form already refreshed the store; re-fetch
+    /// the detail so the position card and chart markers reflect the change.
+    private func reload() {
+        Task { await load() }
+    }
+
+    private func performDelete(_ record: RecordDelete) async {
+        do {
+            switch record {
+            case .trade(let t): try await APIClient.shared.deleteTrade(t.id)
+            case .dividend(let d): try await APIClient.shared.deleteDividend(d.id)
+            }
+            await store.loadAll()
+            await load()
+        } catch {
+            actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
+
+/// A trade or dividend queued for delete confirmation.
+private enum RecordDelete: Identifiable {
+    case trade(Trade)
+    case dividend(Dividend)
+
+    var id: String {
+        switch self {
+        case .trade(let t): return "trade-\(t.id)"
+        case .dividend(let d): return "dividend-\(d.id)"
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .trade(let t):
+            return "\(t.type == .buy ? "Buy" : "Sell") \(Fmt.shares(t.shares)) \(t.ticker) on \(Fmt.prettyDate(t.tradeDate))"
+        case .dividend(let d):
+            return "\(d.ticker) dividend of \(Fmt.money(d.amount, currency: d.currency)) on \(Fmt.prettyDate(d.payDate))"
+        }
+    }
+}
+
+// MARK: - Records (trades & dividends for this stock)
+
+/// This stock's trade and dividend log, newest first, with add/edit/delete —
+/// so records can be managed without leaving the detail page.
+private struct RecordsCard: View {
+    let trades: [Trade]
+    let dividends: [Dividend]
+    let currency: String
+    let onEditTrade: (Trade) -> Void
+    let onEditDividend: (Dividend) -> Void
+    let onDeleteTrade: (Trade) -> Void
+    let onDeleteDividend: (Dividend) -> Void
+
+    private enum Row: Identifiable {
+        case trade(Trade)
+        case dividend(Dividend)
+
+        var id: String {
+            switch self {
+            case .trade(let t): return "trade-\(t.id)"
+            case .dividend(let d): return "dividend-\(d.id)"
+            }
+        }
+        var date: String {
+            switch self {
+            case .trade(let t): return t.tradeDate
+            case .dividend(let d): return d.payDate
+            }
+        }
+    }
+
+    private var rows: [Row] {
+        (trades.map(Row.trade) + dividends.map(Row.dividend))
+            .sorted { $0.date > $1.date }
+    }
+
+    var body: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader("Trades & dividends")
+                if rows.isEmpty {
+                    Text("No records for this stock yet — use + to add a trade or dividend.")
+                        .font(.caption)
+                        .foregroundStyle(Theme.secondaryText)
+                        .padding(.top, 2)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(rows) { row in recordRow(row) }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func recordRow(_ row: Row) -> some View {
+        switch row {
+        case .trade(let t):
+            recordLine(
+                tag: t.type == .buy ? "Buy" : "Sell",
+                tagColor: t.type == .buy ? Theme.positive : Theme.negative,
+                detail: "\(Fmt.shares(t.shares)) @ \(Fmt.money(t.price, currency: currency))",
+                date: t.tradeDate,
+                value: Fmt.money(t.shares * t.price, currency: currency, digits: 0),
+                valueColor: Theme.primaryText,
+                onEdit: { onEditTrade(t) },
+                onDelete: { onDeleteTrade(t) }
+            )
+        case .dividend(let d):
+            recordLine(
+                tag: "Dividend",
+                tagColor: Theme.accent,
+                detail: nil,
+                date: d.payDate,
+                value: "+" + Fmt.money(d.amount, currency: d.currency),
+                valueColor: Theme.positive,
+                onEdit: { onEditDividend(d) },
+                onDelete: { onDeleteDividend(d) }
+            )
+        }
+    }
+
+    private func recordLine(tag: String, tagColor: Color, detail: String?,
+                            date: String, value: String, valueColor: Color,
+                            onEdit: @escaping () -> Void,
+                            onDelete: @escaping () -> Void) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(tag)
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(tagColor)
+                        if let detail {
+                            Text(detail)
+                                .font(.system(.caption, design: .rounded).weight(.semibold))
+                                .foregroundStyle(Theme.primaryText)
+                        }
+                    }
+                    Text(Fmt.prettyDate(date))
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedText)
+                }
+                Spacer()
+                Text(value)
+                    .font(.system(.caption, design: .rounded).weight(.bold))
+                    .foregroundStyle(valueColor)
+                // Explicit affordance — edit/delete shouldn't hide behind a
+                // long-press only.
+                Menu {
+                    Button("Edit") { onEdit() }
+                    Button("Delete", role: .destructive) { onDelete() }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.secondaryText)
+                        .frame(width: 28, height: 28)
+                }
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .onTapGesture { onEdit() }
+            .contextMenu {
+                Button("Edit") { onEdit() }
+                Button("Delete", role: .destructive) { onDelete() }
+            }
+            Rectangle().fill(Theme.stroke).frame(height: 1)
+        }
+    }
+}
+
+// MARK: - Loading skeleton
+
+/// Full-width pulsing placeholder mirroring the loaded layout (header, chart,
+/// stat cards). Replaces the lone spinner, whose content-hugging column
+/// rendered as a weird skinny bar while the detail loaded.
+private struct LoadingSkeleton: View {
+    @State private var pulse = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 10) {
+                bar(width: 130, height: 14)
+                bar(width: 210, height: 34)
+                bar(width: 160, height: 14)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Theme.cardElevated)
+                .frame(height: 220)
+
+            cardBlock
+            cardBlock
+        }
+        .opacity(pulse ? 0.5 : 1)
+        .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse)
+        .onAppear { pulse = true }
+    }
+
+    private var cardBlock: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 16) {
+                bar(width: 110, height: 13)
+                ForEach(0..<3, id: \.self) { _ in
+                    HStack {
+                        bar(width: 90, height: 12)
+                        Spacer()
+                        bar(width: 70, height: 12)
+                    }
+                }
+            }
+        }
+    }
+
+    private func bar(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+            .fill(Theme.cardElevated)
+            .frame(width: width, height: height)
     }
 }
 

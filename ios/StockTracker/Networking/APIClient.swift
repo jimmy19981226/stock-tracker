@@ -240,12 +240,15 @@ final class APIClient {
     /// Streams the assistant reply from /api/ai/chat (Server-Sent Events).
     /// `onInit` fires with the chat id/title, `onChunk` with each text delta,
     /// `onDone` with the canonical content (citations resolved). Throws on error.
+    /// Callbacks are @MainActor: they mutate @Published view-model state, and
+    /// invoking them from the SSE read loop's background executor let UIKit
+    /// race a keyboard dismissal against off-main layout — freezing the chat.
     func streamChat(
         chatId: Int?,
         message: String,
-        onInit: @escaping (Int, String) -> Void,
-        onChunk: @escaping (String) -> Void,
-        onDone: @escaping (String, [String]) -> Void
+        onInit: @escaping @MainActor (Int, String) -> Void,
+        onChunk: @escaping @MainActor (String) -> Void,
+        onDone: @escaping @MainActor (String, [String]) -> Void
     ) async throws {
         var req = URLRequest(url: try url("/api/ai/chat"))
         req.httpMethod = "POST"
@@ -285,11 +288,11 @@ final class APIClient {
 
             switch type {
             case "init":
-                onInit(evt["chat_id"] as? Int ?? 0, evt["title"] as? String ?? "New chat")
+                await onInit(evt["chat_id"] as? Int ?? 0, evt["title"] as? String ?? "New chat")
             case "chunk":
-                if let delta = evt["delta"] as? String { onChunk(delta) }
+                if let delta = evt["delta"] as? String { await onChunk(delta) }
             case "done":
-                onDone(evt["content"] as? String ?? "", evt["queries"] as? [String] ?? [])
+                await onDone(evt["content"] as? String ?? "", evt["queries"] as? [String] ?? [])
             case "error":
                 throw APIError.transport(evt["detail"] as? String ?? "Assistant error")
             default:

@@ -327,8 +327,34 @@ private struct MarketCard: View {
                 }
             }
             .padding(.vertical, 14)
+
+            // Return breakdown, so each component is visible at a glance.
+            if let s = summary {
+                HStack(spacing: 0) {
+                    breakdownStat("Unrealized", s.totalPl, signed: true)
+                    breakdownStat("Realized", s.realizedPl, signed: true)
+                    breakdownStat("Dividends", s.dividends, signed: false)
+                }
+                .padding(.bottom, 12)
+            }
             Rectangle().fill(Theme.stroke).frame(height: 1)
         }
         .contentShape(Rectangle())
+    }
+
+    private func breakdownStat(_ label: String, _ value: Double?, signed: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Theme.mutedText)
+            Text(signed
+                 ? Fmt.signedMoney(value, currency: market.currencyCode, digits: 0)
+                 : Fmt.money(value, currency: market.currencyCode, digits: 0))
+                .font(.system(.caption, design: .rounded).weight(.semibold))
+                .foregroundStyle(signed ? Theme.pl(value) : Theme.secondaryText)
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

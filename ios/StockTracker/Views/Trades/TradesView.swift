@@ -33,6 +33,39 @@ struct TradesView: View {
             .reduce(0) { $0 + $1.shares * $1.price - $1.fee }
     }
 
+    /// Realized P/L booked by the filtered trades — FIFO lots with buy fees in
+    /// the cost basis and sell fees deducted, mirroring the backend's
+    /// _apply_trade so this agrees with the dashboard's Realized figure.
+    /// The whole history is always walked (cost basis crosses years); only
+    /// sells inside the filter window count toward the total.
+    private var totalEarned: Double {
+        var lots: [String: [(shares: Double, costPerShare: Double)]] = [:]
+        var earned = 0.0
+        let yearPrefix = selectedYear.map(String.init)
+        for t in allTrades.sorted(by: { ($0.tradeDate, $0.id) < ($1.tradeDate, $1.id) }) {
+            if t.type == .buy {
+                guard t.shares > 0 else { continue }
+                lots[t.ticker, default: []]
+                    .append((t.shares, (t.shares * t.price + t.fee) / t.shares))
+                continue
+            }
+            var qty = t.shares
+            var delta = -t.fee
+            var open = lots[t.ticker] ?? []
+            while qty > 1e-9, !open.isEmpty {
+                let take = min(qty, open[0].shares)
+                delta += take * (t.price - open[0].costPerShare)
+                open[0].shares -= take
+                qty -= take
+                if open[0].shares <= 1e-9 { open.removeFirst() }
+            }
+            lots[t.ticker] = open
+            if qty > 1e-9 { delta += qty * t.price }  // over-sell: no cost basis
+            if yearPrefix == nil || t.tradeDate.hasPrefix(yearPrefix!) { earned += delta }
+        }
+        return earned
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -44,6 +77,7 @@ struct TradesView: View {
                     TradeSummaryCard(
                         buys: totalBuys,
                         sells: totalSells,
+                        earned: totalEarned,
                         currency: market.currencyCode,
                         year: selectedYear
                     )
@@ -127,6 +161,7 @@ struct TradesView: View {
 private struct TradeSummaryCard: View {
     let buys: Double
     let sells: Double
+    let earned: Double
     let currency: String
     let year: Int?
 
@@ -134,37 +169,35 @@ private struct TradeSummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(year != nil ? "Summary for \(year!)" : "All-time summary")
+            // String(year) — a raw Int interpolation gets a locale comma ("2,026").
+            Text(year != nil ? "Summary for \(String(year!))" : "All-time summary")
                 .font(.subheadline)
                 .foregroundStyle(Theme.secondaryText)
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Bought")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedText)
-                    Text(Fmt.money(buys, currency: currency, digits: 0))
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(Theme.negative)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sold")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedText)
-                    Text(Fmt.money(sells, currency: currency, digits: 0))
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(Theme.positive)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Net cash")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedText)
-                    Text((net >= 0 ? "+" : "") + Fmt.money(net, currency: currency, digits: 0))
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(net >= 0 ? Theme.positive : Theme.negative)
-                }
+            HStack(spacing: 16) {
+                stat("Bought", Fmt.money(buys, currency: currency, digits: 0),
+                     color: Theme.negative)
+                stat("Sold", Fmt.money(sells, currency: currency, digits: 0),
+                     color: Theme.positive)
+                stat("Net cash", Fmt.signedMoney(net, currency: currency, digits: 0),
+                     color: net >= 0 ? Theme.positive : Theme.negative)
+                stat("Earned", Fmt.signedMoney(earned, currency: currency, digits: 0),
+                     color: Theme.pl(earned))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func stat(_ label: String, _ value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(Theme.mutedText)
+            Text(value)
+                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                .foregroundStyle(color)
+                .minimumScaleFactor(0.65)
+                .lineLimit(1)
+        }
     }
 }
 
