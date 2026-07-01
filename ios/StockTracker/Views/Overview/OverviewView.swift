@@ -329,11 +329,16 @@ private struct MarketCard: View {
             .padding(.vertical, 14)
 
             // Return breakdown, so each component is visible at a glance.
+            // Each category gets its own hue (distinct from the green/red
+            // P&L colors): cyan, violet, gold.
             if let s = summary {
                 HStack(spacing: 0) {
-                    breakdownStat("Unrealized", s.totalPl, signed: true)
-                    breakdownStat("Realized", s.realizedPl, signed: true)
-                    breakdownStat("Dividends", s.dividends, signed: false)
+                    breakdownStat("Unrealized", s.totalPl, signed: true,
+                                  color: Color(red: 0.30, green: 0.78, blue: 0.92))
+                    breakdownStat("Realized", s.realizedPl, signed: true,
+                                  color: Color(red: 0.655, green: 0.545, blue: 0.98))
+                    breakdownStat("Dividends", s.dividends, signed: false,
+                                  color: Color(red: 1.0, green: 0.72, blue: 0.25))
                 }
                 .padding(.bottom, 12)
             }
@@ -342,16 +347,17 @@ private struct MarketCard: View {
         .contentShape(Rectangle())
     }
 
-    private func breakdownStat(_ label: String, _ value: Double?, signed: Bool) -> some View {
+    private func breakdownStat(_ label: String, _ value: Double?, signed: Bool,
+                               color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.caption2)
-                .foregroundStyle(Theme.mutedText)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(color.opacity(0.8))
             Text(signed
                  ? Fmt.signedMoney(value, currency: market.currencyCode, digits: 0)
                  : Fmt.money(value, currency: market.currencyCode, digits: 0))
                 .font(.system(.caption, design: .rounded).weight(.semibold))
-                .foregroundStyle(signed ? Theme.pl(value) : Theme.secondaryText)
+                .foregroundStyle(color)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
         }
