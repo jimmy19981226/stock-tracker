@@ -11,7 +11,8 @@ struct DashboardView: View {
         ScrollView {
             VStack(spacing: 16) {
                 SummaryCard(summary: store.summary(for: market), currency: currency)
-                PortfolioValueCard(market: market)
+                PortfolioValueCard(market: market,
+                                   liveTotal: store.summary(for: market)?.totalValue)
                 EarningsCard(points: store.earnings(for: market), currency: currency)
                 HoldingsSection(holdings: store.holdings(for: market), store: store)
             }
@@ -135,6 +136,10 @@ private struct SummaryCard: View {
 /// tab change and is disk-cached so it paints instantly next time.
 private struct PortfolioValueCard: View {
     let market: MarketCode
+    /// Live holdings total from the summary (5s MIS-overlaid quotes). The
+    /// curve ends at this value so it always matches the big number above —
+    /// the backend's last point is a delayed daily close.
+    var liveTotal: Double?
     @State private var period: ValuePeriod = .threeMonth
     @State private var points: [ValuePoint] = []
     @State private var loading = true
@@ -159,10 +164,17 @@ private struct PortfolioValueCard: View {
     // Parse once per body evaluation — never inside Chart closures (those run
     // per data point; see the EarningsCard note below).
     private func makeRows() -> [Row] {
-        points.compactMap { p in
+        var rows: [Row] = points.compactMap { p in
             guard let d = Self.dayFormat.date(from: String(p.date.prefix(10))) else { return nil }
             return Row(date: d, total: p.total)
         }
+        // Stitch the live total onto the curve's most recent point so its
+        // endpoint ticks with the summary number above instead of lagging at
+        // the backend's (possibly delayed, 10-min-cached) daily close.
+        if let live = liveTotal, live > 0, let last = rows.last {
+            rows[rows.count - 1] = Row(date: last.date, total: live)
+        }
+        return rows
     }
 
     private func nearestRow(to date: Date?, in rows: [Row]) -> Row? {
@@ -233,20 +245,9 @@ private struct PortfolioValueCard: View {
                 // the curve fills the card like the Stocks app.
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartYAxis(.hidden)
-                .chartXAxis {
-                    // Whole-day strides on short ranges (the 1W tab):
-                    // .automatic may place sub-day marks, printing the same
-                    // day twice ("Jul 1  Jul 1  Jul 2").
-                    let days = dateRange.upperBound.timeIntervalSince(dateRange.lowerBound) / 86_400
-                    AxisMarks(values: days <= 10
-                              ? .stride(by: .day, count: max(1, Int((days / 4).rounded(.up))))
-                              : .automatic(desiredCount: 4)) { value in
-                        AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
-                                                              to: dateRange.upperBound),
-                                       anchor: Fmt.axisAnchor(value.index, of: value.count))
-                            .foregroundStyle(Theme.mutedText)
-                    }
-                }
+                // No date labels — the period tabs say what's shown and the
+                // scrub tip gives exact dates (matches the Stocks-app look).
+                .chartXAxis(.hidden)
                 .frame(height: 170)
                 .accessibilityLabel("Portfolio value over time")
                 .accessibilityValue(
