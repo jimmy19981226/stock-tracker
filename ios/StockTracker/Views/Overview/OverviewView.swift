@@ -65,6 +65,17 @@ struct OverviewView: View {
         // loop automatically when the screen goes away.
         .task {
             await loadOverview()
+            // Warm both dashboards' value charts in the background: the server
+            // computes + caches the series, and saving to disk here means the
+            // chart paints instantly when a market is opened.
+            Task {
+                for market in MarketCode.allCases {
+                    if let pts = try? await APIClient.shared.getValueHistory(
+                        market: market, period: .threeMonth) {
+                        DiskCache.save(pts, as: "value-history-\(market.rawValue)-\(ValuePeriod.threeMonth.rawValue)")
+                    }
+                }
+            }
             while !Task.isCancelled {
                 let open = store.isOpen(.TW) || store.isOpen(.US)
                 try? await Task.sleep(nanoseconds: (open ? 5 : 60) * 1_000_000_000)

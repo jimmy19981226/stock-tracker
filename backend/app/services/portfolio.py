@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import math
+import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from threading import Lock
 from typing import Iterable
 
 from sqlalchemy.orm import Session
@@ -477,6 +479,28 @@ def build_earnings_history(db: Session, user_id: str, days: int = 180) -> dict[s
 # wasn't recording yet.
 VALUE_HISTORY_START = "2025-01-01"
 
+# Computed value-history series cached per (user, market, period): the build
+# sweeps yfinance history for every relevant ticker, which is seconds of work
+# even warm — far too slow to redo on every poll or tab switch.
+_VALUE_HISTORY_TTL = 600.0
+_value_history_cache: dict[tuple[str, str, str], tuple[float, list[dict]]] = {}
+_value_history_lock = Lock()
+
+
+def _window_start(period: str) -> str:
+    """Approximate first charted day for a period tab (ISO), clamped to
+    VALUE_HISTORY_START. Used to skip tickers whose position was closed
+    before the window — fetching their price history is pure waste."""
+    days = {"5d": 7, "1mo": 32, "3mo": 93, "6mo": 184,
+            "1y": 366, "2y": 731, "5y": 1827}
+    if period == "ytd":
+        start = date(date.today().year, 1, 1).isoformat()
+    elif period in days:
+        start = (date.today() - timedelta(days=days[period])).isoformat()
+    else:  # max
+        start = VALUE_HISTORY_START
+    return max(start, VALUE_HISTORY_START)
+
 
 def build_value_history(
     db: Session, user_id: str, market: str, period: str = "1y"
@@ -494,6 +518,13 @@ def build_value_history(
 
     from . import stock_info
 
+    cache_key = (user_id, market, period)
+    now = time.time()
+    with _value_history_lock:
+        hit = _value_history_cache.get(cache_key)
+        if hit and now - hit[0] < _VALUE_HISTORY_TTL:
+            return hit[1]
+
     trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     mtrades = [
         t for t in trades if (t.market or quotes.market_of(t.ticker)) == market
@@ -507,6 +538,23 @@ def build_value_history(
         deltas[t.ticker].append(
             (t.trade_date, t.shares if t.type == "buy" else -t.shares)
         )
+
+    # Drop tickers that can't touch the window: no shares held entering it
+    # and no trades inside it. (Deltas are date-ordered, so the first delta
+    # past the window start means the ticker traded within the window.)
+    win_start = _window_start(period)
+
+    def _active(tdeltas: list[tuple[date, float]]) -> bool:
+        shares = 0.0
+        for d, delta in tdeltas:
+            if d.isoformat() > win_start:
+                return True
+            shares += delta
+        return shares > 1e-9
+
+    deltas = {tk: td for tk, td in deltas.items() if _active(td)}
+    if not deltas:
+        return []
 
     # Daily closes per ticker, fetched concurrently (each call is cached with
     # a 30-minute TTL in stock_info, so repeat polls are cheap).
@@ -547,4 +595,7 @@ def build_value_history(
 
     out = [{"date": d, "total": round(totals[d], 2)} for d in dates]
     first = next((i for i, row in enumerate(out) if row["total"] > 0), None)
-    return out[first:] if first is not None else []
+    result = out[first:] if first is not None else []
+    with _value_history_lock:
+        _value_history_cache[cache_key] = (now, result)
+    return result

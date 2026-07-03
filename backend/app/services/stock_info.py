@@ -170,6 +170,18 @@ def get_fundamentals(ticker: str) -> dict[str, Any]:
     return out
 
 
+def _history_symbol_candidates(sym: str) -> list[str]:
+    """Yahoo symbol variants to try in order. TPEx (OTC) tickers need ``.TWO``
+    instead of ``.TW``; US share classes are dashed on Yahoo (``BRK-B``, not
+    the ``BRK.B`` brokers print)."""
+    out = [sym]
+    if sym.endswith(".TW"):
+        out.append(sym[:-3] + ".TWO")
+    elif "." in sym and not sym.startswith("^") and not sym.endswith(".TWO"):
+        out.append(sym.replace(".", "-"))
+    return out
+
+
 def get_history(ticker: str, period: str = "1y") -> list[dict]:
     """Daily OHLCV bars for the requested period.
 
@@ -177,6 +189,8 @@ def get_history(ticker: str, period: str = "1y") -> list[dict]:
     ``5y``, ``max``. Returned as a list of
     ``{date, open, high, low, close, volume}`` dicts, oldest first.
     """
+    import yfinance as yf
+
     now = time.time()
     sym = resolve_symbol(ticker)
     key = (sym, period)
@@ -185,12 +199,21 @@ def get_history(ticker: str, period: str = "1y") -> list[dict]:
         if cached and now - cached[0] < _HISTORY_TTL:
             return cached[1]
 
-    try:
-        df = _yticker(ticker).history(period=period, auto_adjust=False)
-    except Exception:
-        return []
+    df = None
+    for candidate in _history_symbol_candidates(sym):
+        try:
+            df = yf.Ticker(candidate).history(period=period, auto_adjust=False)
+        except Exception:
+            df = None
+        if df is not None and not df.empty:
+            break
 
     if df is None or df.empty:
+        # Negative-cache misses too: portfolio value-history sweeps every
+        # ticker ever traded, and re-hitting Yahoo for known-dead symbols on
+        # every request is what made it crawl. Retried after the normal TTL.
+        with _lock:
+            _history_cache[key] = (now, [])
         return []
 
     bars: list[dict] = []
