@@ -272,6 +272,12 @@ private struct PortfolioValueCard: View {
             if let cached = DiskCache.load([ValuePoint].self, name: cacheKey) {
                 points = cached
                 loading = false
+            } else {
+                // No cache for this period yet: show the spinner rather than
+                // leaving the previous period's curve up as if it were this
+                // one (tab flips used to look like "every period is the same").
+                points = []
+                loading = true
             }
             if let fresh = try? await APIClient.shared.getValueHistory(market: market,
                                                                        period: period) {

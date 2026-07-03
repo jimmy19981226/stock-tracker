@@ -474,18 +474,17 @@ def build_earnings_history(db: Session, user_id: str, days: int = 180) -> dict[s
     return dict(daily)
 
 
-# Computed value-history series cached per (user, market, period): the build
-# sweeps yfinance history for every relevant ticker, which is seconds of work
-# even warm — far too slow to redo on every poll or tab switch.
+# The FULL net-worth series cached per (user, market): every period tab is
+# just a date-slice of it, so one heavy build (yfinance sweep over every
+# ticker's max history) serves all six tabs instantly for the TTL.
 _VALUE_HISTORY_TTL = 600.0
-_value_history_cache: dict[tuple[str, str, str], tuple[float, list[dict]]] = {}
+_value_history_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
 _value_history_lock = Lock()
 
 
 def _window_start(period: str) -> str:
-    """Approximate first charted day for a period tab (ISO). Used to skip
-    tickers whose position was closed before the window — fetching their
-    price history is pure waste. MAX keeps every ticker."""
+    """First charted day for a period tab (ISO), used to slice the full
+    series. MAX keeps everything."""
     days = {"5d": 7, "1mo": 32, "3mo": 93, "6mo": 184,
             "1y": 366, "2y": 731, "5y": 1827}
     if period == "ytd":
@@ -501,22 +500,36 @@ def build_value_history(
     """Total market value of the user's holdings in one market per trading
     day — the net-worth curve the mobile app charts with period tabs.
 
+    The full-history series is built once and cached; each period tab is a
+    date-slice of it, so switching tabs never recomputes (and every tab is
+    consistent with the others by construction).
+    """
+    now = time.time()
+    key = (user_id, market)
+    with _value_history_lock:
+        hit = _value_history_cache.get(key)
+    full = hit[1] if hit and now - hit[0] < _VALUE_HISTORY_TTL else None
+    if full is None:
+        full = _build_full_value_series(db, user_id, market)
+        with _value_history_lock:
+            _value_history_cache[key] = (time.time(), full)
+
+    start = _window_start(period)
+    return [p for p in full if p["date"] >= start]
+
+
+def _build_full_value_series(db: Session, user_id: str, market: str) -> list[dict]:
+    """The whole net-worth curve, first held day → today.
+
     For each ticker ever traded in the market, shares held on each day are
     replayed from the trade log and priced at that day's close (cached
     yfinance history). Days where a ticker has no bar — holiday, IPO gap,
     suspension — carry its last known close forward. Days before the first
-    position existed are trimmed so short periods aren't a flat zero line.
+    position existed are trimmed (same-day round trips chart nothing).
     """
     from concurrent.futures import ThreadPoolExecutor
 
     from . import stock_info
-
-    cache_key = (user_id, market, period)
-    now = time.time()
-    with _value_history_lock:
-        hit = _value_history_cache.get(cache_key)
-        if hit and now - hit[0] < _VALUE_HISTORY_TTL:
-            return hit[1]
 
     trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     mtrades = [
@@ -532,28 +545,11 @@ def build_value_history(
             (t.trade_date, t.shares if t.type == "buy" else -t.shares)
         )
 
-    # Drop tickers that can't touch the window: no shares held entering it
-    # and no trades inside it. (Deltas are date-ordered, so the first delta
-    # past the window start means the ticker traded within the window.)
-    win_start = _window_start(period)
-
-    def _active(tdeltas: list[tuple[date, float]]) -> bool:
-        shares = 0.0
-        for d, delta in tdeltas:
-            if d.isoformat() > win_start:
-                return True
-            shares += delta
-        return shares > 1e-9
-
-    deltas = {tk: td for tk, td in deltas.items() if _active(td)}
-    if not deltas:
-        return []
-
     # Daily closes per ticker, fetched concurrently (each call is cached with
-    # a 30-minute TTL in stock_info, so repeat polls are cheap).
+    # a 30-minute TTL in stock_info, so repeat builds are cheap).
     with ThreadPoolExecutor(max_workers=8) as ex:
         hist = dict(
-            zip(deltas, ex.map(lambda tk: stock_info.get_history(tk, period), deltas))
+            zip(deltas, ex.map(lambda tk: stock_info.get_history(tk, "max"), deltas))
         )
 
     # Union of bar dates across the market's tickers, as ISO strings, starting
@@ -587,7 +583,4 @@ def build_value_history(
 
     out = [{"date": d, "total": round(totals[d], 2)} for d in dates]
     first = next((i for i, row in enumerate(out) if row["total"] > 0), None)
-    result = out[first:] if first is not None else []
-    with _value_history_lock:
-        _value_history_cache[cache_key] = (now, result)
-    return result
+    return out[first:] if first is not None else []
