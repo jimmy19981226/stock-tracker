@@ -328,6 +328,34 @@ struct StockDetail: Codable {
     let quarterlyFinancials: [QuarterlyFinancials]
 }
 
+/// One day of the portfolio's total market value (the net-worth curve).
+struct ValuePoint: Codable, Identifiable, Hashable {
+    var id: String { date }
+    let date: String
+    let total: Double
+}
+
+/// Period tabs for the portfolio-value chart (Stocks-app style).
+enum ValuePeriod: String, CaseIterable, Identifiable {
+    case week = "5d"
+    case month = "1mo"
+    case threeMonth = "3mo"
+    case ytd = "ytd"
+    case year = "1y"
+    case max
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .week: return "1W"
+        case .month: return "1M"
+        case .threeMonth: return "3M"
+        case .ytd: return "YTD"
+        case .year: return "1Y"
+        case .max: return "MAX"
+        }
+    }
+}
+
 enum HistoryPeriod: String, CaseIterable, Identifiable {
     case oneMonth = "1mo"
     case threeMonth = "3mo"

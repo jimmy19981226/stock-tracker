@@ -5,7 +5,9 @@ import SwiftUI
 /// per market. The iOS-native equivalent of the web app's Overview page.
 struct OverviewView: View {
     @EnvironmentObject private var store: PortfolioStore
-    @State private var overview: PortfolioOverview?
+    // Seeded from the disk cache so the hero number shows instantly on launch.
+    @State private var overview: PortfolioOverview? =
+        DiskCache.load(PortfolioOverview.self, name: "overview")
     @State private var showSettings = false
 
     var body: some View {
@@ -58,7 +60,19 @@ struct OverviewView: View {
             SettingsView()
         }
         .refreshable { await reload() }
-        .task { await loadOverview() }
+        // Live updates: poll fast while either market is open, slow otherwise,
+        // so the hero number ticks like the Stocks app. `.task` cancels the
+        // loop automatically when the screen goes away.
+        .task {
+            await loadOverview()
+            while !Task.isCancelled {
+                let open = store.isOpen(.TW) || store.isOpen(.US)
+                try? await Task.sleep(nanoseconds: (open ? 5 : 60) * 1_000_000_000)
+                if Task.isCancelled { break }
+                await store.refreshQuietly()
+                await loadOverview()
+            }
+        }
         .onAppear {
             if ProcessInfo.processInfo.environment["UITEST_SETTINGS"] == "1" { showSettings = true }
         }
@@ -70,7 +84,11 @@ struct OverviewView: View {
     }
 
     private func loadOverview() async {
-        overview = try? await APIClient.shared.getOverview()
+        // Keep showing the last good numbers if the fetch fails (or the
+        // backend is still cold-starting) instead of blanking them out.
+        guard let o = try? await APIClient.shared.getOverview() else { return }
+        overview = o
+        DiskCache.save(o, as: "overview")
     }
 }
 
@@ -117,15 +135,18 @@ private struct NetWorthCard: View {
                 .foregroundStyle(Theme.primaryText)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+                .rollingNumber(overview?.combined.twd)
 
             HStack(spacing: 10) {
                 Text("≈ \(Fmt.bigMoney(overview?.combined.usd, currency: "USD"))")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Theme.secondaryText)
+                    .rollingNumber(overview?.combined.usd)
                 if let fx = overview?.fx.usdTwd {
                     Text("USD/TWD \(Fmt.number(fx, digits: 2))")
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedText)
+                        .rollingNumber(fx)
                 }
             }
 
@@ -139,10 +160,12 @@ private struct NetWorthCard: View {
                         Text(Fmt.signedMoney(tr, currency: "TWD"))
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
                             .foregroundStyle(Theme.pl(tr))
+                            .rollingNumber(tr)
                         if let usd = combinedTotalReturnUsd {
                             Text("≈ \(Fmt.signedMoney(usd, currency: "USD"))")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(Theme.secondaryText)
+                                .rollingNumber(usd)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -322,6 +345,7 @@ private struct MarketCard: View {
                         .foregroundStyle(Theme.primaryText)
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
+                        .rollingNumber(summary?.totalValue)
                     PLBadge(value: summary?.todayPl, pct: summary?.todayPlPct,
                             currency: market.currencyCode, compact: true)
                 }
@@ -360,6 +384,7 @@ private struct MarketCard: View {
                 .foregroundStyle(color)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
+                .rollingNumber(value)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

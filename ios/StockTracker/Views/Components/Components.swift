@@ -1,5 +1,15 @@
 import SwiftUI
 
+extension View {
+    /// Stocks-app-style rolling-digit transition: when `value` changes, digits
+    /// roll up on an increase and down on a decrease. Attach to a Text whose
+    /// string is derived from `value`.
+    func rollingNumber(_ value: Double?) -> some View {
+        contentTransition(.numericText(value: value ?? 0))
+            .animation(.snappy(duration: 0.5), value: value)
+    }
+}
+
 /// A solid green/red price pill (Robinhood-style) used on rows and headers.
 struct PLBadge: View {
     let value: Double?
@@ -12,9 +22,11 @@ struct PLBadge: View {
         HStack(spacing: 4) {
             if let value, !compact {
                 Text(Fmt.signedMoney(value, currency: currency))
+                    .rollingNumber(value)
             }
             if let pct {
                 Text(Fmt.pct(pct))
+                    .rollingNumber(pct)
             }
         }
         .font(.system(.subheadline, design: .rounded).weight(.bold))
@@ -23,6 +35,7 @@ struct PLBadge: View {
         .padding(.vertical, 5)
         .background(color == Theme.mutedText ? Theme.cardElevated : color)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .animation(.snappy(duration: 0.5), value: color)
     }
 }
 
@@ -40,9 +53,11 @@ struct ChangeLine: View {
                 .font(.system(size: 10, weight: .bold))
             if let value {
                 Text(Fmt.signedMoney(value, currency: currency))
+                    .rollingNumber(value)
             }
             if let pct {
                 Text("(\(Fmt.pct(pct)))")
+                    .rollingNumber(pct)
             }
             if !suffix.isEmpty {
                 Text(suffix).foregroundStyle(Theme.secondaryText)
@@ -50,6 +65,7 @@ struct ChangeLine: View {
         }
         .font(.system(.subheadline, design: .rounded).weight(.semibold))
         .foregroundStyle(color)
+        .animation(.snappy(duration: 0.5), value: color)
     }
 }
 

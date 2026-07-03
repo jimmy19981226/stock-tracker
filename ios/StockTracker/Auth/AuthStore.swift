@@ -81,6 +81,7 @@ final class AuthStore: ObservableObject {
         Keychain.remove(Self.tokenKey)
         Keychain.remove(Self.refreshTokenKey)
         UserDefaults.standard.removeObject(forKey: Self.userKey)
+        DiskCache.clear()  // next account must not see this one's cached data
         state = .signedOut
     }
 

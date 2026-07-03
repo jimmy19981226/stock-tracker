@@ -21,11 +21,50 @@ final class PortfolioStore: ObservableObject {
 
     private let api = APIClient.shared
     private var pollTask: Task<Void, Never>?
+
+    /// Everything needed to repaint the UI on next launch without the network.
+    private struct Snapshot: Codable {
+        var trades: [Trade]
+        var dividends: [Dividend]
+        var holdings: [Holding]
+        var summaries: [CurrencySummary]
+        var earnings: [String: [EarningsPoint]]
+        var names: [String: String]
+        var markets: [MarketConfig]
+        var lastUpdated: Date?
+    }
+    private static let snapshotKey = "portfolio-snapshot"
     // Monotonic refresh generation. A manual loadAll() and the background poll's
     // refreshQuietly() can be in flight at once; whichever STARTED last owns the
     // final state. An older fetch that resolves late checks this and drops its
     // writes instead of clobbering newer data.
     private var refreshSeq = 0
+
+    init() {
+        // Hydrate from the last saved snapshot so launch paints instantly with
+        // slightly stale data instead of a spinner; loadAll() then replaces it
+        // quietly (and slowly, if the Render backend is cold-starting).
+        if let s = DiskCache.load(Snapshot.self, name: Self.snapshotKey) {
+            trades = s.trades
+            dividends = s.dividends
+            holdings = s.holdings
+            summaries = s.summaries
+            earnings = s.earnings
+            names = s.names
+            markets = s.markets
+            lastUpdated = s.lastUpdated
+            loading = false
+        }
+    }
+
+    private func saveSnapshot() {
+        DiskCache.save(
+            Snapshot(trades: trades, dividends: dividends, holdings: holdings,
+                     summaries: summaries, earnings: earnings, names: names,
+                     markets: markets, lastUpdated: lastUpdated),
+            as: Self.snapshotKey
+        )
+    }
 
     // MARK: - Loading
 
@@ -51,15 +90,24 @@ final class PortfolioStore: ObservableObject {
             names = nn
             errorMessage = nil
             lastUpdated = Date()
+            saveSnapshot()
         } catch {
             guard seq == refreshSeq else { return }
-            errorMessage = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            // Only surface the failure when there's nothing to show. Over good
+            // (cached/stale) data, a transient refresh hiccup shouldn't flash
+            // a red banner — the poll loop heals it on the next tick.
+            if summaries.isEmpty {
+                errorMessage = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            }
         }
         loading = false
     }
 
     func loadMarkets() async {
-        if let m = try? await api.getMarkets() { markets = m }
+        if let m = try? await api.getMarkets(), m != markets {
+            markets = m
+            saveSnapshot()
+        }
     }
 
     /// Pull fresh data but keep the current UI (no full-screen spinner).
@@ -77,6 +125,7 @@ final class PortfolioStore: ObservableObject {
             summaries = ss2
             lastUpdated = Date()
             errorMessage = nil
+            saveSnapshot()
         } catch {
             // Keep showing stale data; surface only hard load failures.
         }

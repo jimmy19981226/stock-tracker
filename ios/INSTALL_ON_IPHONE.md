@@ -140,9 +140,9 @@ This is an Apple limit, no bypass. Resolution chosen: **wait** for the rolling
      consume App IDs.
    - While waiting, do **no** extra installs/Xcode runs/re-signs (each burns more
      App IDs and pushes the reset later).
-   - To halve future consumption, build **without the widget** (only 1 App ID):
-     temporarily remove the `StockTrackerWidget` target from `project.yml`
-     dependencies, `./rebuild-ipa.sh`, install that.
+   - To halve future consumption, build **without the widget** (only 1 App ID).
+     (The widget target has since been removed from the project entirely, so
+     current builds already consume just 1 App ID.)
    - Never sign this Apple ID with a 2nd tool (e.g. Xcode "Run to device") — it
      revokes SideStore's cert. Keep SideStore as the only signer.
 

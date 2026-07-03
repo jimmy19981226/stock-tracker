@@ -21,10 +21,6 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: StockTracker
-      - path: StockTrackerShared
-    dependencies:
-      # Embeds the widget extension into the app bundle (PlugIns/).
-      - target: StockTrackerWidget
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aistockstudio.app
@@ -33,7 +29,6 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        CODE_SIGN_ENTITLEMENTS: StockTracker/StockTracker.entitlements
     info:
       path: StockTracker/Info.plist
       properties:
@@ -55,26 +50,3 @@ targets:
           # serve the backend over HTTPS (e.g. `tailscale serve`), to remove it.
           NSAllowsArbitraryLoads: true
           NSAllowsLocalNetworking: true
-
-  StockTrackerWidget:
-    type: app-extension
-    platform: iOS
-    deploymentTarget: "17.0"
-    sources:
-      - path: StockTrackerWidget
-      - path: StockTrackerShared
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aistockstudio.app.widget
-        MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "1"
-        GENERATE_INFOPLIST_FILE: NO
-        CODE_SIGN_ENTITLEMENTS: StockTrackerWidget/StockTrackerWidget.entitlements
-    info:
-      path: StockTrackerWidget/Info.plist
-      properties:
-        CFBundleDisplayName: Portfolio
-        CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "1"
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension

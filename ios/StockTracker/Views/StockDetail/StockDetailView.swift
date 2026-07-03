@@ -359,6 +359,7 @@ private struct PriceHeader: View {
                 .foregroundStyle(Theme.primaryText)
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+                .rollingNumber(detail.live.price)
             ChangeLine(value: detail.live.todayChange, pct: detail.live.todayChangePct,
                        currency: currency)
 

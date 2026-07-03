@@ -35,8 +35,12 @@ struct RootView: View {
             }
         }
         .task {
-            await store.loadMarkets()
-            await store.loadAll()
+            // Concurrent, not sequential — one round trip of latency, not two.
+            // (Market hours for the MIS overlay come from the cached snapshot
+            // on warm launches, so loadAll doesn't need loadMarkets first.)
+            async let markets: Void = store.loadMarkets()
+            async let all: Void = store.loadAll()
+            _ = await (markets, all)
             // UI-test deep link: launch with env UITEST_MARKET=TW|US to jump
             // straight into a portfolio (used for automated screenshots).
             if let m = ProcessInfo.processInfo.environment["UITEST_MARKET"],

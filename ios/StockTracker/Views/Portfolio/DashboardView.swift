@@ -11,6 +11,7 @@ struct DashboardView: View {
         ScrollView {
             VStack(spacing: 16) {
                 SummaryCard(summary: store.summary(for: market), currency: currency)
+                PortfolioValueCard(market: market)
                 EarningsCard(points: store.earnings(for: market), currency: currency)
                 HoldingsSection(holdings: store.holdings(for: market), store: store)
             }
@@ -50,6 +51,7 @@ private struct SummaryCard: View {
                     .foregroundStyle(Theme.primaryText)
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
+                    .rollingNumber(summary?.totalValue)
                 ChangeLine(value: summary?.todayPl, pct: summary?.todayPlPct,
                            currency: currency)
                 ChangeLine(value: summary?.totalPl, pct: summary?.totalPlPct,
@@ -60,16 +62,17 @@ private struct SummaryCard: View {
             VStack(spacing: 0) {
                 statRow("Realized P&L",
                         Fmt.signedMoney(summary?.realizedPl, currency: currency),
-                        Theme.pl(summary?.realizedPl))
+                        Theme.pl(summary?.realizedPl), raw: summary?.realizedPl)
                 statRow("Dividends",
                         Fmt.money(summary?.dividends, currency: currency),
-                        Theme.primaryText)
+                        Theme.primaryText, raw: summary?.dividends)
                 statRow("Cost basis",
                         Fmt.money(summary?.totalCost, currency: currency),
-                        Theme.primaryText)
+                        Theme.primaryText, raw: summary?.totalCost)
                 statRow("Earned this year",
                         Fmt.signedMoney(summary?.yearEarned, currency: currency),
-                        Theme.pl(summary?.yearEarned), last: true)
+                        Theme.pl(summary?.yearEarned), raw: summary?.yearEarned,
+                        last: true)
             }
 
             // Distinct Total Return band.
@@ -86,10 +89,12 @@ private struct SummaryCard: View {
                     Text(Fmt.signedMoney(tr, currency: currency))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .foregroundStyle(Theme.pl(tr))
+                        .rollingNumber(tr)
                     if let p = totalReturnPct {
                         Text(Fmt.pct(p))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(Theme.mutedText)
+                            .rollingNumber(p)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -104,7 +109,7 @@ private struct SummaryCard: View {
     }
 
     private func statRow(_ label: String, _ value: String, _ color: Color,
-                         last: Bool = false) -> some View {
+                         raw: Double? = nil, last: Bool = false) -> some View {
         VStack(spacing: 0) {
             HStack {
                 Text(label)
@@ -114,9 +119,154 @@ private struct SummaryCard: View {
                 Text(value)
                     .font(.system(.subheadline, design: .rounded).weight(.semibold))
                     .foregroundStyle(color)
+                    .rollingNumber(raw)
             }
             .padding(.vertical, 11)
             if !last { Rectangle().fill(Theme.stroke).frame(height: 1) }
+        }
+    }
+}
+
+// MARK: - Portfolio value chart
+
+/// Total market value of this market's holdings over time, with period tabs —
+/// the Stocks-app-style "net worth curve". Data comes from /value-history
+/// (trade log replayed against daily closes); the shown period re-fetches on
+/// tab change and is disk-cached so it paints instantly next time.
+private struct PortfolioValueCard: View {
+    let market: MarketCode
+    @State private var period: ValuePeriod = .threeMonth
+    @State private var points: [ValuePoint] = []
+    @State private var loading = true
+    @State private var scrubDate: Date?
+
+    private var currency: String { market.currencyCode }
+    private var cacheKey: String { "value-history-\(market.rawValue)-\(period.rawValue)" }
+
+    private struct Row: Identifiable {
+        let id = UUID()
+        let date: Date
+        let total: Double
+    }
+
+    private static let dayFormat: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f
+    }()
+
+    // Parse once per body evaluation — never inside Chart closures (those run
+    // per data point; see the EarningsCard note below).
+    private func makeRows() -> [Row] {
+        points.compactMap { p in
+            guard let d = Self.dayFormat.date(from: String(p.date.prefix(10))) else { return nil }
+            return Row(date: d, total: p.total)
+        }
+    }
+
+    private func nearestRow(to date: Date?, in rows: [Row]) -> Row? {
+        guard let date else { return nil }
+        return rows.min(by: {
+            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+        })
+    }
+
+    var body: some View {
+        let rows = makeRows()
+        let dateRange = (rows.first?.date ?? .now)...(rows.last?.date ?? .now)
+        let up = (rows.last?.total ?? 0) >= (rows.first?.total ?? 0)
+        let lineColor = up ? Theme.positive : Theme.negative
+
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader("Portfolio value") {
+                if let last = rows.last {
+                    Text(Fmt.money(last.total, currency: currency, digits: 0))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .foregroundStyle(Theme.primaryText)
+                        .rollingNumber(last.total)
+                }
+            }
+
+            if rows.count < 2 {
+                if loading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 170)
+                } else {
+                    EmptyState(icon: "chart.xyaxis.line",
+                               title: "Not enough history for this period")
+                }
+            } else {
+                Chart {
+                    ForEach(rows) { row in
+                        LineMark(x: .value("Date", row.date), y: .value("Value", row.total))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(lineColor)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                        AreaMark(x: .value("Date", row.date), y: .value("Value", row.total))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(
+                                LinearGradient(colors: [lineColor.opacity(0.18), .clear],
+                                               startPoint: .top, endPoint: .bottom)
+                            )
+                    }
+                    // Finger scrubbing: the rule + tip track the finger
+                    // continuously; only the dot snaps to the nearest point.
+                    if let raw = scrubDate, let sel = nearestRow(to: raw, in: rows) {
+                        let x = min(max(raw, dateRange.lowerBound), dateRange.upperBound)
+                        RuleMark(x: .value("Date", x))
+                            .foregroundStyle(Theme.mutedText.opacity(0.5))
+                            .lineStyle(StrokeStyle(lineWidth: 1))
+                            .annotation(position: .top,
+                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                ChartScrubTip(date: sel.date,
+                                              value: Fmt.money(sel.total, currency: currency, digits: 0))
+                            }
+                        PointMark(x: .value("Date", sel.date), y: .value("Value", sel.total))
+                            .symbolSize(50)
+                            .foregroundStyle(lineColor)
+                    }
+                }
+                .chartXSelection(value: $scrubDate)
+                // Value, not P&L: start the y-axis at the data, not zero, so
+                // the curve fills the card like the Stocks app.
+                .chartYScale(domain: .automatic(includesZero: false))
+                .chartYAxis(.hidden)
+                .chartXAxis {
+                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                        AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
+                                                              to: dateRange.upperBound))
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                }
+                .frame(height: 170)
+                .accessibilityLabel("Portfolio value over time")
+                .accessibilityValue(
+                    "Currently \(Fmt.money(rows.last?.total ?? 0, currency: currency, digits: 0)), "
+                    + (up ? "trending up" : "trending down")
+                )
+            }
+
+            UnderlineTabs(
+                tabs: ValuePeriod.allCases.map { ($0, $0.label) },
+                selection: $period,
+                font: .system(.caption, design: .rounded).weight(.bold)
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task(id: period) {
+            // Cached series first (instant paint), then the fresh fetch.
+            if let cached = DiskCache.load([ValuePoint].self, name: cacheKey) {
+                points = cached
+                loading = false
+            }
+            if let fresh = try? await APIClient.shared.getValueHistory(market: market,
+                                                                       period: period) {
+                withAnimation(.snappy(duration: 0.5)) { points = fresh }
+                DiskCache.save(fresh, as: cacheKey)
+            }
+            loading = false
         }
     }
 }
@@ -283,14 +433,17 @@ private struct HoldingRow: View {
                     Text(Fmt.money(holding.currentPrice, currency: holding.currency))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .foregroundStyle(.white)
+                        .rollingNumber(holding.currentPrice)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(Theme.pl(holding.todayChange) == Theme.mutedText
                                     ? Theme.cardElevated : Theme.pl(holding.todayChange))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .animation(.snappy(duration: 0.5), value: Theme.pl(holding.todayChange))
                     Text(Fmt.pct(holding.unrealizedPlPct))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.pl(holding.unrealizedPlPct))
+                        .rollingNumber(holding.unrealizedPlPct)
                 }
             }
             .padding(.vertical, 12)

@@ -57,7 +57,7 @@ final class APIClient {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
 
-        let data = try await perform(&req, retryTimeout: method == "GET")
+        let data = try await perform(&req, retryTransient: method == "GET")
         if T.self == EmptyResponse.self { return EmptyResponse() as! T }
         do {
             return try decoder.decode(T.self, from: data)
@@ -66,16 +66,16 @@ final class APIClient {
         }
     }
 
-    /// Runs the request with auth attached. Retries once after a timeout
-    /// (idempotent GETs only — rides out the backend cold-starting) and once
-    /// after a 401 with a freshly refreshed Google token.
-    private func perform(_ req: inout URLRequest, retryTimeout: Bool) async throws -> Data {
+    /// Runs the request with auth attached. Retries once after a transient
+    /// transport failure (idempotent GETs only) and once after a 401 with a
+    /// freshly refreshed Google token.
+    private func perform(_ req: inout URLRequest, retryTransient: Bool) async throws -> Data {
         await Self.attachAuth(&req)
-        var (data, http) = try await execute(req, retryTimeout: retryTimeout)
+        var (data, http) = try await execute(req, retryTransient: retryTransient)
         if http.statusCode == 401,
            let fresh = await AuthTokenProvider.shared.refreshAfterRejection() {
             req.setValue("Bearer \(fresh)", forHTTPHeaderField: "Authorization")
-            (data, http) = try await execute(req, retryTimeout: retryTimeout)
+            (data, http) = try await execute(req, retryTransient: retryTransient)
         }
         guard (200..<300).contains(http.statusCode) else {
             if http.statusCode == 401 {
@@ -86,10 +86,18 @@ final class APIClient {
         return data
     }
 
-    private func execute(_ req: URLRequest, retryTimeout: Bool) async throws -> (Data, HTTPURLResponse) {
+    /// Transport failures worth one retry: a timeout (backend cold-starting),
+    /// or a dead keep-alive connection — after the Render backend idles, the
+    /// pooled connection is gone and the first request on it dies instantly
+    /// with "the network connection was lost". A fresh attempt succeeds.
+    private static let transientCodes: Set<URLError.Code> = [
+        .timedOut, .networkConnectionLost, .cannotConnectToHost,
+    ]
+
+    private func execute(_ req: URLRequest, retryTransient: Bool) async throws -> (Data, HTTPURLResponse) {
         do {
             return try await dataTask(req)
-        } catch let e as URLError where retryTimeout && e.code == .timedOut {
+        } catch let e as URLError where retryTransient && Self.transientCodes.contains(e.code) {
             do { return try await dataTask(req) }
             catch { throw APIError.transport(error.localizedDescription) }
         } catch let e as APIError {
@@ -180,6 +188,10 @@ final class APIClient {
     func getEarningsHistory(days: Int = 1825) async throws -> [String: [EarningsPoint]] {
         try await request("/api/portfolio/earnings-history?days=\(days)")
     }
+    /// Daily total market value of one market's holdings (net-worth curve).
+    func getValueHistory(market: MarketCode, period: ValuePeriod) async throws -> [ValuePoint] {
+        try await request("/api/portfolio/value-history?market=\(market.rawValue)&period=\(period.rawValue)")
+    }
 
     // MARK: - Stock detail
 
@@ -220,7 +232,7 @@ final class APIClient {
         body.appendString("\r\n--\(boundary)--\r\n")
         req.httpBody = body
 
-        let data = try await perform(&req, retryTimeout: false)
+        let data = try await perform(&req, retryTransient: false)
         do {
             return try decoder.decode(ParsedRecords.self, from: data)
         } catch {
