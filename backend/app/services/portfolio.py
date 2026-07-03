@@ -474,11 +474,6 @@ def build_earnings_history(db: Session, user_id: str, days: int = 180) -> dict[s
     return dict(daily)
 
 
-# Earliest day the value chart shows (ISO string, compared against bar dates).
-# Tracked history starts here; earlier prices would chart positions the user
-# wasn't recording yet.
-VALUE_HISTORY_START = "2025-01-01"
-
 # Computed value-history series cached per (user, market, period): the build
 # sweeps yfinance history for every relevant ticker, which is seconds of work
 # even warm — far too slow to redo on every poll or tab switch.
@@ -488,18 +483,16 @@ _value_history_lock = Lock()
 
 
 def _window_start(period: str) -> str:
-    """Approximate first charted day for a period tab (ISO), clamped to
-    VALUE_HISTORY_START. Used to skip tickers whose position was closed
-    before the window — fetching their price history is pure waste."""
+    """Approximate first charted day for a period tab (ISO). Used to skip
+    tickers whose position was closed before the window — fetching their
+    price history is pure waste. MAX keeps every ticker."""
     days = {"5d": 7, "1mo": 32, "3mo": 93, "6mo": 184,
             "1y": 366, "2y": 731, "5y": 1827}
     if period == "ytd":
-        start = date(date.today().year, 1, 1).isoformat()
-    elif period in days:
-        start = (date.today() - timedelta(days=days[period])).isoformat()
-    else:  # max
-        start = VALUE_HISTORY_START
-    return max(start, VALUE_HISTORY_START)
+        return date(date.today().year, 1, 1).isoformat()
+    if period in days:
+        return (date.today() - timedelta(days=days[period])).isoformat()
+    return "1900-01-01"  # max
 
 
 def build_value_history(
@@ -563,15 +556,14 @@ def build_value_history(
             zip(deltas, ex.map(lambda tk: stock_info.get_history(tk, period), deltas))
         )
 
-    # Union of bar dates across the market's tickers, as ISO strings. The
-    # chart never reaches back past VALUE_HISTORY_START regardless of period —
-    # older trades still seed the share counts (the while-loop below applies
-    # every delta dated on/before the first charted day), only the display
-    # window is clamped.
+    # Union of bar dates across the market's tickers, as ISO strings, starting
+    # at this market's first trade — with period=max the bars reach back to
+    # each ticker's IPO, decades before the user held anything.
+    first_trade = min(d for td in deltas.values() for d, _ in td).isoformat()
     dates = sorted(
         d
         for d in {b["date"] for bars in hist.values() for b in bars}
-        if d >= VALUE_HISTORY_START
+        if d >= first_trade
     )
     if not dates:
         return []
