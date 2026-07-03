@@ -76,7 +76,15 @@ enum Fmt {
     static func axisFormat(from first: Date, to last: Date) -> Date.FormatStyle {
         let days = last.timeIntervalSince(first) / 86_400
         if days <= 120 { return .dateTime.month(.abbreviated).day() }
-        if days <= 550 { return .dateTime.month(.abbreviated) }
+        if days <= 550 {
+            // Month-only labels turn ambiguous once the span straddles New
+            // Year (e.g. the value chart's MAX from Jan 2025): "Mar" could be
+            // either year, so append it.
+            let crossesYear = Calendar.current.component(.year, from: first)
+                != Calendar.current.component(.year, from: last)
+            return crossesYear ? .dateTime.month(.abbreviated).year()
+                               : .dateTime.month(.abbreviated)
+        }
         return .dateTime.year()
     }
 }

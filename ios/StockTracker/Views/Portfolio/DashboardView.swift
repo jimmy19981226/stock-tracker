@@ -234,7 +234,13 @@ private struct PortfolioValueCard: View {
                 .chartYScale(domain: .automatic(includesZero: false))
                 .chartYAxis(.hidden)
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                    // Whole-day strides on short ranges (the 1W tab):
+                    // .automatic may place sub-day marks, printing the same
+                    // day twice ("Jul 1  Jul 1  Jul 2").
+                    let days = dateRange.upperBound.timeIntervalSince(dateRange.lowerBound) / 86_400
+                    AxisMarks(values: days <= 10
+                              ? .stride(by: .day, count: max(1, Int((days / 4).rounded(.up))))
+                              : .automatic(desiredCount: 4)) { _ in
                         AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
                                                               to: dateRange.upperBound))
                             .foregroundStyle(Theme.mutedText)
