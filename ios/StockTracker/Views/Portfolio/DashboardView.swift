@@ -191,23 +191,17 @@ private struct PortfolioValueCard: View {
         let lineColor = up ? Theme.positive : Theme.negative
 
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader("Portfolio value") {
-                if let last = rows.last {
-                    Text(Fmt.money(last.total, currency: currency, digits: 0))
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(Theme.primaryText)
-                        .rollingNumber(last.total)
+            // No total in the header — the summary's big number right above
+            // is the same value. The range change is this card's own story.
+            VStack(alignment: .leading, spacing: 5) {
+                SectionHeader("Portfolio value")
+                if let first = rows.first?.total, let last = rows.last?.total,
+                   rows.count >= 2, first != 0 {
+                    ChangeLine(value: last - first,
+                               pct: (last - first) / first * 100,
+                               currency: currency,
+                               suffix: period.changeSuffix)
                 }
-            }
-
-            // Change over the visible range, Stocks-app style: recomputes as
-            // the period tabs switch.
-            if let first = rows.first?.total, let last = rows.last?.total,
-               rows.count >= 2, first != 0 {
-                ChangeLine(value: last - first,
-                           pct: (last - first) / first * 100,
-                           currency: currency,
-                           suffix: period.changeSuffix)
             }
 
             if rows.count < 2 {
