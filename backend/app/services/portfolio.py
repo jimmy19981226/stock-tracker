@@ -472,6 +472,12 @@ def build_earnings_history(db: Session, user_id: str, days: int = 180) -> dict[s
     return dict(daily)
 
 
+# Earliest day the value chart shows (ISO string, compared against bar dates).
+# Tracked history starts here; earlier prices would chart positions the user
+# wasn't recording yet.
+VALUE_HISTORY_START = "2025-01-01"
+
+
 def build_value_history(
     db: Session, user_id: str, market: str, period: str = "1y"
 ) -> list[dict]:
@@ -509,8 +515,16 @@ def build_value_history(
             zip(deltas, ex.map(lambda tk: stock_info.get_history(tk, period), deltas))
         )
 
-    # Union of bar dates across the market's tickers, as ISO strings.
-    dates = sorted({b["date"] for bars in hist.values() for b in bars})
+    # Union of bar dates across the market's tickers, as ISO strings. The
+    # chart never reaches back past VALUE_HISTORY_START regardless of period —
+    # older trades still seed the share counts (the while-loop below applies
+    # every delta dated on/before the first charted day), only the display
+    # window is clamped.
+    dates = sorted(
+        d
+        for d in {b["date"] for bars in hist.values() for b in bars}
+        if d >= VALUE_HISTORY_START
+    )
     if not dates:
         return []
 
