@@ -8,6 +8,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
     case gemini
     case openai
     case claude
+    case nvidia
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .gemini: return "Google Gemini"
         case .openai: return "OpenAI"
         case .claude: return "Anthropic Claude"
+        case .nvidia: return "NVIDIA NIM"
         }
     }
 
@@ -25,6 +27,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .gemini: return "aistudio.google.com/apikey"
         case .openai: return "platform.openai.com/api-keys"
         case .claude: return "console.anthropic.com"
+        case .nvidia: return "build.nvidia.com (free)"
         }
     }
 
@@ -33,6 +36,7 @@ enum AIProvider: String, CaseIterable, Identifiable {
         case .gemini: return "AIza…"
         case .openai: return "sk-…"
         case .claude: return "sk-ant-…"
+        case .nvidia: return "nvapi-…"
         }
     }
 
@@ -55,6 +59,12 @@ enum AIProvider: String, CaseIterable, Identifiable {
                 AIModel(id: "claude-opus-4-8",          label: "Claude Opus 4.8",   note: "Most capable · recommended"),
                 AIModel(id: "claude-sonnet-4-6",        label: "Claude Sonnet 4.6", note: "Balanced speed & quality"),
                 AIModel(id: "claude-haiku-4-5-20251001",label: "Claude Haiku 4.5",  note: "Fast & cheap"),
+            ]
+        case .nvidia:
+            return [
+                AIModel(id: "deepseek-ai/deepseek-v4-pro", label: "DeepSeek V4 Pro", note: "Free · smartest, strong Chinese · recommended"),
+                AIModel(id: "moonshotai/kimi-k2.6",        label: "Kimi K2.6",       note: "Free · superb instruction following"),
+                AIModel(id: "z-ai/glm-5.2",                label: "GLM-5.2",         note: "Free · strong Chinese & reasoning"),
             ]
         }
     }

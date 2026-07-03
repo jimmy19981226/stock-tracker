@@ -158,21 +158,24 @@ def chat(
 ):
     """Stream the assistant's reply as Server-Sent Events.
 
-    The provider (``X-AI-Provider``: ``gemini`` | ``openai`` | ``claude``), the
-    user's own key (``X-AI-Key``), and the requested model (``X-AI-Model``) come
-    from the app's AI settings. Gemini may fall back to the server's
-    ``GOOGLE_AI_API_KEY`` env var; OpenAI/Claude require the user's key. When
+    The provider (``X-AI-Provider``: ``gemini`` | ``openai`` | ``claude`` |
+    ``nvidia``), the user's own key (``X-AI-Key``), and the requested model
+    (``X-AI-Model``) come from the app's AI settings. Gemini may fall back to
+    the server's ``GOOGLE_AI_API_KEY`` env var; OpenAI/Claude/NVIDIA require
+    the user's key (NVIDIA NIM keys are free at build.nvidia.com). When
     ``X-AI-Model`` is omitted, each provider's default model is used. All
     providers emit the same SSE protocol:
 
     - ``init``  → ``{chat_id, title}`` (sent once before generation begins)
     - ``chunk`` → ``{delta}`` (raw text chunk as the model emits it)
     - ``done``  → ``{content, queries, duration_ms}`` (final canonical content;
-      Gemini adds inline ``[N]`` markers + a Sources block, others return plain text)
+      Gemini and NVIDIA add inline ``[N]`` markers + a Sources block —
+      Gemini via native Google Search grounding, NVIDIA via DuckDuckGo —
+      OpenAI/Claude return plain text)
     - ``error`` → ``{detail}``
     """
     provider = (x_ai_provider or "gemini").strip().lower()
-    if provider not in ("gemini", "openai", "claude"):
+    if provider not in ("gemini", "openai", "claude", "nvidia"):
         provider = "gemini"
 
     # User-supplied key wins; Gemini can fall back to the server env var.
@@ -184,6 +187,7 @@ def chat(
             "gemini": "Add a Google Gemini key (aistudio.google.com/apikey) in the app's AI settings.",
             "openai": "Add your OpenAI API key (platform.openai.com/api-keys) in the app's AI settings.",
             "claude": "Add your Anthropic API key (console.anthropic.com) in the app's AI settings.",
+            "nvidia": "Add your free NVIDIA NIM key (build.nvidia.com) in the app's AI settings.",
         }
         raise HTTPException(status_code=503, detail=hints[provider])
 
@@ -309,17 +313,53 @@ def chat(
                 except Exception:
                     queries = []
             else:
-                # OpenAI / Claude — plain text streaming, no web grounding.
+                # OpenAI / Claude / NVIDIA — plain text streaming. NVIDIA NIM
+                # additionally gets DIY web grounding: a planner call decides
+                # the search queries, DuckDuckGo fetches the results, and the
+                # numbered sources go into the prompt with the same [N]
+                # citation contract the Gemini path uses.
                 from ..services import ai_providers
 
                 chosen_model = (x_ai_model or "").strip() or None
+                prompt_for_stream = system_prompt
+                sources: list[dict] = []
+
+                if provider == "nvidia":
+                    today = datetime.now(_TAIPEI).date().isoformat()
+                    queries = ai_providers.plan_search_queries(
+                        api_key, chosen_model, user_text, today
+                    )
+                    if queries:
+                        sources = ai_providers.search_web(queries)
+                    if sources:
+                        lines = [
+                            f"[{i}] {s['title']} — {s['url']}\n    {s['snippet']}"
+                            for i, s in enumerate(sources, 1)
+                        ]
+                        prompt_for_stream = (
+                            system_prompt
+                            + "\n\nWEB SEARCH RESULTS (fetched just now for this "
+                            "question). When a statement relies on one of these, "
+                            "append its marker like [1] or [2][3] right after the "
+                            "sentence. Don't write URLs yourself — a Sources list "
+                            "is appended automatically:\n"
+                            + "\n".join(lines)
+                        )
+
                 for delta in ai_providers.stream(
-                    provider, api_key, chosen_model, system_prompt, history_msgs
+                    provider, api_key, chosen_model, prompt_for_stream, history_msgs
                 ):
                     if delta:
                         accumulated_text += delta
                         yield sse({"type": "chunk", "delta": delta})
                 final_text = accumulated_text or "(no response)"
+
+                if sources and accumulated_text:
+                    src_lines = ["**Sources:**"] + [
+                        f"{i}. [{s['title']}]({s['url']})"
+                        for i, s in enumerate(sources, 1)
+                    ]
+                    final_text = final_text.rstrip() + "\n\n" + "\n".join(src_lines)
 
             elapsed_ms = int((time.time() - start_ts) * 1000)
             meta_header = json.dumps(
