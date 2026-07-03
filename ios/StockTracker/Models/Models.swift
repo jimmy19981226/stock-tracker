@@ -354,6 +354,17 @@ enum ValuePeriod: String, CaseIterable, Identifiable {
         case .max: return "MAX"
         }
     }
+    /// Suffix for the range-change line ("+NT$12,345 (+1.2%) Past month").
+    var changeSuffix: String {
+        switch self {
+        case .week: return "Past week"
+        case .month: return "Past month"
+        case .threeMonth: return "Past 3 months"
+        case .ytd: return "This year"
+        case .year: return "Past year"
+        case .max: return "All time"
+        }
+    }
 }
 
 enum HistoryPeriod: String, CaseIterable, Identifiable {

@@ -200,6 +200,16 @@ private struct PortfolioValueCard: View {
                 }
             }
 
+            // Change over the visible range, Stocks-app style: recomputes as
+            // the period tabs switch.
+            if let first = rows.first?.total, let last = rows.last?.total,
+               rows.count >= 2, first != 0 {
+                ChangeLine(value: last - first,
+                           pct: (last - first) / first * 100,
+                           currency: currency,
+                           suffix: period.changeSuffix)
+            }
+
             if rows.count < 2 {
                 if loading {
                     ProgressView()
