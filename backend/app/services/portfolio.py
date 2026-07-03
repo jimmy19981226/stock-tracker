@@ -470,3 +470,67 @@ def build_earnings_history(db: Session, user_id: str, days: int = 180) -> dict[s
         cursor += timedelta(days=1)
 
     return dict(daily)
+
+
+def build_value_history(
+    db: Session, user_id: str, market: str, period: str = "1y"
+) -> list[dict]:
+    """Total market value of the user's holdings in one market per trading
+    day — the net-worth curve the mobile app charts with period tabs.
+
+    For each ticker ever traded in the market, shares held on each day are
+    replayed from the trade log and priced at that day's close (cached
+    yfinance history). Days where a ticker has no bar — holiday, IPO gap,
+    suspension — carry its last known close forward. Days before the first
+    position existed are trimmed so short periods aren't a flat zero line.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from . import stock_info
+
+    trades = db.query(Trade).filter(Trade.user_id == user_id).all()
+    mtrades = [
+        t for t in trades if (t.market or quotes.market_of(t.ticker)) == market
+    ]
+    if not mtrades:
+        return []
+
+    # Per-ticker signed share deltas in trade order.
+    deltas: dict[str, list[tuple[date, float]]] = defaultdict(list)
+    for t in sorted(mtrades, key=lambda t: (t.trade_date, t.id)):
+        deltas[t.ticker].append(
+            (t.trade_date, t.shares if t.type == "buy" else -t.shares)
+        )
+
+    # Daily closes per ticker, fetched concurrently (each call is cached with
+    # a 30-minute TTL in stock_info, so repeat polls are cheap).
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        hist = dict(
+            zip(deltas, ex.map(lambda tk: stock_info.get_history(tk, period), deltas))
+        )
+
+    # Union of bar dates across the market's tickers, as ISO strings.
+    dates = sorted({b["date"] for bars in hist.values() for b in bars})
+    if not dates:
+        return []
+
+    totals = dict.fromkeys(dates, 0.0)
+    for ticker, tdeltas in deltas.items():
+        close_by_date = {
+            b["date"]: b["close"] for b in hist[ticker] if b.get("close") is not None
+        }
+        shares = 0.0
+        last_close = None
+        i = 0
+        for d in dates:
+            # Deltas dated on/before d (including any before the window) apply.
+            while i < len(tdeltas) and tdeltas[i][0].isoformat() <= d:
+                shares += tdeltas[i][1]
+                i += 1
+            last_close = close_by_date.get(d, last_close)
+            if shares > 1e-9 and last_close:
+                totals[d] += shares * last_close
+
+    out = [{"date": d, "total": round(totals[d], 2)} for d in dates]
+    first = next((i for i, row in enumerate(out) if row["total"] > 0), None)
+    return out[first:] if first is not None else []

@@ -56,6 +56,23 @@ def get_earnings_history(
     return portfolio.build_earnings_history(db, user, days=days)
 
 
+# yfinance period shorthands the value-history chart's tabs map to.
+_VALUE_PERIODS = {"5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"}
+
+
+@router.get("/value-history")
+def get_value_history(
+    market: str = Query("TW", pattern="^(TW|US)$"),
+    period: str = Query("1y"),
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    """Daily total market value of one market's holdings (net-worth curve)."""
+    if period not in _VALUE_PERIODS:
+        period = "1y"
+    return portfolio.build_value_history(db, user, market=market, period=period)
+
+
 @router.get("/names")
 def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     """Ticker → short-name map for every ticker the user has touched.
