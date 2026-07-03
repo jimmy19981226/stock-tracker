@@ -476,10 +476,16 @@ def build_earnings_history(db: Session, user_id: str, days: int = 180) -> dict[s
 
 # The FULL net-worth series cached per (user, market): every period tab is
 # just a date-slice of it, so one heavy build (yfinance sweep over every
-# ticker's max history) serves all six tabs instantly for the TTL.
-_VALUE_HISTORY_TTL = 600.0
+# ticker's max history) serves all six tabs instantly for the TTL. The
+# series only changes as new closes land (the app stitches the live total
+# onto the endpoint itself), so a long TTL is safe and spares Yahoo.
+_VALUE_HISTORY_TTL = 1800.0
 _value_history_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
 _value_history_lock = Lock()
+# Single-flight per (user, market): concurrent requests (warm-up + tab taps)
+# must NOT each launch their own 8-thread yfinance sweep — that stampede gets
+# the server rate-limited by Yahoo and every build comes back empty.
+_value_history_builds: dict[tuple[str, str], Lock] = {}
 
 
 def _window_start(period: str) -> str:
@@ -504,15 +510,28 @@ def build_value_history(
     date-slice of it, so switching tabs never recomputes (and every tab is
     consistent with the others by construction).
     """
-    now = time.time()
     key = (user_id, market)
-    with _value_history_lock:
-        hit = _value_history_cache.get(key)
-    full = hit[1] if hit and now - hit[0] < _VALUE_HISTORY_TTL else None
-    if full is None:
-        full = _build_full_value_series(db, user_id, market)
+
+    def _cached() -> list[dict] | None:
         with _value_history_lock:
-            _value_history_cache[key] = (time.time(), full)
+            hit = _value_history_cache.get(key)
+        return hit[1] if hit and time.time() - hit[0] < _VALUE_HISTORY_TTL else None
+
+    full = _cached()
+    if full is None:
+        with _value_history_lock:
+            build_lock = _value_history_builds.setdefault(key, Lock())
+        with build_lock:
+            # Re-check: whoever held the lock likely just built it for us.
+            full = _cached()
+            if full is None:
+                full = _build_full_value_series(db, user_id, market)
+                # Never cache an empty build — it's a failure (rate-limited
+                # Yahoo, network), not a fact, and caching it blanks every
+                # period tab for the whole TTL.
+                if full:
+                    with _value_history_lock:
+                        _value_history_cache[key] = (time.time(), full)
 
     start = _window_start(period)
     return [p for p in full if p["date"] >= start]

@@ -26,6 +26,7 @@ from .quotes import resolve_symbol
 
 _FUNDAMENTALS_TTL = 3600.0    # 1 hour
 _HISTORY_TTL = 1800.0          # 30 minutes
+_HISTORY_NEG_TTL = 300.0       # empty/failed history: retry after 5 minutes
 _FINANCIALS_TTL = 6 * 3600.0   # 6 hours — month/quarter data updates rarely
 
 _fundamentals_cache: dict[str, tuple[float, dict]] = {}
@@ -196,8 +197,13 @@ def get_history(ticker: str, period: str = "1y") -> list[dict]:
     key = (sym, period)
     with _lock:
         cached = _history_cache.get(key)
-        if cached and now - cached[0] < _HISTORY_TTL:
-            return cached[1]
+        if cached:
+            # Empty results expire fast: they're usually a transient Yahoo
+            # rate-limit (429 from cloud IPs), not a truly dead symbol, and a
+            # 30-min poison window starves the portfolio value chart.
+            ttl = _HISTORY_TTL if cached[1] else _HISTORY_NEG_TTL
+            if now - cached[0] < ttl:
+                return cached[1]
 
     df = None
     for candidate in _history_symbol_candidates(sym):
