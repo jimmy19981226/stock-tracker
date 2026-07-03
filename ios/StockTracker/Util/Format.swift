@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 /// Formatting helpers mirroring the web app's format.ts so figures read the
 /// same across platforms (NT$ / $, signed percentages, em-dash for nil).
@@ -67,6 +68,14 @@ enum Fmt {
         case 1e3...: return "\(sign)\(String(format: "%.1f", abs / 1e3))K"
         default: return number(v, digits: 0)
         }
+    }
+
+    /// Anchor for a time-axis label so edge labels tuck inward: a tick at the
+    /// plot's right edge centers its label under itself, clipping half of it
+    /// ("Jul…" cut off). First label grows rightward, last leftward.
+    static func axisAnchor(_ index: Int, of count: Int) -> UnitPoint {
+        if count > 1 && index == count - 1 { return .topTrailing }
+        return index == 0 ? .topLeading : .top
     }
 
     /// Chart time-axis label format matched to the visible span: "Jun 5" for

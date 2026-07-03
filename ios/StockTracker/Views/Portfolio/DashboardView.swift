@@ -240,9 +240,10 @@ private struct PortfolioValueCard: View {
                     let days = dateRange.upperBound.timeIntervalSince(dateRange.lowerBound) / 86_400
                     AxisMarks(values: days <= 10
                               ? .stride(by: .day, count: max(1, Int((days / 4).rounded(.up))))
-                              : .automatic(desiredCount: 4)) { _ in
+                              : .automatic(desiredCount: 4)) { value in
                         AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
-                                                              to: dateRange.upperBound))
+                                                              to: dateRange.upperBound),
+                                       anchor: Fmt.axisAnchor(value.index, of: value.count))
                             .foregroundStyle(Theme.mutedText)
                     }
                 }
@@ -368,9 +369,10 @@ private struct EarningsCard: View {
                 .chartXSelection(value: $scrubDate)
                 .chartYAxis(.hidden)
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
                         AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
-                                                              to: dateRange.upperBound))
+                                                              to: dateRange.upperBound),
+                                       anchor: Fmt.axisAnchor(value.index, of: value.count))
                             .foregroundStyle(Theme.mutedText)
                     }
                 }

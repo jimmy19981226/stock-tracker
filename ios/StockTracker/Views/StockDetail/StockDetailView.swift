@@ -509,9 +509,10 @@ private struct ChartCard: View {
                 }
                 .chartXScale(domain: dateRange)
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
                         AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
-                                                              to: dateRange.upperBound))
+                                                              to: dateRange.upperBound),
+                                       anchor: Fmt.axisAnchor(value.index, of: value.count))
                             .foregroundStyle(Theme.mutedText)
                     }
                 }
