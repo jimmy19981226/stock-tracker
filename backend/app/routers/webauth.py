@@ -136,6 +136,24 @@ def web_earnings_history(
     return portfolio.build_earnings_history(db, user, days=days)
 
 
+# Period tabs the net-worth chart offers (mirrors /api/portfolio/value-history).
+_VALUE_PERIODS = {"5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"}
+
+
+@router.get("/value-history")
+def web_value_history(
+    market: str = Query("TW", pattern="^(TW|US)$"),
+    period: str = Query("1y"),
+    db: Session = Depends(get_db),
+    user: str = Depends(require_web_auth),
+):
+    """Daily total market value of one market's holdings — the same series the
+    iOS app charts, served read-only for the web dashboard's net-worth chart."""
+    if period not in _VALUE_PERIODS:
+        period = "1y"
+    return portfolio.build_value_history(db, user, market=market, period=period)
+
+
 @router.get("/trades")
 def web_trades(db: Session = Depends(get_db), user: str = Depends(require_web_auth)):
     rows = (

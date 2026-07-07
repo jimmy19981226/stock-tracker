@@ -47,7 +47,7 @@ A **WidgetKit** Home Screen widget (in [`ios/StockTrackerWidget/`](ios/StockTrac
 
 ## 🌐 Web dashboard (mobile + desktop)
 
-A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + Vite) lets you check the portfolio from any phone or computer over the internet — net worth, an interactive total-earned chart, separate **Taiwan and US holdings cards**, and live prices. Access is gated by a single shared password (`WEB_DASHBOARD_PASSWORD`); it reads the scope set by `WEB_DASHBOARD_USER_ID` (default `legacy`). Deploy it to **Vercel** pointing at your Render backend — see [`frontend/README.md`](frontend/README.md).
+A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + Vite) lets you check the portfolio from any phone or computer over the internet — net worth, an interactive **net-worth history chart** with period tabs (1M · 3M · 6M · YTD · 1Y · MAX, both markets combined in NT$), an interactive total-earned chart, separate **Taiwan and US holdings cards**, and live prices. Access is gated by a single shared password (`WEB_DASHBOARD_PASSWORD`); it reads the scope set by `WEB_DASHBOARD_USER_ID` (default `legacy`). Deploy it to **Vercel** pointing at your Render backend — see [`frontend/README.md`](frontend/README.md).
 
 ---
 

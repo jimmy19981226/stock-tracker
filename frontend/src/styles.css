@@ -195,6 +195,31 @@ code {
 .tk-sh { color: var(--muted); font-size: 11px; }
 .mini { display: block; font-size: 11px; font-weight: 500; opacity: 0.85; }
 
+/* ---- Period tabs (net-worth chart) --------------------------------------- */
+.period-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.period-tab {
+  flex: 1;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  transition: background 120ms, color 120ms;
+}
+.period-tab:hover { color: var(--secondary); }
+.period-tab.active {
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--stroke);
+  padding: 5px 0; /* compensate the 1px border so tabs stay the same height */
+}
+
 /* ---- Color states ------------------------------------------------------- */
 .up { color: var(--up); }
 .down { color: var(--down); }

@@ -4,9 +4,10 @@ A read-only portfolio dashboard that works on **phones and computers** over the
 internet. Built with React + Vite, deployed to Vercel, talking to the FastAPI
 backend on Render. Access is gated by a single shared password.
 
-It shows: combined net worth (NT$ + US$), a "total earned" chart, per-market
-(TW / US) summary cards, and the full holdings table with live prices. It is
-strictly **read-only** — nothing here can edit your data.
+It shows: combined net worth (NT$ + US$), a net-worth history chart with
+period tabs (1M–MAX, TW + US combined in NT$), a "total earned" chart,
+per-market (TW / US) summary cards, and the full holdings table with live
+prices. It is strictly **read-only** — nothing here can edit your data.
 
 ## Local development
 
@@ -57,7 +58,7 @@ password), so changing the password instantly invalidates every issued token.
 ```
 POST /api/web/login  { password }      → { token, expires_in }   (password matches WEB_DASHBOARD_PASSWORD)
 GET  /api/web/overview                 → portfolio overview        (Authorization: Bearer <token>)
-GET  /api/web/holdings | summary | earnings-history | trades | dividends
+GET  /api/web/holdings | summary | earnings-history | value-history | trades | dividends
 ```
 
 All `/api/web/*` data endpoints require the bearer token and return data for

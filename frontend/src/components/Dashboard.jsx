@@ -100,6 +100,8 @@ export default function Dashboard({ onSignOut }) {
           )}
         </section>
 
+        <NetWorthChart fx={fx} liveTotal={combinedTwd} />
+
         {earnedSeries.length >= 2 && (
           <section className="card">
             <div className="card-head">
@@ -268,6 +270,116 @@ function HoldingRow({ h }) {
       </span>
     </div>
   );
+}
+
+// Period tabs for the net-worth chart (labels → backend period params).
+const VALUE_PERIODS = [
+  { label: "1M", period: "1mo" },
+  { label: "3M", period: "3mo" },
+  { label: "6M", period: "6mo" },
+  { label: "YTD", period: "ytd" },
+  { label: "1Y", period: "1y" },
+  { label: "MAX", period: "max" },
+];
+
+// Combined (TW + US, in TWD) portfolio-value history with period tabs —
+// the same net-worth curve the iOS app charts. Series are fetched once per
+// period and cached; the last point is stitched to the live combined total
+// so the curve always ends at the number in the hero.
+function NetWorthChart({ fx, liveTotal }) {
+  const [period, setPeriod] = useState("1y");
+  const [seriesByPeriod, setSeriesByPeriod] = useState({}); // period -> [{date,total}] per market
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (seriesByPeriod[period]) return;
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([api.valueHistory("TW", period), api.valueHistory("US", period)])
+      .then(([tw, us]) => {
+        if (cancelled) return;
+        setSeriesByPeriod((prev) => ({ ...prev, [period]: { tw, us } }));
+      })
+      .catch(() => {
+        /* transient — the card just stays in its loading/empty state */
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
+
+  const series = useMemo(() => {
+    const raw = seriesByPeriod[period];
+    if (!raw) return [];
+    const pts = combineValueSeries(raw.tw, raw.us, fx);
+    // End the curve at the live combined total so chart and hero agree.
+    if (pts.length && liveTotal != null) pts[pts.length - 1] = { ...pts[pts.length - 1], value: liveTotal };
+    return pts;
+  }, [seriesByPeriod, period, fx, liveTotal]);
+
+  const change = series.length >= 2 ? series[series.length - 1].value - series[0].value : null;
+  const changePct =
+    change != null && series[0].value > 0 ? (change / series[0].value) * 100 : null;
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Net worth</h2>
+        {change != null && (
+          <span className={`pl ${plClass(change)}`}>
+            {signedMoney(change, "TWD")}
+            {changePct != null && <span className="v-extra">{pct(changePct)}</span>}
+          </span>
+        )}
+      </div>
+      <div className="period-tabs" role="tablist" aria-label="Chart period">
+        {VALUE_PERIODS.map((p) => (
+          <button
+            key={p.period}
+            role="tab"
+            aria-selected={period === p.period}
+            className={`period-tab${period === p.period ? " active" : ""}`}
+            onClick={() => setPeriod(p.period)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {series.length >= 2 ? (
+        <Sparkline
+          data={series}
+          formatValue={(v) => money(v, "TWD")}
+          formatDate={(d) =>
+            d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+          }
+        />
+      ) : (
+        <div className="muted empty-row">
+          {loading ? "Loading value history…" : "Not enough history for this period yet."}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Merge per-market daily value series into one TWD total across the union of
+// dates, carrying each market's last value forward over gaps (different
+// trading calendars), converting the US leg at the current FX rate.
+function combineValueSeries(tw, us, fx) {
+  const twByDate = new Map();
+  const usByDate = new Map();
+  for (const p of tw || []) twByDate.set(p.date.slice(0, 10), p.total);
+  for (const p of us || []) usByDate.set(p.date.slice(0, 10), p.total);
+  const allDates = [...new Set([...twByDate.keys(), ...usByDate.keys()])].sort();
+  let lastTw = 0;
+  let lastUs = 0;
+  return allDates.map((d) => {
+    if (twByDate.has(d)) lastTw = twByDate.get(d);
+    if (usByDate.has(d)) lastUs = usByDate.get(d);
+    return { date: new Date(d + "T00:00:00Z"), value: lastTw + (fx != null ? lastUs * fx : 0) };
+  });
 }
 
 // Merge the per-currency earnings series into one TWD-denominated total series,
