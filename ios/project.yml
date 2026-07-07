@@ -50,3 +50,18 @@ targets:
           # serve the backend over HTTPS (e.g. `tailscale serve`), to remove it.
           NSAllowsArbitraryLoads: true
           NSAllowsLocalNetworking: true
+  # Local-only UI-driving target (not shipped): lets the CLI tap through the
+  # app on the simulator to reproduce/verify UI behavior.
+  StockTrackerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: UITests
+    dependencies:
+      - target: StockTracker
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aistockstudio.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: StockTracker

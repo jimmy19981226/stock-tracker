@@ -39,15 +39,27 @@
 		E2D5EA21AF4D64EFD0F2C7AF /* MISQuotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9250130334BCF77C5C7FBE /* MISQuotes.swift */; };
 		E61F09BB594BB5C6C8C98675 /* AuthTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B510C92B73EC980E35D9A9E /* AuthTokenProvider.swift */; };
 		E9E5DED70BACAEC0F876505D /* DividendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665969461AD6B11CA8AF0BDD /* DividendsView.swift */; };
+		EFD5B333FA05AF8B1D3169D1 /* SortSwitchDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */; };
 		F9B5DBCB3E640142143743A3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E8E78CC543F32EC9F8A37FB /* Theme.swift */; };
 		FB6FDA20BC5B416BD3153FED /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B5A3CEF34E1BC529FCF43A /* Format.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		80A9C61BEC56A772E33C3378 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F503EC97B55632E0CBFD05A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F5B94C36DA159648E0039B8A;
+			remoteInfo = StockTracker;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		01ED1814C71609892E781704 /* ImportRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportRecordsView.swift; sourceTree = "<group>"; };
 		061A44E5DF7B8AE95CA3EC16 /* AIProviderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviderSettingsView.swift; sourceTree = "<group>"; };
 		08AC8ECD4D8CF200DD39E0D0 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		178C89BFB1C25D1662FE56DB /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		189F0861420DA62D321AD57A /* StockTrackerUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = StockTrackerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F7EB774FB63B1456023AB0A /* AssistantView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantView.swift; sourceTree = "<group>"; };
 		2409FACE0EF56EC856982C87 /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownText.swift; sourceTree = "<group>"; };
 		344F05D989D23B371D60747A /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
@@ -57,6 +69,7 @@
 		3E5AFAAE26E09A340630D6B4 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		4E8C77D78C60E17B135BD606 /* DividendFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividendFormView.swift; sourceTree = "<group>"; };
 		592A352FEAEAEBCD762E4C67 /* StockTracker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = StockTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SortSwitchDriver.swift; sourceTree = "<group>"; };
 		5E8E78CC543F32EC9F8A37FB /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		5F057F8A620AE04DF20F4ADE /* StockTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StockTrackerApp.swift; sourceTree = "<group>"; };
 		65B5A3CEF34E1BC529FCF43A /* Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Format.swift; sourceTree = "<group>"; };
@@ -195,6 +208,7 @@
 			isa = PBXGroup;
 			children = (
 				AE21C951AB82F7346F69197A /* StockTracker */,
+				B65751E96F957EFFBB7AB888 /* UITests */,
 				72C7EA295FBD4DB15EDF2CA2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -203,6 +217,7 @@
 			isa = PBXGroup;
 			children = (
 				592A352FEAEAEBCD762E4C67 /* StockTracker.app */,
+				189F0861420DA62D321AD57A /* StockTrackerUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -259,6 +274,14 @@
 			path = StockTracker;
 			sourceTree = "<group>";
 		};
+		B65751E96F957EFFBB7AB888 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */,
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
 		BE6F9D32FE93C49C9D4C61F6 /* Splash */ = {
 			isa = PBXGroup;
 			children = (
@@ -304,6 +327,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		3DF9D4461BD1D4F02F3E3FC4 /* StockTrackerUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C9EA1B52C65CEE13FAAA7DB3 /* Build configuration list for PBXNativeTarget "StockTrackerUITests" */;
+			buildPhases = (
+				CE8815A8F57B3DD148D7407A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5FDA9273CC0AC1209B495B06 /* PBXTargetDependency */,
+			);
+			name = StockTrackerUITests;
+			packageProductDependencies = (
+			);
+			productName = StockTrackerUITests;
+			productReference = 189F0861420DA62D321AD57A /* StockTrackerUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		F5B94C36DA159648E0039B8A /* StockTracker */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = BB8C8D55ED5F4EA1FE7DCA8B /* Build configuration list for PBXNativeTarget "StockTracker" */;
@@ -331,6 +372,11 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					3DF9D4461BD1D4F02F3E3FC4 = {
+						DevelopmentTeam = D77DF52MVG;
+						ProvisioningStyle = Automatic;
+						TestTargetID = F5B94C36DA159648E0039B8A;
+					};
 					F5B94C36DA159648E0039B8A = {
 						DevelopmentTeam = D77DF52MVG;
 						ProvisioningStyle = Automatic;
@@ -352,6 +398,7 @@
 			projectRoot = "";
 			targets = (
 				F5B94C36DA159648E0039B8A /* StockTracker */,
+				3DF9D4461BD1D4F02F3E3FC4 /* StockTrackerUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -408,7 +455,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CE8815A8F57B3DD148D7407A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EFD5B333FA05AF8B1D3169D1 /* SortSwitchDriver.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5FDA9273CC0AC1209B495B06 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F5B94C36DA159648E0039B8A /* StockTracker */;
+			targetProxy = 80A9C61BEC56A772E33C3378 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		02FE597FFFEB4BFD167BC198 /* Debug */ = {
@@ -559,6 +622,42 @@
 			};
 			name = Release;
 		};
+		B545C80684DF953AE8E9FC71 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = StockTracker;
+			};
+			name = Release;
+		};
+		CEB46734BC205F1A8F4BFF64 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = StockTracker;
+			};
+			name = Debug;
+		};
 		DE636CBDA8B87A528F56F06D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -597,6 +696,15 @@
 			buildConfigurations = (
 				02FE597FFFEB4BFD167BC198 /* Debug */,
 				DE636CBDA8B87A528F56F06D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C9EA1B52C65CEE13FAAA7DB3 /* Build configuration list for PBXNativeTarget "StockTrackerUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CEB46734BC205F1A8F4BFF64 /* Debug */,
+				B545C80684DF953AE8E9FC71 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
