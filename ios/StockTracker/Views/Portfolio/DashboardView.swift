@@ -87,9 +87,13 @@ private struct SummaryCard: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.mutedText)
                     Spacer()
-                    Text(Fmt.signedMoney(tr, currency: currency))
+                    // Whole dollars + scale-to-fit: a 7-figure return used to
+                    // wrap its trailing cents onto a second line.
+                    Text(Fmt.signedMoney(tr, currency: currency, digits: 0))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .foregroundStyle(Theme.pl(tr))
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
                         .rollingNumber(tr)
                     if let p = totalReturnPct {
                         Text(Fmt.pct(p))
@@ -245,6 +249,8 @@ private struct PortfolioValueCard: View {
                     }
                 }
                 .chartXSelection(value: $scrubDate)
+                // Tick as the scrub dot snaps from point to point.
+                .sensoryFeedback(.selection, trigger: nearestRow(to: scrubDate, in: rows)?.date)
                 // Value, not P&L: start the y-axis at the data, not zero, so
                 // the curve fills the card like the Stocks app.
                 .chartYScale(domain: .automatic(includesZero: false))
@@ -378,6 +384,8 @@ private struct EarningsCard: View {
                     }
                 }
                 .chartXSelection(value: $scrubDate)
+                // Tick as the scrub dot snaps from point to point.
+                .sensoryFeedback(.selection, trigger: nearestRow(to: scrubDate, in: rows)?.date)
                 .chartYAxis(.hidden)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { value in
@@ -396,16 +404,59 @@ private struct EarningsCard: View {
 
 // MARK: - Holdings
 
+/// How the holdings list is ordered. "Value" mirrors the backend's default;
+/// the others surface today's movers / the biggest winners without scrolling.
+private enum HoldingSort: String, CaseIterable, Identifiable {
+    case value = "Market value"
+    case today = "Today's move"
+    case gain = "Gain %"
+    var id: String { rawValue }
+
+    func areInOrder(_ a: Holding, _ b: Holding) -> Bool {
+        switch self {
+        case .value: return (a.marketValue ?? -.infinity) > (b.marketValue ?? -.infinity)
+        case .today: return (a.todayChangePct ?? -.infinity) > (b.todayChangePct ?? -.infinity)
+        case .gain: return (a.unrealizedPlPct ?? -.infinity) > (b.unrealizedPlPct ?? -.infinity)
+        }
+    }
+}
+
 private struct HoldingsSection: View {
     let holdings: [Holding]
     let store: PortfolioStore
+    @State private var sort: HoldingSort = .value
+
+    private var sorted: [Holding] {
+        holdings.sorted(by: sort.areInOrder)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             SectionHeader("Holdings") {
-                Text("\(holdings.count)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.secondaryText)
+                HStack(spacing: 10) {
+                    Text("\(holdings.count)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                    Menu {
+                        Picker("Sort by", selection: $sort.animation(.snappy(duration: 0.4))) {
+                            ForEach(HoldingSort.allCases) { s in
+                                Text(s.rawValue).tag(s)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.up.arrow.down")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(sort.rawValue)
+                                .font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(Theme.secondaryText)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Theme.cardElevated)
+                        .clipShape(Capsule())
+                    }
+                }
             }
             .padding(.bottom, 4)
             if holdings.isEmpty {
@@ -413,13 +464,14 @@ private struct HoldingsSection: View {
                            message: "Add a trade to start tracking.")
             } else {
                 VStack(spacing: 0) {
-                    ForEach(holdings) { h in
+                    ForEach(sorted) { h in
                         NavigationLink(value: h) {
                             HoldingRow(holding: h, name: store.name(for: h.ticker))
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .sensoryFeedback(.selection, trigger: sort)
             }
         }
     }
@@ -447,7 +499,7 @@ private struct HoldingRow: View {
                     }
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 5) {
+                VStack(alignment: .trailing, spacing: 4) {
                     // Solid pill = current price, colored by today's move.
                     Text(Fmt.money(holding.currentPrice, currency: holding.currency))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
@@ -459,6 +511,11 @@ private struct HoldingRow: View {
                                     ? Theme.cardElevated : Theme.pl(holding.todayChange))
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                         .animation(.snappy(duration: 0.5), value: Theme.pl(holding.todayChange))
+                    // What the position is worth — the number checked most.
+                    Text(Fmt.money(holding.marketValue, currency: holding.currency, digits: 0))
+                        .font(.system(.caption, design: .rounded).weight(.semibold))
+                        .foregroundStyle(Theme.secondaryText)
+                        .rollingNumber(holding.marketValue)
                     Text(Fmt.pct(holding.unrealizedPlPct))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.pl(holding.unrealizedPlPct))

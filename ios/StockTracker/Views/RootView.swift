@@ -46,6 +46,12 @@ struct RootView: View {
             if let m = ProcessInfo.processInfo.environment["UITEST_MARKET"],
                let market = MarketCode(rawValue: m), portfolioPath.isEmpty {
                 portfolioPath.append(market)
+                // Optionally continue into a held stock's detail page
+                // (UITEST_TICKER=2330) for stock-detail screenshots.
+                if let t = ProcessInfo.processInfo.environment["UITEST_TICKER"],
+                   let h = store.holdings(for: market).first(where: { $0.ticker == t }) {
+                    portfolioPath.append(h)
+                }
             }
         }
     }

@@ -66,12 +66,12 @@ A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + V
 - Per-currency summary grid: market value, unrealized P/L, realized P/L, dividends, and today's move (accent-colored)
 - Unrealized P/L is **net of estimated exit costs** (sell commission + transaction tax), so it matches your broker's 損益試算 / 獲利率 rather than the gross gain
 - **Cumulative earnings chart** (Swift Charts) stacking realized P/L + dividends
-- **Holdings list** — each position with shares, avg cost, market value, and unrealized P&L
+- **Holdings list** — each position with shares, market value, live price, and unrealized P&L, sortable by market value, today's move, or gain %
 
 Holdings/summary refresh while a portfolio is on screen — every 5 s while that market is open, 60 s otherwise.
 
 ### 🔎 Per-stock detail (tap any holding)
-- **Live quote header** + key stats: previous close, day range, market cap, P/E, EPS, beta, dividend yield, 52-week range, **1-year analyst target**
+- **Live quote header** + key stats: previous close, day range, market cap, P/E, EPS, beta, dividend yield, a visual **52-week range bar**, **1-year analyst target**
 - **Your position card**: shares, avg cost, market value, realized + unrealized + dividends + total return (and %)
 - **Price-history chart** (1M / 3M / 6M / 1Y / 2Y / 5Y / All) with your buys, sells, and dividends overlaid as markers
 - The backend `/detail` endpoint also serves **monthly revenue (月營收)** and **8 quarters of financials** for any ticker — used to enrich AI answers

@@ -195,6 +195,8 @@ struct UnderlineTabs<T: Hashable>: View {
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.stroke).frame(height: 1)
         }
+        // A light tick when the selected tab changes, like the Stocks app.
+        .sensoryFeedback(.selection, trigger: selection)
     }
 }
 

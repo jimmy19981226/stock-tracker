@@ -53,7 +53,8 @@ struct StockDetailView: View {
                                 onEditDividend: { editingDividend = $0 },
                                 onDeleteTrade: { pendingDelete = .trade($0) },
                                 onDeleteDividend: { pendingDelete = .dividend($0) })
-                    FundamentalsCard(f: detail.fundamentals, currency: currency)
+                    FundamentalsCard(f: detail.fundamentals, currency: currency,
+                                     currentPrice: detail.live.price)
                 }
             }
             .padding(16)
@@ -497,6 +498,8 @@ private struct ChartCard: View {
                     }
                 }
                 .chartXSelection(value: $scrubDate)
+                // Tick as the scrub dot snaps from bar to bar.
+                .sensoryFeedback(.selection, trigger: nearestBar(to: scrubDate, in: bars)?.date)
                 .chartYAxis {
                     AxisMarks { value in
                         AxisValueLabel {
@@ -569,6 +572,16 @@ private struct PositionCard: View {
 private struct FundamentalsCard: View {
     let f: StockDetailFundamentals
     let currency: String
+    /// Live price, so the 52-week bar can mark where the stock trades now.
+    var currentPrice: Double?
+
+    /// The bar replaces the plain 52w high/low text rows; they return to the
+    /// grid only when the bar can't render (missing price or a flat range).
+    private var showRangeBar: Bool {
+        guard let lo = f.fiftyTwoWeekLow, let hi = f.fiftyTwoWeekHigh,
+              let p = currentPrice else { return false }
+        return hi > lo && p > 0
+    }
 
     private var rows: [(String, String)] {
         var r: [(String, String)] = []
@@ -579,14 +592,16 @@ private struct FundamentalsCard: View {
         if let v = f.dividendYield { r.append(("Div yield", Fmt.pct(v * 100))) }
         if let v = f.beta { r.append(("Beta", Fmt.number(v))) }
         if let v = f.priceToBook { r.append(("P/B", Fmt.number(v))) }
-        if let v = f.fiftyTwoWeekHigh { r.append(("52w high", Fmt.number(v))) }
-        if let v = f.fiftyTwoWeekLow { r.append(("52w low", Fmt.number(v))) }
+        if !showRangeBar {
+            if let v = f.fiftyTwoWeekHigh { r.append(("52w high", Fmt.number(v))) }
+            if let v = f.fiftyTwoWeekLow { r.append(("52w low", Fmt.number(v))) }
+        }
         if let v = f.averageVolume { r.append(("Avg vol", Fmt.compact(v))) }
         return r
     }
 
     var body: some View {
-        if rows.isEmpty { EmptyView() } else {
+        if rows.isEmpty && !showRangeBar { EmptyView() } else {
             Card {
                 VStack(alignment: .leading, spacing: 14) {
                     SectionHeader("Fundamentals")
@@ -594,6 +609,11 @@ private struct FundamentalsCard: View {
                         Text(sector + (f.industry.map { " · \($0)" } ?? ""))
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText)
+                    }
+                    if showRangeBar, let lo = f.fiftyTwoWeekLow,
+                       let hi = f.fiftyTwoWeekHigh, let price = currentPrice {
+                        FiftyTwoWeekBar(low: lo, high: hi, price: price)
+                            .padding(.vertical, 2)
                     }
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
                         ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
@@ -604,5 +624,73 @@ private struct FundamentalsCard: View {
                 }
             }
         }
+    }
+}
+
+/// Where today's price sits inside the 52-week range: a thin track with a
+/// marker dot, low/high values at the ends, and the current price above the
+/// marker. Reads at a glance what the "52w high / 52w low" rows only implied.
+private struct FiftyTwoWeekBar: View {
+    let low: Double
+    let high: Double
+    let price: Double
+
+    /// 0…1 position of the current price along the range (clamped — the live
+    /// quote can momentarily poke past a stale 52w bound).
+    private var t: CGFloat {
+        CGFloat(min(max((price - low) / (high - low), 0), 1))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("52-WEEK RANGE")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.mutedText)
+                .tracking(0.4)
+
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Theme.cardElevated)
+                        .frame(height: 5)
+                    // Filled portion up to the current price.
+                    Capsule()
+                        .fill(
+                            LinearGradient(colors: [Theme.accent.opacity(0.35), Theme.accent],
+                                           startPoint: .leading, endPoint: .trailing)
+                        )
+                        .frame(width: max(t * w, 5), height: 5)
+                    // Current-price marker with a surface ring so it reads on
+                    // top of the filled track.
+                    Circle()
+                        .fill(Theme.accent)
+                        .frame(width: 11, height: 11)
+                        .overlay(Circle().stroke(Theme.card, lineWidth: 2))
+                        .offset(x: t * w - 5.5)
+                }
+                .frame(height: 11)
+            }
+            .frame(height: 11)
+
+            HStack {
+                Text(Fmt.number(low))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(Theme.secondaryText)
+                Spacer()
+                Text(Fmt.number(price))
+                    .font(.system(.caption, design: .rounded).weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                Spacer()
+                Text(Fmt.number(high))
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(Theme.secondaryText)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("52-week range")
+        .accessibilityValue(
+            "Current \(Fmt.number(price)), between \(Fmt.number(low)) and \(Fmt.number(high))"
+        )
     }
 }

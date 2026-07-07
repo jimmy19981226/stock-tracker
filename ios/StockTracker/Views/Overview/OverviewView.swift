@@ -168,9 +168,11 @@ private struct NetWorthCard: View {
                             .font(.caption2.weight(.bold))
                             .tracking(0.5)
                             .foregroundStyle(trAccent)
-                        Text(Fmt.signedMoney(tr, currency: "TWD"))
+                        Text(Fmt.signedMoney(tr, currency: "TWD", digits: 0))
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
                             .foregroundStyle(Theme.pl(tr))
+                            .minimumScaleFactor(0.7)
+                            .lineLimit(1)
                             .rollingNumber(tr)
                         if let usd = combinedTotalReturnUsd {
                             Text("≈ \(Fmt.signedMoney(usd, currency: "USD"))")
@@ -303,6 +305,8 @@ private struct TotalEarnedCard: View {
                     }
                 }
                 .chartXSelection(value: $scrubDate)
+                // Tick as the scrub dot snaps from point to point.
+                .sensoryFeedback(.selection, trigger: nearestRow(to: scrubDate, in: rows)?.date)
                 .chartYAxis(.hidden)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: 4)) { value in
