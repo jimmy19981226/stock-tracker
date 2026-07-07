@@ -120,7 +120,11 @@ struct TradesView: View {
                     } label: {
                         Label(selectedYear.map { String($0) } ?? "All", systemImage: "calendar")
                             .font(.system(size: 14, weight: .medium))
+                            .fixedSize()
                     }
+                    // Same Menu label-sizing quirk as the holdings sort pill:
+                    // rebuild when the title changes so it never clips.
+                    .id(selectedYear)
                 }
                 Button { showImport = true } label: { Image(systemName: "text.viewfinder") }
                 Button { showAdd = true } label: { Image(systemName: "plus") }

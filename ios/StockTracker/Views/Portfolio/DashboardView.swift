@@ -450,12 +450,18 @@ private struct HoldingsSection: View {
                             Text(sort.rawValue)
                                 .font(.caption.weight(.semibold))
                         }
+                        .fixedSize()
                         .foregroundStyle(Theme.secondaryText)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
                         .background(Theme.cardElevated)
                         .clipShape(Capsule())
                     }
+                    // Menu freezes its label's size at first layout on some iOS
+                    // versions, clipping the text when the title changes
+                    // (e.g. "Gain %" → "Market valu…"). Rebuild it per sort so
+                    // the capsule always fits the current title.
+                    .id(sort)
                 }
             }
             .padding(.bottom, 4)
