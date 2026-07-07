@@ -101,8 +101,29 @@ final class SortSwitchDriver: XCTestCase {
         let quanta = app.staticTexts["2382"].firstMatch
         if quanta.waitForExistence(timeout: 5) {
             quanta.tap()
-            sleep(3)
+            // Wait for the loaded content (position card), not the skeleton.
+            _ = app.staticTexts["Your position"].waitForExistence(timeout: 45)
+            sleep(1)
             snap(app, "10-detail-after-sort")
+            app.navigationBars.buttons.firstMatch.tap()
+            sleep(1)
         }
+
+        // Direction toggle: Gain % low-to-high should put the worst gainer
+        // on top.
+        let sb2 = app.buttons["Gain %"].firstMatch
+        guard sb2.waitForExistence(timeout: 5) else { return }
+        var back = 0
+        while !sb2.isHittable && back < 10 {
+            app.swipeDown()
+            back += 1
+        }
+        sb2.tap()
+        sleep(1)
+        let lowToHigh = app.buttons["Low to high"].firstMatch
+        guard lowToHigh.waitForExistence(timeout: 5) else { return }
+        lowToHigh.tap()
+        sleep(2)
+        snap(app, "11-ascending")
     }
 }

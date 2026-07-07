@@ -4,8 +4,22 @@ import Charts
 struct DashboardView: View {
     let market: MarketCode
     @EnvironmentObject private var store: PortfolioStore
+    @State private var search = ""
 
     private var currency: String { market.currencyCode }
+
+    private var query: String {
+        search.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var visibleHoldings: [Holding] {
+        let all = store.holdings(for: market)
+        guard !query.isEmpty else { return all }
+        return all.filter {
+            $0.ticker.localizedCaseInsensitiveContains(query)
+                || store.name(for: $0.ticker).localizedCaseInsensitiveContains(query)
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -14,10 +28,13 @@ struct DashboardView: View {
                 PortfolioValueCard(market: market,
                                    liveTotal: store.summary(for: market)?.totalValue)
                 EarningsCard(points: store.earnings(for: market), currency: currency)
-                HoldingsSection(holdings: store.holdings(for: market), store: store)
+                HoldingsSection(holdings: visibleHoldings, store: store,
+                                searching: !query.isEmpty)
             }
             .padding(16)
         }
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .automatic),
+                    prompt: "Search holdings")
         .refreshable { await store.loadAll() }
     }
 }
@@ -412,40 +429,68 @@ private enum HoldingSort: String, CaseIterable, Identifiable {
     case gain = "Gain %"
     var id: String { rawValue }
 
-    func areInOrder(_ a: Holding, _ b: Holding) -> Bool {
+    private func key(_ h: Holding) -> Double? {
         switch self {
-        case .value: return (a.marketValue ?? -.infinity) > (b.marketValue ?? -.infinity)
-        case .today: return (a.todayChangePct ?? -.infinity) > (b.todayChangePct ?? -.infinity)
-        case .gain: return (a.unrealizedPlPct ?? -.infinity) > (b.unrealizedPlPct ?? -.infinity)
+        case .value: return h.marketValue
+        case .today: return h.todayChangePct
+        case .gain: return h.unrealizedPlPct
         }
+    }
+
+    func areInOrder(_ a: Holding, _ b: Holding) -> Bool {
+        let ka = key(a) ?? -.infinity
+        let kb = key(b) ?? -.infinity
+        // Ties fall back to market value so the order is still meaningful
+        // when the key is missing across the board (e.g. "Today's move"
+        // outside market hours, when there is no today change to sort by).
+        if ka == kb { return (a.marketValue ?? -.infinity) > (b.marketValue ?? -.infinity) }
+        return ka > kb
     }
 }
 
 private struct HoldingsSection: View {
     let holdings: [Holding]
     let store: PortfolioStore
+    var searching = false
     @State private var sort: HoldingSort = .value
+    @State private var ascending = false
 
     private var sorted: [Holding] {
-        holdings.sorted(by: sort.areInOrder)
+        let base = holdings.sorted(by: sort.areInOrder)
+        return ascending ? base.reversed() : base
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionHeader("Holdings") {
-                HStack(spacing: 10) {
+            // SectionHeader layout, but with the position count sitting right
+            // next to the "Holdings" title instead of by the sort pill.
+            HStack {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text("Holdings")
+                        .font(.system(.headline, design: .rounded).weight(.bold))
+                        .foregroundStyle(Theme.primaryText)
                     Text("\(holdings.count)")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.secondaryText)
+                }
+                Spacer()
+                HStack(spacing: 10) {
                     Menu {
                         Picker("Sort by", selection: $sort.animation(.snappy(duration: 0.4))) {
                             ForEach(HoldingSort.allCases) { s in
                                 Text(s.rawValue).tag(s)
                             }
                         }
+                        Divider()
+                        Button {
+                            withAnimation(.snappy(duration: 0.4)) { ascending.toggle() }
+                        } label: {
+                            Label("Low to high",
+                                  systemImage: ascending ? "checkmark" : "arrow.up")
+                        }
                     } label: {
                         HStack(spacing: 3) {
-                            Image(systemName: "arrow.up.arrow.down")
+                            Image(systemName: ascending ? "arrow.up" : "arrow.down")
                                 .font(.system(size: 11, weight: .semibold))
                             Text(sort.rawValue)
                                 .font(.caption.weight(.semibold))
@@ -459,15 +504,20 @@ private struct HoldingsSection: View {
                     }
                     // Menu freezes its label's size at first layout on some iOS
                     // versions, clipping the text when the title changes
-                    // (e.g. "Gain %" → "Market valu…"). Rebuild it per sort so
+                    // (e.g. "Gain %" → "Market valu…"). Rebuild it per state so
                     // the capsule always fits the current title.
-                    .id(sort)
+                    .id("\(sort.rawValue)-\(ascending)")
                 }
             }
             .padding(.bottom, 4)
             if holdings.isEmpty {
-                EmptyState(icon: "tray", title: "No positions",
-                           message: "Add a trade to start tracking.")
+                if searching {
+                    EmptyState(icon: "magnifyingglass", title: "No matches",
+                               message: "No holdings match your search.")
+                } else {
+                    EmptyState(icon: "tray", title: "No positions",
+                               message: "Add a trade to start tracking.")
+                }
             } else {
                 VStack(spacing: 0) {
                     ForEach(sorted) { h in
@@ -506,17 +556,29 @@ private struct HoldingRow: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
-                    // Solid pill = current price, colored by today's move.
-                    Text(Fmt.money(holding.currentPrice, currency: holding.currency))
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(.white)
-                        .rollingNumber(holding.currentPrice)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(Theme.pl(holding.todayChange) == Theme.mutedText
-                                    ? Theme.cardElevated : Theme.pl(holding.todayChange))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .animation(.snappy(duration: 0.5), value: Theme.pl(holding.todayChange))
+                    // Solid pill = current price, colored by today's move,
+                    // with today's % change alongside when the market's given
+                    // us one.
+                    HStack(spacing: 5) {
+                        Text(Fmt.money(holding.currentPrice, currency: holding.currency))
+                            .font(.system(.subheadline, design: .rounded).weight(.bold))
+                            .rollingNumber(holding.currentPrice)
+                        // Hidden when flat/no data (a wall of 0.00% after
+                        // hours says nothing).
+                        if let p = holding.todayChangePct, p != 0 {
+                            Text(Fmt.pct(p))
+                                .font(.system(.caption2, design: .rounded).weight(.bold))
+                                .opacity(0.9)
+                                .rollingNumber(p)
+                        }
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Theme.pl(holding.todayChange) == Theme.mutedText
+                                ? Theme.cardElevated : Theme.pl(holding.todayChange))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .animation(.snappy(duration: 0.5), value: Theme.pl(holding.todayChange))
                     // What the position is worth — the number checked most.
                     Text(Fmt.money(holding.marketValue, currency: holding.currency, digits: 0))
                         .font(.system(.caption, design: .rounded).weight(.semibold))

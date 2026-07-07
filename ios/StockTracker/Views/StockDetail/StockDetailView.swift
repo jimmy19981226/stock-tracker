@@ -442,10 +442,20 @@ private struct ChartCard: View {
         }
     }
 
+    /// Average cost, but only when it sits near the charted price range —
+    /// a far-away line would stretch the y-axis and flatten the curve.
+    private func avgCostLine(bars: [Bar]) -> Double? {
+        guard let avg = detail.position?.avgCost, avg > 0,
+              let lo = bars.map(\.close).min(),
+              let hi = bars.map(\.close).max(), hi > 0 else { return nil }
+        return avg >= lo * 0.7 && avg <= hi * 1.3 ? avg : nil
+    }
+
     var body: some View {
         let bars = makeBars()
         let dateRange = (bars.first?.date ?? .now)...(bars.last?.date ?? .now)
         let markers = makeMarkers(bars: bars, range: dateRange)
+        let avgCost = avgCostLine(bars: bars)
         let up = (bars.last?.close ?? 0) >= (bars.first?.close ?? 0)
         let color = up ? Theme.positive : Theme.negative
 
@@ -477,6 +487,23 @@ private struct ChartCard: View {
                                 Image(systemName: m.buy ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
                                     .font(.system(size: 9))
                                     .foregroundStyle(m.buy ? Theme.positive : Theme.negative)
+                            }
+                    }
+                    // Average cost: at a glance, is the line above or below
+                    // what I paid?
+                    if let avgCost {
+                        RuleMark(y: .value("Avg cost", avgCost))
+                            .foregroundStyle(Theme.mutedText.opacity(0.8))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .annotation(position: .top, alignment: .trailing,
+                                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                                Text("Avg \(Fmt.number(avgCost))")
+                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Theme.secondaryText)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Theme.cardElevated.opacity(0.9))
+                                    .clipShape(Capsule())
                             }
                     }
                     // Finger scrubbing: the rule + tip track the finger
