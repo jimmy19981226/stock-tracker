@@ -85,6 +85,37 @@ struct MarkdownText: View {
 
         case .rule:
             Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 2)
+
+        case let .table(header, rows):
+            // GFM table → a real grid (wide tables scroll horizontally).
+            ScrollView(.horizontal, showsIndicators: false) {
+                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
+                    GridRow {
+                        ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
+                            inline(cell)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Theme.secondaryText)
+                        }
+                    }
+                    Divider()
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        GridRow {
+                            ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                                inline(cell)
+                                    .font(.footnote)
+                                    .foregroundStyle(textColor)
+                            }
+                        }
+                    }
+                }
+                .padding(10)
+            }
+            .background(Theme.bg.opacity(0.6))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Theme.stroke, lineWidth: 1)
+            )
         }
     }
 
@@ -128,6 +159,7 @@ struct MarkdownText: View {
         case code(String)
         case quote([String])
         case rule
+        case table([String], [[String]])  // header cells, data rows
     }
 
     static func parse(_ text: String) -> [Block] {
@@ -206,12 +238,51 @@ struct MarkdownText: View {
                 blocks.append(.ordered(items)); continue
             }
 
+            // GFM table: `| a | b |` header, `|---|---|` separator, data rows.
+            if isTableRow(line), i + 1 < lines.count,
+               isTableSeparator(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
+                flushParagraph()
+                let header = tableCells(line)
+                i += 2 // skip header + separator
+                var rows: [[String]] = []
+                while i < lines.count {
+                    let l = lines[i].trimmingCharacters(in: .whitespaces)
+                    guard isTableRow(l) else { break }
+                    // Pad/trim to the header width so Grid rows line up.
+                    var cells = tableCells(l)
+                    while cells.count < header.count { cells.append("") }
+                    rows.append(Array(cells.prefix(header.count)))
+                    i += 1
+                }
+                blocks.append(.table(header, rows))
+                continue
+            }
+
             // Plain paragraph line
             paragraph.append(line)
             i += 1
         }
         flushParagraph()
         return blocks
+    }
+
+    private static func isTableRow(_ line: String) -> Bool {
+        line.hasPrefix("|") && line.dropFirst().contains("|")
+    }
+
+    /// `|---|:---:|` — only pipes, dashes, colons and spaces, with a dash.
+    private static func isTableSeparator(_ line: String) -> Bool {
+        guard line.hasPrefix("|"), line.contains("-") else { return false }
+        let allowed = Set("|-: ")
+        return line.allSatisfy { allowed.contains($0) }
+    }
+
+    private static func tableCells(_ line: String) -> [String] {
+        var l = line.trimmingCharacters(in: .whitespaces)
+        if l.hasPrefix("|") { l.removeFirst() }
+        if l.hasSuffix("|") { l.removeLast() }
+        return l.components(separatedBy: "|")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     /// Replace `[label](url)` whose label is itself a long URL with the URL's

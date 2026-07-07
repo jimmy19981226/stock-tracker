@@ -27,6 +27,24 @@ final class AssistantViewModel: ObservableObject {
     private var streamTask: Task<Void, Never>?
 
     init() {
+        // UI-test hook: seed a markdown-table reply to screenshot the renderer.
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_TABLE"] == "1" {
+            messages = [
+                ChatMessage(role: "user", content: "How are my TW holdings doing?"),
+                ChatMessage(role: "assistant", content: """
+                **Your TW Holdings Snapshot (NT$)**
+
+                | Metric | Value |
+                |---|---|
+                | Total market value | **NT$1,754,047** |
+                | Total cost | NT$1,485,309 |
+                | Unrealized P/L | **+NT$261,002** (+17.6%) |
+                | Today's P/L | NT$0 (market closed) |
+
+                Solid unrealized gain — 2330 (台積電) is doing the heavy lifting.
+                """),
+            ]
+        }
         // UI-test hook: seed a parsed-import review card to screenshot the flow.
         if ProcessInfo.processInfo.environment["UITEST_CHAT_IMPORT"] == "1" {
             messages = [ChatMessage(role: "user", content: "(attached a brokerage screenshot)")]

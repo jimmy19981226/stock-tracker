@@ -10,6 +10,18 @@ final class SortSwitchDriver: XCTestCase {
         try? png.write(to: URL(fileURLWithPath: "/tmp/sortswitch-\(name).png"))
     }
 
+    /// Seed a markdown-table chat reply and screenshot how it renders.
+    func testChatTableRendering() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["UITEST_CHAT_TABLE"] = "1"
+        app.launch()
+        let tab = app.buttons["Assistant"].firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 30))
+        tab.tap()
+        sleep(2)
+        snap(app, "t1-chat-table")
+    }
+
     /// Drive the Assistant tab: open the new provider/model header menu and
     /// screenshot it.
     func testAssistantModelMenu() throws {
