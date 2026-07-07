@@ -78,6 +78,16 @@ enum Fmt {
         return index == 0 ? .topLeading : .top
     }
 
+    /// Evenly spaced tick dates across the span — first at the start, last at
+    /// the end — so labels fill the axis edge-to-edge instead of clumping
+    /// wherever calendar-week boundaries happen to land (which left a bare
+    /// stretch on one side and a cramped label on the other).
+    static func axisDates(from first: Date, to last: Date, count: Int = 4) -> [Date] {
+        guard count > 1, last > first else { return [first] }
+        let step = last.timeIntervalSince(first) / Double(count - 1)
+        return (0..<count).map { first.addingTimeInterval(Double($0) * step) }
+    }
+
     /// Chart time-axis label format matched to the visible span: "Jun 5" for
     /// weeks–months, "Jun" for about a year, "2025" beyond that. A fixed
     /// month-only format repeats the same label on short ranges and drops the

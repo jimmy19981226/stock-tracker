@@ -405,7 +405,8 @@ private struct EarningsCard: View {
                 .sensoryFeedback(.selection, trigger: nearestRow(to: scrubDate, in: rows)?.date)
                 .chartYAxis(.hidden)
                 .chartXAxis {
-                    AxisMarks(values: .automatic(desiredCount: 4)) { value in
+                    AxisMarks(values: Fmt.axisDates(from: dateRange.lowerBound,
+                                                    to: dateRange.upperBound)) { value in
                         AxisValueLabel(format: Fmt.axisFormat(from: dateRange.lowerBound,
                                                               to: dateRange.upperBound),
                                        anchor: Fmt.axisAnchor(value.index, of: value.count))
