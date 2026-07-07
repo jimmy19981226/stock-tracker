@@ -8,8 +8,9 @@ this module covers the plain text-streaming path used by OpenAI, Anthropic
 build.nvidia.com). Each function yields raw text deltas so the SSE generator
 can forward them unchanged.
 
-NIM has no native web grounding, so :func:`plan_search_queries` +
-:func:`search_web` provide a DIY equivalent: a quick planner call decides
+Only Gemini has native web grounding, so :func:`plan_search_queries` +
+:func:`search_web` provide a DIY equivalent for the other providers (NIM,
+OpenAI, Claude): a quick planner call on the user's own provider decides
 whether the question needs fresh web data, DuckDuckGo (keyless, free) fetches
 the results, and ``ai.py`` injects them into the system prompt with the same
 ``[N]`` citation contract the Gemini path uses.
@@ -33,7 +34,8 @@ DEFAULT_MODELS = {
 History = Iterable[tuple[str, str]]  # (role, content), role in {"user","assistant"}
 
 
-def _openai_client(api_key: str, base_url: str | None = None):
+def _openai_client(api_key: str, base_url: str | None = None,
+                   timeout: float | None = None):
     try:
         from openai import OpenAI
     except ImportError as exc:  # pragma: no cover
@@ -41,7 +43,21 @@ def _openai_client(api_key: str, base_url: str | None = None):
             "The 'openai' package isn't installed on the server. "
             "Add openai to requirements.txt and redeploy."
         ) from exc
-    return OpenAI(api_key=api_key, base_url=base_url)
+    return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+
+
+def _nim_extra_body(model: str) -> dict | None:
+    """Request options NIM needs beyond the OpenAI schema.
+
+    NIM's DeepSeek reasoning models hang indefinitely unless the request
+    carries ``chat_template_kwargs`` picking a thinking mode. Thinking off =
+    direct answers, which is what a chat assistant wants (and what makes
+    responses start streaming immediately instead of after minutes of
+    hidden reasoning).
+    """
+    if "deepseek" in model.lower():
+        return {"chat_template_kwargs": {"thinking": False}}
+    return None
 
 
 _THINK_OPEN = "<think>"
@@ -88,7 +104,8 @@ def _filter_think(chunks: Iterable[str]) -> Iterator[str]:
 
 
 def _stream_chat_completions(client, model: str, system_prompt: str,
-                             history: History) -> Iterator[str]:
+                             history: History,
+                             extra_body: dict | None = None) -> Iterator[str]:
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
     for role, content in history:
         messages.append({
@@ -102,6 +119,7 @@ def _stream_chat_completions(client, model: str, system_prompt: str,
         stream=True,
         max_tokens=1500,
         temperature=0.4,
+        extra_body=extra_body,
     )
 
     def deltas() -> Iterator[str]:
@@ -126,9 +144,13 @@ def stream_openai(api_key: str, model: str | None, system_prompt: str,
 
 def stream_nvidia(api_key: str, model: str | None, system_prompt: str,
                   history: History) -> Iterator[str]:
-    client = _openai_client(api_key, base_url=NVIDIA_BASE_URL)
+    # 120s cap so a queued/hung NIM request errors out instead of spinning
+    # forever (free-tier NIM queues under load).
+    client = _openai_client(api_key, base_url=NVIDIA_BASE_URL, timeout=120.0)
+    chosen = model or DEFAULT_MODELS["nvidia"]
     return _stream_chat_completions(
-        client, model or DEFAULT_MODELS["nvidia"], system_prompt, history
+        client, chosen, system_prompt, history,
+        extra_body=_nim_extra_body(chosen),
     )
 
 
@@ -175,15 +197,47 @@ def stream(provider: str, api_key: str, model: str | None, system_prompt: str,
 
 
 # ---------------------------------------------------------------------------
-# DIY web grounding for providers without a native search tool (NVIDIA NIM).
+# DIY web grounding for providers without a native search tool
+# (NVIDIA NIM, OpenAI, Claude — Gemini uses its native google_search tool).
 # ---------------------------------------------------------------------------
 
 _JSON_OBJ = re.compile(r"\{[^{}]*\}")
 
 
-def plan_search_queries(api_key: str, model: str | None, user_text: str,
-                        today: str) -> list[str]:
-    """One quick NIM call that decides whether the question needs the web.
+def _plan_completion(provider: str, api_key: str, model: str,
+                     system_prompt: str, user_text: str) -> str:
+    """One small non-streaming completion on the user's chosen provider.
+    Short timeout — this gates the visible answer."""
+    if provider == "claude":
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key, timeout=15.0)
+        resp = client.messages.create(
+            model=model,
+            max_tokens=300,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_text}],
+        )
+        return "".join(b.text for b in resp.content if b.type == "text")
+
+    base_url = NVIDIA_BASE_URL if provider == "nvidia" else None
+    client = _openai_client(api_key, base_url=base_url, timeout=15.0)
+    resp = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_text},
+        ],
+        max_tokens=200,
+        temperature=0.0,
+        extra_body=_nim_extra_body(model) if provider == "nvidia" else None,
+    )
+    return resp.choices[0].message.content or ""
+
+
+def plan_search_queries(provider: str, api_key: str, model: str | None,
+                        user_text: str, today: str) -> list[str]:
+    """One quick model call that decides whether the question needs the web.
 
     Returns up to 3 search queries, or [] when the portfolio context alone
     should answer it. Never raises — grounding is best-effort and must not
@@ -201,17 +255,9 @@ def plan_search_queries(api_key: str, model: str | None, user_text: str,
         "and company name in the query."
     )
     try:
-        client = _openai_client(api_key, base_url=NVIDIA_BASE_URL)
-        resp = client.chat.completions.create(
-            model=model or DEFAULT_MODELS["nvidia"],
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": user_text[:2000]},
-            ],
-            max_tokens=600,  # headroom: reasoning models may think before the JSON
-            temperature=0.0,
-        )
-        text = (resp.choices[0].message.content or "").strip()
+        chosen = model or DEFAULT_MODELS.get(provider) or DEFAULT_MODELS["nvidia"]
+        text = _plan_completion(provider, api_key, chosen, prompt,
+                                user_text[:2000]).strip()
         # Reasoning models may wrap the JSON in commentary — take the last
         # flat {...} that parses and carries a "queries" key.
         for blob in reversed(_JSON_OBJ.findall(text)):

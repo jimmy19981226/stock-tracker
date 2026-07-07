@@ -324,12 +324,19 @@ def chat(
                 prompt_for_stream = system_prompt
                 sources: list[dict] = []
 
-                if provider == "nvidia":
+                # DIY grounding for every non-Gemini provider (Gemini uses
+                # its native google_search tool). Grounding runs before any
+                # answer tokens — tell the UI what's happening so it doesn't
+                # look hung. Clients that don't know "status" events ignore
+                # them.
+                if provider in ("nvidia", "openai", "claude"):
+                    yield sse({"type": "status", "text": "Thinking…"})
                     today = datetime.now(_TAIPEI).date().isoformat()
                     queries = ai_providers.plan_search_queries(
-                        api_key, chosen_model, user_text, today
+                        provider, api_key, chosen_model, user_text, today
                     )
                     if queries:
+                        yield sse({"type": "status", "text": "Searching the web…"})
                         sources = ai_providers.search_web(queries)
                     if sources:
                         lines = [
