@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
 import { money, signedMoney, pct, shares, plClass, prettyDate } from "../format.js";
 import Sparkline from "./Sparkline.jsx";
@@ -9,30 +9,53 @@ export default function Dashboard({ onSignOut }) {
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState(null);
 
-  async function load() {
+  const inFlight = useRef(false);
+
+  // Price-driven numbers (quotes, values, P/L). Polled every 5s — the backend
+  // quote cache has a matching 5s TTL, so each poll sees fresh prices.
+  async function loadQuotes() {
+    if (inFlight.current) return; // don't stack requests on a slow backend
+    inFlight.current = true;
     try {
-      const [overview, holdings, summary, earnings] = await Promise.all([
-        api.overview(),
-        api.holdings(),
-        api.summary(),
-        api.earnings(365),
-      ]);
-      setData({ overview, holdings, summary, earnings });
+      const [overview, holdings] = await Promise.all([api.overview(), api.holdings()]);
+      setData((prev) => ({ ...prev, overview, holdings }));
       setUpdatedAt(new Date());
       setError(null);
     } catch (err) {
       if (err.status === 401) return onSignOut();
       setError(err.message || "Couldn’t load the portfolio.");
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   }
 
+  // Earnings history only moves on dividends/sells — a slow cadence is plenty.
+  async function loadEarnings() {
+    try {
+      const earnings = await api.earnings(365);
+      setData((prev) => ({ ...prev, earnings }));
+    } catch (err) {
+      if (err.status === 401) return onSignOut();
+      /* transient — keep showing the last good series */
+    }
+  }
+
   useEffect(() => {
-    load();
-    // Light polling so the dashboard stays fresh on a desktop left open.
-    const id = setInterval(load, 30000);
-    return () => clearInterval(id);
+    loadQuotes();
+    loadEarnings();
+    // Fast poll for live prices; pause while the tab is hidden so a
+    // backgrounded dashboard doesn't hammer the backend.
+    const quotesId = setInterval(() => {
+      if (document.visibilityState === "visible") loadQuotes();
+    }, 5000);
+    const earningsId = setInterval(() => {
+      if (document.visibilityState === "visible") loadEarnings();
+    }, 60000);
+    return () => {
+      clearInterval(quotesId);
+      clearInterval(earningsId);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -128,7 +151,7 @@ export default function Dashboard({ onSignOut }) {
         <Holdings holdings={data?.holdings || []} />
 
         <footer className="updated">
-          {updatedAt && `Updated ${updatedAt.toLocaleTimeString()}`} · auto-refreshes every 30s · read-only
+          {updatedAt && `Updated ${updatedAt.toLocaleTimeString()}`} · auto-refreshes every 5s · read-only
         </footer>
       </main>
     </div>
