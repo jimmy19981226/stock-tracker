@@ -64,8 +64,12 @@ def _fetch_one(bare: str) -> QuoteData | None:
         # know which a code is, so try .TW then fall back to .TWO.
         meta = _fetch_meta(f"{bare}.TW") or _fetch_meta(f"{bare}.TWO")
     else:
-        # US (and other already-qualified) symbols are fetched as-is.
+        # US (and other already-qualified) symbols are fetched as-is. Class
+        # shares are dashed on Yahoo (BRK-B), while brokers print them dotted
+        # (BRK.B) — fall back to the dashed form when the dotted one misses.
         meta = _fetch_meta(bare)
+        if meta is None and "." in bare and not bare.startswith("^"):
+            meta = _fetch_meta(bare.replace(".", "-"))
     if meta is None:
         return None
 

@@ -109,9 +109,11 @@ _load_last_good()
 
 
 def _bare(ticker: str) -> str:
-    """Strip ``.TW``/``.TWO`` suffix to get the bare numeric code."""
+    """Strip ``.TW``/``.TWO`` suffix to get the bare numeric code. Dots in
+    US symbols (``BRK.B``) are kept — they'd fail ``_is_tw`` either way."""
     t = ticker.strip().upper()
-    return t.split(".", 1)[0] if "." in t else t
+    base, _, suffix = t.partition(".")
+    return base if suffix in ("TW", "TWO") else t
 
 
 def _is_tw(bare: str) -> bool:

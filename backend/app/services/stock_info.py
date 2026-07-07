@@ -37,9 +37,11 @@ _lock = Lock()
 
 
 def _bare_tw(ticker: str) -> str:
-    """Strip .TW/.TWO suffix to get the numeric code FinMind expects."""
+    """Strip .TW/.TWO suffix to get the numeric code FinMind expects. Dots in
+    US symbols (BRK.B) are kept — those fail the numeric check anyway."""
     t = ticker.strip().upper()
-    return t.split(".", 1)[0] if "." in t else t
+    base, _, suffix = t.partition(".")
+    return base if suffix in ("TW", "TWO") else t
 
 
 def _yticker(ticker: str):

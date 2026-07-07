@@ -48,6 +48,18 @@ def _compute_statuses(trades: list[Trade]) -> dict[int, str]:
     return statuses
 
 
+def _status_of(db: Session, trade: Trade) -> str:
+    """FIFO open/closed status for one trade, recomputed over its ticker's
+    rows — so create/update responses carry the same status the list does
+    (a bare sell used to echo the schema default "open")."""
+    rows = (
+        db.query(Trade)
+        .filter(Trade.user_id == trade.user_id, Trade.ticker == trade.ticker)
+        .all()
+    )
+    return _compute_statuses(rows).get(trade.id, "open")
+
+
 def _to_out(t: Trade, status: str) -> dict:
     return {
         "id": t.id,
@@ -99,7 +111,7 @@ def create_trade(
     db.add(trade)
     db.commit()
     db.refresh(trade)
-    return trade
+    return _to_out(trade, _status_of(db, trade))
 
 
 @router.put("/{trade_id}", response_model=TradeOut)
@@ -126,7 +138,7 @@ def update_trade(
     trade.market = payload.market or quotes.market_of(trade.ticker)
     db.commit()
     db.refresh(trade)
-    return trade
+    return _to_out(trade, _status_of(db, trade))
 
 
 @router.delete("/{trade_id}", status_code=status.HTTP_204_NO_CONTENT)

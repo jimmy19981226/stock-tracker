@@ -73,8 +73,11 @@ class QuoteData:
 
 
 def _bare(ticker: str) -> str:
+    """Strip a ``.TW``/``.TWO`` exchange suffix. A dot in a US symbol
+    (``BRK.B``) is part of the ticker, not an exchange suffix — keep it."""
     t = ticker.strip().upper()
-    return t.split(".", 1)[0] if "." in t else t
+    base, _, suffix = t.partition(".")
+    return base if suffix in ("TW", "TWO") else t
 
 
 def get_quote(ticker: str) -> QuoteData | None:
