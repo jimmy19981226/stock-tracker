@@ -612,14 +612,16 @@ private struct ChatBubble: View {
         }
     }
 
-    /// Strip the internal `<!--meta:{...}-->` header the backend prepends to the
-    /// canonical reply (the web app hides it too).
+    /// Strip the internal `<!--meta:{...}-->` header(s) the backend prepends to
+    /// the canonical reply. Loops because older chats can carry more than one
+    /// (models used to see the header in history and echo their own copy).
     static func stripMeta(_ s: String) -> String {
-        var out = s
-        if out.hasPrefix("<!--meta:"), let r = out.range(of: "-->") {
+        var out = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        while out.hasPrefix("<!--meta:"), let r = out.range(of: "-->") {
             out = String(out[r.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        return out
     }
 }
 

@@ -39,6 +39,9 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 DEFAULT_MODEL = os.environ.get("GOOGLE_AI_MODEL", "gemini-2.5-flash")
 MAX_HISTORY_TURNS = 20  # cap conversation length sent to the model
+
+# One or more leading <!--meta:{...}--> headers on a persisted assistant reply.
+_META_HEADER_RE = re.compile(r"^(?:\s*<!--meta:.*?-->\s*)+", re.DOTALL)
 MAX_TITLE_LEN = 60
 
 
@@ -212,8 +215,11 @@ def chat(
         db.add(ChatMessage(chat_id=chat_obj.id, role="user", content=user_text))
         db.flush()
 
+        # Strip the internal <!--meta:{...}--> headers from persisted replies
+        # before replaying them to the model — models imitate what they see
+        # in history and start emitting fake meta lines into visible answers.
         history_msgs = [
-            (m.role, m.content)
+            (m.role, _META_HEADER_RE.sub("", m.content))
             for m in list(chat_obj.messages)[-MAX_HISTORY_TURNS:]
         ]
         focus_tickers = _detect_tickers([c for _, c in history_msgs])[:3]
