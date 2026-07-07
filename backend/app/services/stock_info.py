@@ -112,12 +112,24 @@ def get_fundamentals(ticker: str) -> dict[str, Any]:
         info = {}
 
     # yfinance is inconsistent across versions about whether dividendYield
-    # is returned as a decimal (0.01 = 1%) or a percentage (1.0 = 1%). Some
-    # tickers also return 0 instead of None when there's no dividend.
-    # Normalize: anything > 1 is treated as a percentage and divided by 100,
-    # so callers can always do `value * 100` for display.
+    # is returned as a decimal (0.01 = 1%) or a percentage (1.0 = 1%), and the
+    # old ">1 means percentage" heuristic misread sub-1% percentages as
+    # 10x-100x decimals (TSMC's 0.98 → shown as 98%). When the annual dividend
+    # rate and a price are available, compute the yield directly — that form
+    # is unambiguous. Otherwise fall back to the heuristic, treating anything
+    # above 25% (implausible as a real yield) as a percentage. Callers always
+    # get a decimal (`value * 100` for display).
     raw_yield = info.get("dividendYield")
-    if raw_yield is not None and raw_yield > 1:
+    _rate = info.get("dividendRate")
+    _price = (
+        info.get("currentPrice")
+        or info.get("regularMarketPrice")
+        or info.get("regularMarketPreviousClose")
+        or info.get("previousClose")
+    )
+    if _rate and _price:
+        raw_yield = _rate / _price
+    elif raw_yield is not None and raw_yield > 0.25:
         raw_yield = raw_yield / 100
 
     out = {
