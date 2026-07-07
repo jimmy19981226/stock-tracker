@@ -260,7 +260,8 @@ final class APIClient {
         message: String,
         onInit: @escaping @MainActor (Int, String) -> Void,
         onChunk: @escaping @MainActor (String) -> Void,
-        onDone: @escaping @MainActor (String, [String]) -> Void
+        onDone: @escaping @MainActor (String, [String]) -> Void,
+        onStatus: @escaping @MainActor (String) -> Void = { _ in }
     ) async throws {
         var req = URLRequest(url: try url("/api/ai/chat"))
         req.httpMethod = "POST"
@@ -303,6 +304,10 @@ final class APIClient {
                 await onInit(evt["chat_id"] as? Int ?? 0, evt["title"] as? String ?? "New chat")
             case "chunk":
                 if let delta = evt["delta"] as? String { await onChunk(delta) }
+            case "status":
+                // Pre-answer progress ("Searching the web…") so the UI isn't
+                // a silent spinner while the backend grounds the question.
+                if let text = evt["text"] as? String { await onStatus(text) }
             case "done":
                 await onDone(evt["content"] as? String ?? "", evt["queries"] as? [String] ?? [])
             case "error":

@@ -7,6 +7,8 @@ final class AssistantViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var streamingText = ""
     @Published var isStreaming = false
+    /// Backend progress before the first answer token ("Searching the web…").
+    @Published var streamStatus: String?
     @Published var input = ""
     @Published var status: AiStatus?
     @Published var error: String?
@@ -106,6 +108,7 @@ final class AssistantViewModel: ObservableObject {
                     },
                     onChunk: { [weak self] delta in
                         guard let self, !Task.isCancelled else { return }
+                        self.streamStatus = nil
                         self.streamingText += delta
                     },
                     onDone: { [weak self] content, _ in
@@ -113,6 +116,11 @@ final class AssistantViewModel: ObservableObject {
                         let final = content.isEmpty ? self.streamingText : content
                         self.messages.append(ChatMessage(role: "assistant", content: final))
                         self.streamingText = ""
+                        self.streamStatus = nil
+                    },
+                    onStatus: { [weak self] text in
+                        guard let self, !Task.isCancelled else { return }
+                        self.streamStatus = text
                     }
                 )
             } catch {
@@ -135,6 +143,7 @@ final class AssistantViewModel: ObservableObject {
         chatId = nil
         messages = []
         streamingText = ""
+        streamStatus = nil
         isStreaming = false
         error = nil
         cancelImport()
@@ -272,11 +281,25 @@ struct AssistantView: View {
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
 
+    // Mirrors of the persisted provider/model so the header re-renders when
+    // they're switched from the in-chat menu.
+    @State private var activeProvider = AISettings.activeProvider
+    @State private var activeModel = AISettings.selectedModel(for: AISettings.activeProvider)
+
     /// Short label for the currently active model, e.g. "Gemini 2.5 Flash".
     private var activeModelLabel: String {
-        let provider = AISettings.activeProvider
-        let modelId = AISettings.selectedModel(for: provider)
-        return provider.availableModels.first { $0.id == modelId }?.label ?? modelId
+        activeProvider.availableModels.first { $0.id == activeModel }?.label ?? activeModel
+    }
+
+    /// Switch provider/model right from the chat header. Keys still live in
+    /// Settings — picking a keyless provider routes there.
+    private func select(provider: AIProvider, model: String) {
+        AISettings.activeProvider = provider
+        AISettings.setModel(model, for: provider)
+        activeProvider = provider
+        activeModel = model
+        providerHasKey = AISettings.hasKey(for: provider)
+        if !providerHasKey { showSettings = true }
     }
 
     var body: some View {
@@ -291,14 +314,53 @@ struct AssistantView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                VStack(spacing: 1) {
-                    Text("Assistant")
-                        .font(.headline)
-                        .foregroundStyle(Theme.primaryText)
-                    Text("\(AISettings.activeProvider.displayName) · \(activeModelLabel)")
-                        .font(.system(size: 11, weight: .regular))
+                // Tap the title to switch provider/model without a trip to
+                // Settings (keys still live there).
+                Menu {
+                    ForEach(AIProvider.allCases) { provider in
+                        Menu {
+                            ForEach(provider.availableModels) { m in
+                                Button {
+                                    select(provider: provider, model: m.id)
+                                } label: {
+                                    if provider == activeProvider && m.id == activeModel {
+                                        Label(m.label, systemImage: "checkmark")
+                                    } else {
+                                        Text(m.label)
+                                    }
+                                }
+                            }
+                        } label: {
+                            if AISettings.hasKey(for: provider) {
+                                Text(provider.displayName)
+                            } else {
+                                Label(provider.displayName, systemImage: "key")
+                            }
+                        }
+                    }
+                    Divider()
+                    Button { showSettings = true } label: {
+                        Label("API keys & settings…", systemImage: "gearshape")
+                    }
+                } label: {
+                    VStack(spacing: 1) {
+                        Text("Assistant")
+                            .font(.headline)
+                            .foregroundStyle(Theme.primaryText)
+                        HStack(spacing: 3) {
+                            Text("\(activeProvider.displayName) · \(activeModelLabel)")
+                                .font(.system(size: 11, weight: .regular))
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 8, weight: .semibold))
+                        }
                         .foregroundStyle(Theme.mutedText)
+                    }
+                    .fixedSize()
                 }
+                // Menu freezes its label's size at first layout on some iOS
+                // versions (see the holdings sort pill) — rebuild per selection
+                // so the subtitle never clips.
+                .id("\(activeProvider.rawValue)-\(activeModel)")
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button { showHistory = true } label: {
@@ -317,7 +379,12 @@ struct AssistantView: View {
             }
         }
         .sheet(isPresented: $showHistory) { ChatHistoryView(vm: vm) }
-        .sheet(isPresented: $showSettings) { SettingsView() }
+        .sheet(isPresented: $showSettings, onDismiss: {
+            // Settings may have changed the provider/model/keys — resync.
+            activeProvider = AISettings.activeProvider
+            activeModel = AISettings.selectedModel(for: activeProvider)
+            providerHasKey = AISettings.hasKey(for: activeProvider)
+        }) { SettingsView() }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             photoItem = nil
@@ -331,7 +398,9 @@ struct AssistantView: View {
         }
         .task { await vm.loadStatus() }
         .onAppear {
-            providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
+            activeProvider = AISettings.activeProvider
+            activeModel = AISettings.selectedModel(for: activeProvider)
+            providerHasKey = AISettings.hasKey(for: activeProvider)
             if ProcessInfo.processInfo.environment["UITEST_HISTORY"] == "1" { showHistory = true }
         }
     }
@@ -365,8 +434,17 @@ struct AssistantView: View {
                     if vm.isStreaming {
                         Group {
                             if vm.streamingText.isEmpty {
-                                TypingIndicator()
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                HStack(spacing: 10) {
+                                    TypingIndicator()
+                                    if let status = vm.streamStatus {
+                                        Text(status)
+                                            .font(.subheadline)
+                                            .foregroundStyle(Theme.secondaryText)
+                                            .transition(.opacity)
+                                    }
+                                }
+                                .animation(.easeInOut(duration: 0.25), value: vm.streamStatus)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             } else {
                                 ChatBubble(message: ChatMessage(role: "assistant",
                                                                 content: vm.streamingText))

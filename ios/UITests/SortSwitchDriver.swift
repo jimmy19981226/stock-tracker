@@ -10,6 +10,30 @@ final class SortSwitchDriver: XCTestCase {
         try? png.write(to: URL(fileURLWithPath: "/tmp/sortswitch-\(name).png"))
     }
 
+    /// Drive the Assistant tab: open the new provider/model header menu and
+    /// screenshot it.
+    func testAssistantModelMenu() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let tab = app.buttons["Assistant"].firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: 30))
+        tab.tap()
+        sleep(2)
+        snap(app, "a1-assistant")
+        // The principal title is a Menu labeled "Assistant · <provider>".
+        let title = app.staticTexts["Assistant"].firstMatch
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        title.tap()
+        sleep(1)
+        snap(app, "a2-model-menu")
+        let nvidia = app.buttons["NVIDIA NIM"].firstMatch
+        if nvidia.waitForExistence(timeout: 5) {
+            nvidia.tap()
+            sleep(1)
+            snap(app, "a3-nvidia-models")
+        }
+    }
+
     func testSwitchHoldingsSort() throws {
         let app = XCUIApplication()
         app.launch()
