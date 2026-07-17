@@ -1,15 +1,23 @@
-"""Quote-source status API.
+"""Quote-source status + live-price streaming API.
 
 GET /api/quotes/sources live-probes each TW quote source so the app can show
 which ones are usable from this deployment and let the user pick one. The
 pick itself travels back per request as the ``X-Quote-Source`` header
 ("auto" | "mis" | "yahoo"), applied by middleware in main.py.
+
+GET /api/quotes/stream is an SSE feed of real-time US price ticks (fan-out of
+the Yahoo WebSocket, see services/live_quotes.py). Clients get a snapshot of
+the current live table on connect, then one event per tick.
 """
+import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
-from ..services import quote_relay_client, quotes, tw_quotes, yahoo_quotes
+from ..auth import get_current_user
+from ..services import live_quotes, quote_relay_client, quotes, tw_quotes, yahoo_quotes
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 
@@ -48,3 +56,33 @@ def quote_sources():
             "realtime": False,
         },
     }
+
+
+@router.get("/stream")
+async def quote_stream(user: str = Depends(get_current_user)):
+    """SSE stream of real-time US price ticks.
+
+    Emits a ``snapshot`` event on connect (the current live table), then a
+    ``tick`` event per trade print. A comment line goes out every 15s so
+    proxies don't reap idle connections while the US market is closed.
+    Prices are public data — auth only gates access, no per-user filtering.
+    """
+    q = live_quotes.register()
+
+    async def gen():
+        try:
+            yield f"data: {json.dumps({'type': 'snapshot', 'ticks': live_quotes.snapshot()})}\n\n"
+            while True:
+                try:
+                    payload = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield f"data: {json.dumps(payload)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keep-alive\n\n"
+        finally:
+            live_quotes.unregister(q)
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

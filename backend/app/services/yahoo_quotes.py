@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Iterable
@@ -43,7 +45,8 @@ _lock = Lock()
 
 
 def _fetch_meta(sym: str) -> dict | None:
-    url = _CHART.format(sym=sym)
+    # Index symbols carry a caret (^TWII, ^GSPC) — encode it for the URL path.
+    url = _CHART.format(sym=urllib.parse.quote(sym, safe=""))
     try:
         req = urllib.request.Request(url, headers=_HEADERS)
         with urllib.request.urlopen(req, timeout=8) as resp:
@@ -146,4 +149,33 @@ def get_quotes(bares: Iterable[str]) -> dict[str, QuoteData]:
                 if b in out:
                     _cache[b] = (now, out[b])
 
+    _overlay_live(out)
     return out
+
+
+def _overlay_live(out: dict[str, QuoteData]) -> None:
+    """Replace US prices with fresher WebSocket ticks (see live_quotes.py).
+
+    Only while the US session is open — after the close, the REST snapshot's
+    official close price is authoritative and the tick table goes stale.
+    """
+    us = [b for b in out if market_of(b) == "US"]
+    if not us:
+        return
+    from . import live_quotes, markets
+
+    if not markets.is_market_open("US"):
+        return
+    now = time.time()
+    for b in us:
+        tick = live_quotes.get(b)
+        # 6.5h = one full US session; older ticks are a previous session's.
+        if tick is None or now - tick.ts > 6.5 * 3600:
+            continue
+        q = out[b]
+        out[b] = replace(
+            q,
+            price=tick.price,
+            previous_close=tick.prev_close if tick.prev_close is not None else q.previous_close,
+            volume=tick.day_volume if tick.day_volume is not None else q.volume,
+        )

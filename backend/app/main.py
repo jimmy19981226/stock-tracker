@@ -18,6 +18,7 @@ from .routers import (
     ai,
     data,
     dividends,
+    indices,
     markets,
     mobile,
     portfolio,
@@ -26,6 +27,7 @@ from .routers import (
     trades,
     webauth,
 )
+from .services import live_quotes
 from .services import quotes as quote_service
 from .services import xlsx_io
 
@@ -71,6 +73,13 @@ def _startup() -> None:
     _seed_from_disk()
 
 
+@app.on_event("startup")
+async def _start_live_quotes() -> None:
+    # Async handler: the Yahoo WebSocket listener must be created on the
+    # running event loop (see services/live_quotes.py).
+    live_quotes.start()
+
+
 def _seed_from_disk() -> None:
     """Load the portfolio Excel workbook on startup if both tables are empty.
 
@@ -111,6 +120,7 @@ app.include_router(ai.router)
 app.include_router(stock.router)
 app.include_router(markets.router)
 app.include_router(quotes.router)
+app.include_router(indices.router)
 app.include_router(mobile.router)
 app.include_router(mobile.page_router)
 app.include_router(webauth.router)
