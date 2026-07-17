@@ -88,6 +88,8 @@ code {
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   padding: 18px;
+  overflow: hidden; /* nothing paints past the card edge, ever */
+  min-width: 0;     /* let cards shrink inside grid tracks */
 }
 .card-head {
   display: flex;
@@ -111,9 +113,9 @@ code {
 .market.empty { display: flex; flex-direction: column; justify-content: center; min-height: 120px; }
 .market-rows { display: flex; flex-direction: column; gap: 8px; }
 
-.kv { display: flex; align-items: baseline; justify-content: space-between; font-size: 14px; }
-.kv .k { color: var(--muted); }
-.kv .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+.kv { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; }
+.kv .k { color: var(--muted); flex-shrink: 0; }
+.kv .v { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 0; text-align: right; }
 .v-extra { color: var(--muted); margin-left: 8px; font-weight: 500; font-size: 12px; }
 
 /* ---- Total Return (distinct violet accent vs. the green/red rows) -------- */
@@ -150,9 +152,11 @@ code {
 .total-return-badge {
   display: inline-flex;
   align-items: baseline;
-  gap: 10px;
+  flex-wrap: wrap; /* wrap at any width — the note is long */
+  gap: 6px 10px;
   margin-top: 12px;
   padding: 8px 14px;
+  max-width: 100%;
   background: rgba(167, 139, 250, 0.1);
   border: 1px solid rgba(167, 139, 250, 0.3);
   border-radius: 12px;
@@ -162,7 +166,6 @@ code {
 .tr-usd { color: var(--secondary); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; }
 .tr-note { color: var(--muted); font-size: 11px; }
 @media (max-width: 560px) {
-  .total-return-badge { flex-wrap: wrap; gap: 6px 10px; }
   .tr-note { flex-basis: 100%; }
 }
 
@@ -176,7 +179,9 @@ code {
   border-bottom: 1px solid var(--stroke);
   align-items: center;
   font-variant-numeric: tabular-nums;
+  font-size: 15px;
 }
+.hrow > span { min-width: 0; } /* grid cells may shrink below content width */
 .hrow:last-child { border-bottom: none; }
 .hrow.head { color: var(--muted); font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--stroke); }
 .hrow.group {
@@ -307,7 +312,12 @@ button.ghost {
 /* ---- Mobile ------------------------------------------------------------- */
 @media (max-width: 560px) {
   .market-cards { grid-template-columns: 1fr; }
-  .hrow { grid-template-columns: 1.3fr 1fr 1.1fr; }
+  /* 3 columns (Price hidden): keep the row's font small enough that an
+     8-digit signed NT$ amount fits its track instead of spilling out of
+     the card. */
+  .hrow { grid-template-columns: 1.1fr 1fr 1.2fr; font-size: 12.5px; gap: 6px; }
   .hrow .col-price { display: none; }
   .hrow > span:nth-child(2) { display: none; } /* hide Price column on small screens */
+  .mini { font-size: 10px; }
+  .tk-name { font-size: 11px; }
 }
