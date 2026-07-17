@@ -560,7 +560,12 @@ struct AssistantView: View {
             .disabled(!vm.canSend)
         }
         .padding(12)
-        .background(Theme.card)
+        // Frosted compose bar over the gradient — matches the index strip
+        // and the iOS-native look, instead of a flat tinted band.
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.stroke).frame(height: 1)
+        }
     }
 }
 
@@ -600,7 +605,13 @@ private struct ChatBubble: View {
                     .foregroundStyle(.black)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(Theme.accent)
+                    // Slight top-lit gradient so the bubble reads as a lit
+                    // surface, not a flat color chip.
+                    .background(
+                        LinearGradient(
+                            colors: [Theme.accent.opacity(0.92), Theme.accent],
+                            startPoint: .top, endPoint: .bottom)
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .textSelection(.enabled)
             }
@@ -709,9 +720,7 @@ private struct ImportReviewCard: View {
                     .foregroundStyle(Theme.secondaryText)
             }
         }
-        .padding(14)
-        .background(Theme.card)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .cardStyle(padding: 14)
     }
 
     private func importRow(isOn: Binding<Bool>, title: String, tag: String,
