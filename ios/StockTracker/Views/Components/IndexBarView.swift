@@ -141,15 +141,17 @@ private struct IndexDetailCard: View {
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedText)
                 }
-                HStack(spacing: 8) {
-                    Text(Fmt.number(quote.price, digits: 2))
-                        .font(.system(.title3, design: .rounded).weight(.bold))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.primaryText)
-                        .contentTransition(.numericText())
-                        .animation(.easeOut(duration: 0.25), value: quote.price)
-                    ChangeLabel(change: quote.change, changePct: quote.changePct, size: .caption)
-                }
+                // Price and change stacked on separate single lines — a long
+                // index level must never wrap mid-number.
+                Text(Fmt.number(quote.price, digits: 2))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(Theme.primaryText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.25), value: quote.price)
+                ChangeLabel(change: quote.change, changePct: quote.changePct, size: .caption)
                 if let live = detail?.live {
                     HStack(spacing: 10) {
                         ohl("O", live.dayOpen)
@@ -226,6 +228,8 @@ private struct ChangeLabel: View {
                 }
             }
             .foregroundStyle(Theme.pl(change))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .contentTransition(.numericText())
             .animation(.easeOut(duration: 0.25), value: change)
         }
