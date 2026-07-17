@@ -155,6 +155,18 @@ final class AssistantViewModel: ObservableObject {
         }
     }
 
+    /// Stop generation mid-stream, keeping whatever has arrived as the reply.
+    func stopStreaming() {
+        streamTask?.cancel()
+        streamTask = nil
+        if !streamingText.isEmpty {
+            messages.append(ChatMessage(role: "assistant", content: streamingText))
+        }
+        streamingText = ""
+        streamStatus = nil
+        isStreaming = false
+    }
+
     func reset() {
         streamTask?.cancel()
         streamTask = nil
@@ -464,8 +476,9 @@ struct AssistantView: View {
                                 .animation(.easeInOut(duration: 0.25), value: vm.streamStatus)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             } else {
+                                // Trailing ▍ = the live-generation cursor.
                                 ChatBubble(message: ChatMessage(role: "assistant",
-                                                                content: vm.streamingText))
+                                                                content: vm.streamingText + " ▍"))
                             }
                         }
                         .id("streaming")
@@ -503,6 +516,8 @@ struct AssistantView: View {
             }
             // Swipe down on the transcript to dismiss the keyboard.
             .scrollDismissesKeyboard(.interactively)
+            // A soft tick when a reply lands (message count grows).
+            .sensoryFeedback(.impact(weight: .light), trigger: vm.messages.count)
             .onChange(of: vm.messages.count) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
@@ -518,20 +533,71 @@ struct AssistantView: View {
         }
     }
 
+    /// Portfolio-aware starter prompts — tap to send. Kept short so each fits
+    /// one line; they showcase the assistant's range (analysis, news via web
+    /// grounding, fundamentals).
+    private static let starterPrompts: [(icon: String, text: String)] = [
+        ("chart.line.uptrend.xyaxis", "How is my portfolio doing today?"),
+        ("trophy", "What are my best and worst performers?"),
+        ("newspaper", "Any news affecting my holdings?"),
+        ("scalemass", "Am I too concentrated? Review my allocation"),
+        ("building.2", "Summarize 2330's latest quarter"),
+    ]
+
     private var welcome: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 44))
-                .foregroundStyle(Theme.accent)
-            Text("Ask about your portfolio")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Theme.primaryText)
-            Text("“How is my Taiwan portfolio doing?”\n“What's my best performing stock?”")
-                .font(.subheadline)
-                .foregroundStyle(Theme.secondaryText)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 20) {
+            VStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 40))
+                    .foregroundStyle(
+                        LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.55)],
+                                       startPoint: .top, endPoint: .bottom))
+                    .shadow(color: Theme.accent.opacity(0.5), radius: 18)
+                Text("Ask anything about your portfolio")
+                    .font(.system(.title3, design: .rounded).weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
+                    .multilineTextAlignment(.center)
+                Text("Portfolio-aware · Web search · Statement import")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedText)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(Self.starterPrompts, id: \.text) { prompt in
+                    Button {
+                        vm.input = prompt.text
+                        vm.send()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: prompt.icon)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .frame(width: 22)
+                            Text(prompt.text)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Theme.primaryText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Theme.mutedText)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Theme.card.opacity(0.85))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!providerHasKey)
+                }
+            }
         }
-        .padding(.top, 60)
+        .padding(.top, 36)
     }
 
     private var inputBar: some View {
@@ -544,20 +610,33 @@ struct AssistantView: View {
             }
             .disabled(vm.isParsingImport || vm.isSubmittingImport)
 
-            TextField("Message", text: $vm.input, axis: .vertical)
-                .focused($inputFocused)
-                .lineLimit(1...5)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Theme.cardElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-
-            Button { vm.send() } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(vm.canSend ? Theme.accent : Theme.mutedText)
+            // Send button lives inside the field pill (ChatGPT-style), and
+            // becomes a stop button while a reply is streaming.
+            HStack(alignment: .bottom, spacing: 6) {
+                TextField("Ask about your portfolio…", text: $vm.input, axis: .vertical)
+                    .focused($inputFocused)
+                    .lineLimit(1...5)
+                    .padding(.leading, 6)
+                    .padding(.vertical, 5)
+                Button {
+                    if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
+                } label: {
+                    Image(systemName: vm.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(vm.isStreaming ? Theme.primaryText
+                                         : vm.canSend ? Theme.accent : Theme.mutedText)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .disabled(!vm.isStreaming && !vm.canSend)
             }
-            .disabled(!vm.canSend)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Theme.cardElevated.opacity(0.9))
+            .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 21, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
         }
         .padding(12)
         // Frosted compose bar over the gradient — matches the index strip
@@ -620,6 +699,13 @@ private struct ChatBubble: View {
             MarkdownText(markdown: content)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contextMenu {
+                    Button {
+                        UIPasteboard.general.string = content
+                    } label: {
+                        Label("Copy reply", systemImage: "doc.on.doc")
+                    }
+                }
         }
     }
 
