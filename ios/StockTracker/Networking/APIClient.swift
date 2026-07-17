@@ -62,7 +62,17 @@ final class APIClient {
         // room instead of failing at the session default.
         if let timeout { req.timeoutInterval = timeout }
 
-        let data = try await perform(&req, retryTransient: method == "GET")
+        // POST/PUT get the same transient retry as GETs, made safe by a
+        // per-attempt idempotency key: the backend replays the original
+        // response if a retry re-delivers a create (PUTs are naturally
+        // idempotent). DELETE stays no-retry — a repeat would just 404.
+        var retryTransient = method == "GET"
+        if method == "POST" || method == "PUT" {
+            req.setValue(UUID().uuidString, forHTTPHeaderField: "Idempotency-Key")
+            retryTransient = true
+        }
+
+        let data = try await perform(&req, retryTransient: retryTransient)
         if T.self == EmptyResponse.self { return EmptyResponse() as! T }
         do {
             return try decoder.decode(T.self, from: data)
@@ -188,6 +198,10 @@ final class APIClient {
     func getOverview() async throws -> PortfolioOverview { try await request("/api/portfolio/overview") }
     func getNames() async throws -> [String: String] { try await request("/api/portfolio/names") }
     func getMarkets() async throws -> [MarketConfig] { try await request("/api/markets") }
+    /// Cheap fire-and-forget GET the add forms call on appear: it replaces a
+    /// dead pooled keep-alive connection and starts the Render cold boot while
+    /// the user is still typing, so the save itself doesn't pay for either.
+    func warmUp() async { _ = try? await getMarkets() }
     /// Live-probes each quote source server-side; takes a few seconds.
     func getQuoteSources() async throws -> QuoteSourcesStatus { try await request("/api/quotes/sources") }
     func getEarningsHistory(days: Int = 1825) async throws -> [String: [EarningsPoint]] {
@@ -338,6 +352,15 @@ final class APIClient {
     func deleteChat(_ id: Int) async throws {
         let _: EmptyResponse = try await request("/api/ai/chats/\(id)", method: "DELETE")
     }
+    /// Cancel the chat's in-flight server-side generation (stop button).
+    func stopChat(_ id: Int) async throws {
+        let _: EmptyResponse = try await request("/api/ai/chats/\(id)/stop", method: "POST")
+    }
+    /// Wake the backend and pre-build the chat context — called when the
+    /// Assistant screen opens so the first send streams with zero waiting.
+    func prewarmAI() async {
+        let _: EmptyResponse? = try? await request("/api/ai/prewarm", method: "POST")
+    }
 
     /// Streams the assistant reply from /api/ai/chat (Server-Sent Events).
     /// `onInit` fires with the chat id/title, `onChunk` with each text delta,
@@ -351,7 +374,9 @@ final class APIClient {
         onInit: @escaping @MainActor (Int, String) -> Void,
         onChunk: @escaping @MainActor (String) -> Void,
         onDone: @escaping @MainActor (String, [String]) -> Void,
-        onStatus: @escaping @MainActor (String) -> Void = { _ in }
+        onStatus: @escaping @MainActor (String) -> Void = { _ in },
+        onAction: @escaping @MainActor (ParsedRecords) -> Void = { _ in },
+        onThinking: @escaping @MainActor (String) -> Void = { _ in }
     ) async throws {
         var req = URLRequest(url: try url("/api/ai/chat"))
         req.httpMethod = "POST"
@@ -394,10 +419,22 @@ final class APIClient {
                 await onInit(evt["chat_id"] as? Int ?? 0, evt["title"] as? String ?? "New chat")
             case "chunk":
                 if let delta = evt["delta"] as? String { await onChunk(delta) }
+            case "thinking":
+                // Reasoning deltas (Claude extended thinking / Gemini thought
+                // summaries) for the collapsible reasoning section.
+                if let delta = evt["delta"] as? String { await onThinking(delta) }
             case "status":
-                // Pre-answer progress ("Searching the web…") so the UI isn't
-                // a silent spinner while the backend grounds the question.
+                // Tool-call progress ("Searching the web…", "Reading
+                // holdings…") so the UI isn't a silent spinner.
                 if let text = evt["text"] as? String { await onStatus(text) }
+            case "action":
+                // A write tool proposed records — decoded into the same
+                // ParsedRecords the image-import confirm card renders.
+                if let rec = evt["records"] as? [String: Any],
+                   let data = try? JSONSerialization.data(withJSONObject: rec),
+                   let parsed = try? decoder.decode(ParsedRecords.self, from: data) {
+                    await onAction(parsed)
+                }
             case "done":
                 await onDone(evt["content"] as? String ?? "", evt["queries"] as? [String] ?? [])
             case "error":

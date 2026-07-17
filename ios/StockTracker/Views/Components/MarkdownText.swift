@@ -7,6 +7,9 @@ import SwiftUI
 struct MarkdownText: View {
     let markdown: String
     var textColor: Color = Theme.primaryText
+    /// Claude-style serif reading voice for body text and headings. Colors and
+    /// code/table styling are unaffected — this is typography only.
+    var serif = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -23,13 +26,14 @@ struct MarkdownText: View {
         switch block {
         case let .heading(level, text):
             inline(text)
-                .font(.system(size: headingSize(level), weight: .bold, design: .rounded))
+                .font(.system(size: headingSize(level), weight: .bold,
+                              design: serif ? .serif : .rounded))
                 .foregroundStyle(textColor)
                 .padding(.top, level <= 2 ? 2 : 0)
 
         case let .paragraph(lines):
             multiline(lines)
-                .font(.subheadline)
+                .font(bodyFont)
                 .foregroundStyle(textColor)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -41,7 +45,7 @@ struct MarkdownText: View {
                         inline(item).foregroundStyle(textColor)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .font(.subheadline)
+                    .font(bodyFont)
                 }
             }
 
@@ -55,7 +59,7 @@ struct MarkdownText: View {
                         inline(item).foregroundStyle(textColor)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .font(.subheadline)
+                    .font(bodyFont)
                 }
             }
 
@@ -79,7 +83,7 @@ struct MarkdownText: View {
                     .fill(Theme.accent.opacity(0.6))
                     .frame(width: 3)
                 multiline(lines)
-                    .font(.subheadline)
+                    .font(bodyFont)
                     .foregroundStyle(Theme.secondaryText)
             }
 
@@ -117,6 +121,11 @@ struct MarkdownText: View {
                     .stroke(Theme.stroke, lineWidth: 1)
             )
         }
+    }
+
+    /// Body text voice: 15pt serif in Claude mode, .subheadline otherwise.
+    private var bodyFont: Font {
+        serif ? .system(size: 15, design: .serif) : .subheadline
     }
 
     private func headingSize(_ level: Int) -> CGFloat {

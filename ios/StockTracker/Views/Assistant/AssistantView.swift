@@ -9,6 +9,9 @@ final class AssistantViewModel: ObservableObject {
     @Published var isStreaming = false
     /// Backend progress before the first answer token ("Searching the web…").
     @Published var streamStatus: String?
+    /// Streamed reasoning (Claude extended thinking / Gemini thought
+    /// summaries) — rendered in a collapsible section above the reply.
+    @Published var thinkingText = ""
     @Published var input = ""
     @Published var status: AiStatus?
     @Published var error: String?
@@ -25,6 +28,12 @@ final class AssistantViewModel: ObservableObject {
     /// The in-flight streaming task, so a reset / teardown can cancel it and
     /// stop late onChunk/onDone callbacks from mutating a fresh transcript.
     private var streamTask: Task<Void, Never>?
+    /// Polls for a reply the server finished while our stream was dead
+    /// (app backgrounded, network blip) — generation continues server-side.
+    private var recoverTask: Task<Void, Never>?
+    /// Extra execution window so a reply keeps streaming ~30s after the user
+    /// switches apps or locks the screen.
+    private var bgTaskId: UIBackgroundTaskIdentifier = .invalid
 
     init() {
         // UI-test hook: seed a markdown-table reply to screenshot the renderer.
@@ -110,9 +119,15 @@ final class AssistantViewModel: ObservableObject {
         guard !text.isEmpty, !isStreaming else { return }
         input = ""
         error = nil
+        recoverTask?.cancel()
         messages.append(ChatMessage(role: "user", content: text))
         isStreaming = true
         streamingText = ""
+        thinkingText = ""
+        beginBackgroundTask()
+        // Server truth after this turn completes: everything local so far
+        // plus the assistant reply — used by recovery to know it landed.
+        let expectedCount = messages.count + 1
 
         streamTask = Task { [weak self] in
             guard let self else { return }
@@ -139,6 +154,20 @@ final class AssistantViewModel: ObservableObject {
                     onStatus: { [weak self] text in
                         guard let self, !Task.isCancelled else { return }
                         self.streamStatus = text
+                    },
+                    onAction: { [weak self] records in
+                        guard let self, !Task.isCancelled else { return }
+                        // A write tool proposed records — show the same
+                        // confirm card the image import uses. Nothing is
+                        // saved until the user taps Add.
+                        self.pendingImport = records
+                        self.importTradeOn = Array(repeating: true, count: records.trades.count)
+                        self.importDividendOn = Array(repeating: true, count: records.dividends.count)
+                    },
+                    onThinking: { [weak self] delta in
+                        guard let self, !Task.isCancelled else { return }
+                        self.streamStatus = nil
+                        self.thinkingText += delta
                     }
                 )
             } catch {
@@ -149,37 +178,95 @@ final class AssistantViewModel: ObservableObject {
                         self.messages.append(ChatMessage(role: "assistant", content: self.streamingText))
                         self.streamingText = ""
                     }
+                    // The server keeps generating even though our stream died
+                    // (e.g. the app was backgrounded past the grace window) —
+                    // poll until the finished reply lands, then swap it in.
+                    self.startRecovery(expectedCount: expectedCount)
                 }
             }
             if !Task.isCancelled { self.isStreaming = false }
+            self.endBackgroundTask()
         }
     }
 
     /// Stop generation mid-stream, keeping whatever has arrived as the reply.
+    /// Also cancels the server-side run so it stops burning tokens.
     func stopStreaming() {
         streamTask?.cancel()
         streamTask = nil
+        recoverTask?.cancel()
+        if let id = chatId {
+            Task { try? await APIClient.shared.stopChat(id) }
+        }
         if !streamingText.isEmpty {
             messages.append(ChatMessage(role: "assistant", content: streamingText))
         }
         streamingText = ""
         streamStatus = nil
         isStreaming = false
+        endBackgroundTask()
     }
 
     func reset() {
         streamTask?.cancel()
         streamTask = nil
+        recoverTask?.cancel()
         chatId = nil
         messages = []
         streamingText = ""
         streamStatus = nil
+        thinkingText = ""
         isStreaming = false
         error = nil
+        endBackgroundTask()
         cancelImport()
     }
 
-    deinit { streamTask?.cancel() }
+    deinit {
+        streamTask?.cancel()
+        recoverTask?.cancel()
+    }
+
+    // MARK: - Background continuation
+
+    private func beginBackgroundTask() {
+        endBackgroundTask()
+        bgTaskId = UIApplication.shared.beginBackgroundTask(withName: "ai-generation") {
+            [weak self] in
+            Task { @MainActor in self?.endBackgroundTask() }
+        }
+    }
+
+    private func endBackgroundTask() {
+        if bgTaskId != .invalid {
+            UIApplication.shared.endBackgroundTask(bgTaskId)
+            bgTaskId = .invalid
+        }
+    }
+
+    /// Fetch the chat until the server-persisted reply appears (generation
+    /// finishes server-side even with no client attached), then replace the
+    /// local transcript with the canonical one.
+    private func startRecovery(expectedCount: Int) {
+        guard let id = chatId else { return }
+        recoverTask?.cancel()
+        recoverTask = Task { [weak self] in
+            for _ in 0..<20 {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                if let detail = try? await APIClient.shared.getChat(id),
+                   detail.messages.count >= expectedCount,
+                   detail.messages.last?.role == "assistant" {
+                    self.messages = detail.messages
+                    self.streamingText = ""
+                    self.streamStatus = nil
+                    self.error = nil
+                    self.isStreaming = false
+                    return
+                }
+            }
+        }
+    }
 
     // MARK: - Image import (in-chat)
 
@@ -281,6 +368,7 @@ final class AssistantViewModel: ObservableObject {
         guard let detail = try? await APIClient.shared.getChat(id) else { return }
         messages = detail.messages
         streamingText = ""
+        thinkingText = ""
         error = nil
         chatId = detail.id
     }
@@ -431,6 +519,9 @@ struct AssistantView: View {
             activeProvider = AISettings.activeProvider
             activeModel = AISettings.selectedModel(for: activeProvider)
             providerHasKey = AISettings.hasKey(for: activeProvider)
+            // Wake a cold backend + pre-build the chat context while the user
+            // is still reading/typing, so the first send streams immediately.
+            Task { await APIClient.shared.prewarmAI() }
             if ProcessInfo.processInfo.environment["UITEST_HISTORY"] == "1" { showHistory = true }
         }
     }
@@ -458,30 +549,43 @@ struct AssistantView: View {
                     if vm.messages.isEmpty && vm.streamingText.isEmpty {
                         welcome
                     }
-                    ForEach(Array(vm.messages.enumerated()), id: \.offset) { _, msg in
+                    ForEach(Array(vm.messages.enumerated()), id: \.offset) { idx, msg in
+                        // Keep the last reply's reasoning attached above it,
+                        // collapsed but re-expandable, until the next send.
+                        if idx == vm.messages.count - 1, msg.role == "assistant",
+                           !vm.thinkingText.isEmpty, !vm.isStreaming {
+                            ReasoningSection(text: vm.thinkingText, active: false)
+                        }
                         ChatBubble(message: msg)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     if vm.isStreaming {
                         Group {
-                            if vm.streamingText.isEmpty {
-                                HStack(spacing: 10) {
-                                    TypingIndicator()
-                                    if let status = vm.streamStatus {
-                                        Text(status)
-                                            .font(.subheadline)
-                                            .foregroundStyle(Theme.secondaryText)
-                                            .transition(.opacity)
-                                    }
+                            VStack(alignment: .leading, spacing: 12) {
+                                if !vm.thinkingText.isEmpty {
+                                    // Live reasoning — expanded while it
+                                    // streams, collapses when the answer
+                                    // starts; tap to toggle anytime.
+                                    ReasoningSection(text: vm.thinkingText,
+                                                     active: vm.streamingText.isEmpty)
                                 }
-                                .animation(.easeInOut(duration: 0.25), value: vm.streamStatus)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            } else {
-                                // Trailing ▍ = the live-generation cursor.
-                                ChatBubble(message: ChatMessage(role: "assistant",
-                                                                content: vm.streamingText + " ▍"))
+                                if vm.streamingText.isEmpty {
+                                    if vm.thinkingText.isEmpty {
+                                        ThinkingIndicator(text: vm.streamStatus ?? "Thinking…")
+                                            .animation(.easeInOut(duration: 0.25), value: vm.streamStatus)
+                                    } else if let status = vm.streamStatus {
+                                        ThinkingIndicator(text: status)
+                                    }
+                                } else {
+                                    // Trailing ▍ = the live-generation cursor.
+                                    ChatBubble(message: ChatMessage(role: "assistant",
+                                                                    content: vm.streamingText + " ▍"))
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .id("streaming")
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
                     // In-chat image import: attached image → parsing → review card.
@@ -496,13 +600,8 @@ struct AssistantView: View {
                         }
                     }
                     if vm.isParsingImport {
-                        HStack(spacing: 10) {
-                            TypingIndicator()
-                            Text("Reading your image…")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.secondaryText)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        ThinkingIndicator(text: "Reading your image…", icon: "photo.viewfinder")
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if vm.pendingImport != nil {
                         ImportReviewCard(vm: vm, store: store)
@@ -513,6 +612,11 @@ struct AssistantView: View {
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(16)
+                // Spring the new-message/thinking rows in instead of popping.
+                .animation(.spring(response: 0.35, dampingFraction: 0.85),
+                           value: vm.messages.count)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85),
+                           value: vm.isStreaming)
             }
             // Swipe down on the transcript to dismiss the keyboard.
             .scrollDismissesKeyboard(.interactively)
@@ -522,6 +626,9 @@ struct AssistantView: View {
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: vm.streamingText) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            .onChange(of: vm.thinkingText) { _, _ in
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
             .onChange(of: vm.isParsingImport) { _, _ in
@@ -648,24 +755,106 @@ struct AssistantView: View {
     }
 }
 
-/// Bare inline "thinking" indicator — pulsing dots directly in the chat flow
-/// (no bubble container), the way Claude renders generation.
-private struct TypingIndicator: View {
+/// Collapsible reasoning section, like Claude's: a tappable "Reasoning" row
+/// with a chevron. While the model is still reasoning (`active`) it stays
+/// expanded and streams the thought text; when the answer starts it collapses
+/// to a single row, and the user can re-expand it anytime.
+private struct ReasoningSection: View {
+    let text: String
+    let active: Bool
+    @State private var expanded: Bool
+    @State private var userToggled = false
+
+    init(text: String, active: Bool) {
+        self.text = text
+        self.active = active
+        _expanded = State(initialValue: active)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                userToggled = true
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(active ? "Reasoning…" : "Reasoning")
+                        .font(.footnote.weight(.medium))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .foregroundStyle(Theme.mutedText)
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                HStack(alignment: .top, spacing: 10) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Theme.stroke)
+                        .frame(width: 3)
+                    Text(text)
+                        .font(.system(size: 13, design: .serif))
+                        .italic()
+                        .foregroundStyle(Theme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Auto-collapse when reasoning finishes, unless the user pinned it
+        // open themselves.
+        .onChange(of: active) { _, nowActive in
+            if !nowActive && !userToggled {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded = false }
+            }
+        }
+    }
+}
+
+/// Bare inline "thinking" row — a pulsing accent sparkle plus a shimmering
+/// status line (highlight sweeping left→right), directly in the chat flow with
+/// no bubble container. The text is either the backend's live status
+/// ("Searching the web…") or a generic "Thinking…".
+private struct ThinkingIndicator: View {
+    let text: String
+    var icon: String = "sparkles"
+
     var body: some View {
         TimelineView(.animation) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 5) {
-                ForEach(0..<3, id: \.self) { i in
-                    let phase = (sin(t * 4 - Double(i) * 0.9) + 1) / 2
-                    Circle()
-                        .fill(Theme.secondaryText)
-                        .frame(width: 7, height: 7)
-                        .scaleEffect(0.7 + 0.3 * phase)
-                        .opacity(0.35 + 0.65 * phase)
-                }
+            let pulse = (sin(t * 3) + 1) / 2
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .scaleEffect(0.9 + 0.15 * pulse)
+                    .opacity(0.6 + 0.4 * pulse)
+                shimmer(t)
             }
             .padding(.vertical, 6)
         }
+    }
+
+    private func shimmer(_ t: Double) -> some View {
+        // Phase runs -0.4 → 1.4 so the highlight fully enters and exits.
+        let phase = t.truncatingRemainder(dividingBy: 1.6) / 1.6 * 1.8 - 0.4
+        return Text(text)
+            // Serif to match the reply voice it precedes.
+            .font(.system(size: 15, design: .serif))
+            .foregroundStyle(
+                LinearGradient(
+                    stops: [
+                        .init(color: Theme.secondaryText, location: 0),
+                        .init(color: Theme.primaryText, location: 0.5),
+                        .init(color: Theme.secondaryText, location: 1),
+                    ],
+                    startPoint: UnitPoint(x: phase - 0.35, y: 0.5),
+                    endPoint: UnitPoint(x: phase + 0.35, y: 0.5)))
     }
 }
 
@@ -695,8 +884,9 @@ private struct ChatBubble: View {
                     .textSelection(.enabled)
             }
         } else {
-            // Assistant replies render as full-width formatted Markdown, like Claude.
-            MarkdownText(markdown: content)
+            // Assistant replies render as full-width formatted Markdown in the
+            // Claude serif reading voice (typography only — app colors stay).
+            MarkdownText(markdown: content, serif: true)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contextMenu {

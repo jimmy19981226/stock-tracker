@@ -122,7 +122,12 @@ struct DividendFormView: View {
                     Task { await save() }
                 }
             }
-            .onAppear(perform: populate)
+            .onAppear {
+                populate()
+                // Revive an idle backend / dead keep-alive while the user is
+                // still typing, so the save doesn't pay the cold-start.
+                Task { await APIClient.shared.warmUp() }
+            }
         }
         .presentationBackground(Theme.bg)
         .presentationDragIndicator(.visible)
@@ -158,13 +163,17 @@ struct DividendFormView: View {
             market: market
         )
         do {
+            let saved: Dividend
             if let existing {
-                _ = try await APIClient.shared.updateDividend(existing.id, payload)
+                saved = try await APIClient.shared.updateDividend(existing.id, payload)
             } else {
-                _ = try await APIClient.shared.createDividend(payload)
+                saved = try await APIClient.shared.createDividend(payload)
             }
-            await store.loadAll()
+            // Same as TradeFormView: dismiss on write success, refresh in the
+            // background instead of holding the sheet open.
+            store.upsert(saved)
             dismiss()
+            Task { await store.loadAll() }
         } catch {
             self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
             saving = false

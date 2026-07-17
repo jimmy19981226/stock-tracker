@@ -119,6 +119,32 @@ final class PortfolioStore: ObservableObject {
         }
     }
 
+    // MARK: - Local upserts (optimistic add/edit)
+
+    /// Merge a just-saved trade into the published list immediately, in the
+    /// backend's list order, so the form sheet can dismiss without waiting on
+    /// the full refresh; a background loadAll() reconciles holdings/summary.
+    func upsert(_ trade: Trade) {
+        if let i = trades.firstIndex(where: { $0.id == trade.id }) {
+            trades[i] = trade
+        } else {
+            trades.append(trade)
+        }
+        trades.sort { ($0.tradeDate, $0.id) > ($1.tradeDate, $1.id) }
+        saveSnapshot()
+    }
+
+    /// Dividend twin of `upsert(_ trade:)`.
+    func upsert(_ dividend: Dividend) {
+        if let i = dividends.firstIndex(where: { $0.id == dividend.id }) {
+            dividends[i] = dividend
+        } else {
+            dividends.append(dividend)
+        }
+        dividends.sort { ($0.payDate, $0.id) > ($1.payDate, $1.id) }
+        saveSnapshot()
+    }
+
     /// Pull fresh data but keep the current UI (no full-screen spinner).
     func refreshQuietly() async {
         refreshSeq += 1

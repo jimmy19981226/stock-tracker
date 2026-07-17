@@ -136,7 +136,12 @@ struct TradeFormView: View {
                     Task { await save() }
                 }
             }
-            .onAppear(perform: populate)
+            .onAppear {
+                populate()
+                // Revive an idle backend / dead keep-alive while the user is
+                // still typing, so the save doesn't pay the cold-start.
+                Task { await APIClient.shared.warmUp() }
+            }
         }
         .presentationBackground(Theme.bg)
         .presentationDragIndicator(.visible)
@@ -228,13 +233,18 @@ struct TradeFormView: View {
             market: market
         )
         do {
+            let saved: Trade
             if let existing {
-                _ = try await APIClient.shared.updateTrade(existing.id, payload)
+                saved = try await APIClient.shared.updateTrade(existing.id, payload)
             } else {
-                _ = try await APIClient.shared.createTrade(payload)
+                saved = try await APIClient.shared.createTrade(payload)
             }
-            await store.loadAll()
+            // Dismiss as soon as the write lands. The full refresh (live
+            // quotes for holdings/summary/names) runs in the background —
+            // waiting on it here kept the sheet spinning for many seconds.
+            store.upsert(saved)
             dismiss()
+            Task { await store.loadAll() }
         } catch {
             self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
             saving = false
