@@ -24,6 +24,7 @@ struct OverviewView: View {
                 TotalEarnedCard(tw: store.earnings["TWD"] ?? [],
                                 us: store.earnings["USD"] ?? [],
                                 usdTwd: overview?.fx.usdTwd)
+                    .cardStyle()
 
                 ForEach(MarketCode.allCases) { market in
                     NavigationLink(value: market) {
@@ -32,6 +33,7 @@ struct OverviewView: View {
                             summary: store.summary(for: market),
                             isOpen: store.isOpen(market)
                         )
+                        .cardStyle()
                     }
                     .buttonStyle(.plain)
                 }
@@ -381,9 +383,8 @@ private struct MarketCard: View {
                     breakdownStat("Dividends", s.dividends, signed: false,
                                   color: Color(red: 1.0, green: 0.72, blue: 0.25))
                 }
-                .padding(.bottom, 12)
+                .padding(.bottom, 2)
             }
-            Rectangle().fill(Theme.stroke).frame(height: 1)
         }
         .contentShape(Rectangle())
     }

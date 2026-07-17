@@ -81,6 +81,7 @@ struct TradesView: View {
                         currency: market.currencyCode,
                         year: selectedYear
                     )
+                    .cardStyle()
                     .padding(.bottom, 14)
                     ForEach(trades) { trade in
                         TradeRow(trade: trade, name: store.name(for: trade.ticker))

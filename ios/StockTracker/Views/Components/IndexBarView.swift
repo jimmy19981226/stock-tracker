@@ -76,7 +76,7 @@ struct IndexBarView: View {
                 }
                 .padding(.vertical, 7)
             }
-            .background(Theme.card.opacity(0.92))
+            .background(.ultraThinMaterial)  // frosted glass over the gradient
             .sheet(isPresented: $showEditor) {
                 IndexEditorView()
                     .environmentObject(store)

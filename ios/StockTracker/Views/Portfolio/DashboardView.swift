@@ -25,12 +25,16 @@ struct DashboardView: View {
         ScrollView {
             VStack(spacing: 16) {
                 SummaryCard(summary: store.summary(for: market), currency: currency)
+                    .cardStyle()
                 PortfolioValueCard(market: market,
                                    liveTotal: store.summary(for: market)?.totalValue)
+                    .cardStyle()
                 PerformanceCard(market: market)
                 EarningsCard(points: store.earnings(for: market), currency: currency)
+                    .cardStyle()
                 HoldingsSection(holdings: visibleHoldings, store: store,
                                 searching: !query.isEmpty)
+                    .cardStyle()
             }
             .padding(16)
         }
@@ -524,7 +528,8 @@ private struct HoldingsSection: View {
                 VStack(spacing: 0) {
                     ForEach(sorted) { h in
                         NavigationLink(value: h) {
-                            HoldingRow(holding: h, name: store.name(for: h.ticker))
+                            HoldingRow(holding: h, name: store.name(for: h.ticker),
+                                       showsSeparator: h.id != sorted.last?.id)
                         }
                         .buttonStyle(.plain)
                     }
@@ -538,6 +543,7 @@ private struct HoldingsSection: View {
 private struct HoldingRow: View {
     let holding: Holding
     let name: String
+    var showsSeparator = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -593,7 +599,9 @@ private struct HoldingRow: View {
                 }
             }
             .padding(.vertical, 12)
-            Rectangle().fill(Theme.stroke).frame(height: 1)
+            if showsSeparator {
+                Rectangle().fill(Theme.stroke).frame(height: 1)
+            }
         }
         .contentShape(Rectangle())
     }

@@ -22,7 +22,7 @@ enum Theme {
     static let positive = Color(red: 0.0, green: 0.78, blue: 0.02)
     static let negative = Color(red: 1.0, green: 0.31, blue: 0.0)
 
-    static let cornerRadius: CGFloat = 14
+    static let cornerRadius: CGFloat = 18
 
     /// Green when up, red when down, muted when flat/unknown.
     static func pl(_ value: Double?) -> Color {
@@ -75,11 +75,7 @@ struct Card<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        content
-            .padding(padding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.card)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous))
+        content.cardStyle(padding: padding)
     }
 }
 
@@ -89,5 +85,25 @@ extension View {
         self.background(
             Theme.backgroundGradient.ignoresSafeArea()
         )
+    }
+
+    /// The card chrome, shared by `Card` and call-site wrapping. Depth comes
+    /// from three subtle layers — fill, a 1px light edge on the top-facing
+    /// rim, and a soft drop shadow — rather than flat panels or hairline
+    /// boxes, which is what makes surfaces read as designed, not generated.
+    func cardStyle(padding: CGFloat = 16) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.cornerRadius, style: .continuous)
+        return self.padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.card)
+            .clipShape(shape)
+            .overlay(
+                shape.strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.10), Color.white.opacity(0.03)],
+                        startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 14, x: 0, y: 6)
     }
 }

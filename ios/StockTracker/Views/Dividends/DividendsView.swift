@@ -45,8 +45,10 @@ struct DividendsView: View {
                         Text(Fmt.money(total, currency: market.currencyCode))
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundStyle(Theme.positive)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .cardStyle()
                     .padding(.bottom, 14)
                     ForEach(dividends) { div in
                         DividendRow(dividend: div, name: store.name(for: div.ticker))
