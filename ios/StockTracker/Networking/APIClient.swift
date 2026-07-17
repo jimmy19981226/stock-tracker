@@ -240,6 +240,79 @@ final class APIClient {
         }
     }
 
+    // MARK: - Indices & live quotes
+
+    private struct IndexSymbolsPayload: Codable { let symbols: [String] }
+
+    func getIndices() async throws -> [IndexQuote] {
+        (try await request("/api/indices") as IndicesResponse).indices
+    }
+
+    func setIndices(_ symbols: [String]) async throws {
+        let _: IndexSymbolsPayload = try await send(
+            "/api/indices", method: "PUT", body: IndexSymbolsPayload(symbols: symbols))
+    }
+
+    /// Long-lived SSE stream of real-time US price ticks (stocks + indices).
+    /// Runs until the server closes the connection or the task is cancelled;
+    /// the caller owns reconnection. `onTick` is @MainActor for the same
+    /// reason as streamChat's callbacks — ticks mutate @Published state.
+    func streamQuotes(onTick: @escaping @MainActor (QuoteTick) -> Void) async throws {
+        var req = URLRequest(url: try url("/api/quotes/stream"))
+        req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        await Self.attachAuth(&req)
+
+        var (bytes, resp) = try await session.bytes(for: req)
+        guard var http = resp as? HTTPURLResponse else {
+            throw APIError.transport("No response from server")
+        }
+        if http.statusCode == 401,
+           let fresh = await AuthTokenProvider.shared.refreshAfterRejection() {
+            req.setValue("Bearer \(fresh)", forHTTPHeaderField: "Authorization")
+            (bytes, resp) = try await session.bytes(for: req)
+            guard let retried = resp as? HTTPURLResponse else {
+                throw APIError.transport("No response from server")
+            }
+            http = retried
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            throw APIError.http(http.statusCode, "Quote stream failed (\(http.statusCode))")
+        }
+
+        func tick(from evt: [String: Any]) -> QuoteTick? {
+            guard let ticker = evt["ticker"] as? String,
+                  let price = evt["price"] as? Double else { return nil }
+            return QuoteTick(
+                ticker: ticker,
+                price: price,
+                prevClose: evt["prev_close"] as? Double,
+                change: evt["change"] as? Double,
+                changePct: evt["change_pct"] as? Double
+            )
+        }
+
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data:") else { continue }
+            let json = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+            guard !json.isEmpty,
+                  let data = json.data(using: .utf8),
+                  let evt = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let type = evt["type"] as? String
+            else { continue }
+
+            switch type {
+            case "tick":
+                if let t = tick(from: evt) { await onTick(t) }
+            case "snapshot":
+                for raw in evt["ticks"] as? [[String: Any]] ?? [] {
+                    if let t = tick(from: raw) { await onTick(t) }
+                }
+            default:
+                break
+            }
+        }
+    }
+
     // MARK: - AI
 
     func getAiStatus() async throws -> AiStatus { try await request("/api/ai/status") }

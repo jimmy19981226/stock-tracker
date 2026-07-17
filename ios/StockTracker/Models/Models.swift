@@ -145,6 +145,32 @@ struct EarningsPoint: Codable, Identifiable, Hashable {
     let total: Double
 }
 
+// MARK: - Market indices (pinned index strip)
+
+/// One market index in the strip pinned across a market's pages.
+struct IndexQuote: Codable, Identifiable, Hashable {
+    var id: String { symbol }
+    let symbol: String        // Yahoo symbol, e.g. "^TWII", "^GSPC"
+    let name: String
+    let market: MarketCode
+    var price: Double?
+    var change: Double?
+    var changePct: Double?
+}
+
+struct IndicesResponse: Codable {
+    let indices: [IndexQuote]
+}
+
+/// One live price tick from /api/quotes/stream (US stocks + indices).
+struct QuoteTick {
+    let ticker: String
+    let price: Double
+    let prevClose: Double?
+    let change: Double?
+    let changePct: Double?
+}
+
 // MARK: - AI image import (parse a brokerage screenshot into records)
 
 struct ParsedTradeRow: Codable, Hashable {

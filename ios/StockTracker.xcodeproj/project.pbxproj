@@ -16,6 +16,7 @@
 		1C33E05E8D518C96FBD268EF /* PortfolioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA606A5EA8338A48F297E7F0 /* PortfolioStore.swift */; };
 		2981D9B86DAB2568E33307D7 /* AssistantView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F7EB774FB63B1456023AB0A /* AssistantView.swift */; };
 		479A445FD0119534F096B1DD /* TradeFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E738D8F756898FA40BA0E1FB /* TradeFormView.swift */; };
+		4C3D3B065E6E6CB0936AF4C1 /* IndexBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 042CAE16A8C008381BEF7627 /* IndexBarView.swift */; };
 		51C3E405AA6A679B1DC4B41D /* DiskCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 909BC2824E181539870CAA3A /* DiskCache.swift */; };
 		631CFDD6DAC5919BD1EA6E39 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB15DFA9042B6B6917DC0B8 /* Keychain.swift */; };
 		656B0565D8E2B842F43C28D7 /* PortfolioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A25010DCC2530C5563929BD4 /* PortfolioView.swift */; };
@@ -56,6 +57,7 @@
 
 /* Begin PBXFileReference section */
 		01ED1814C71609892E781704 /* ImportRecordsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportRecordsView.swift; sourceTree = "<group>"; };
+		042CAE16A8C008381BEF7627 /* IndexBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndexBarView.swift; sourceTree = "<group>"; };
 		061A44E5DF7B8AE95CA3EC16 /* AIProviderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIProviderSettingsView.swift; sourceTree = "<group>"; };
 		08AC8ECD4D8CF200DD39E0D0 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		178C89BFB1C25D1662FE56DB /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
@@ -226,6 +228,7 @@
 			isa = PBXGroup;
 			children = (
 				88166F0F84CF6011BB19B41B /* Components.swift */,
+				042CAE16A8C008381BEF7627 /* IndexBarView.swift */,
 				2409FACE0EF56EC856982C87 /* MarkdownText.swift */,
 			);
 			path = Components;
@@ -435,6 +438,7 @@
 				FB6FDA20BC5B416BD3153FED /* Format.swift in Sources */,
 				AB1A25767568850E3C2AB0BD /* GoogleAuth.swift in Sources */,
 				D2E4DBE812B160BBFF05EED6 /* ImportRecordsView.swift in Sources */,
+				4C3D3B065E6E6CB0936AF4C1 /* IndexBarView.swift in Sources */,
 				631CFDD6DAC5919BD1EA6E39 /* Keychain.swift in Sources */,
 				E2D5EA21AF4D64EFD0F2C7AF /* MISQuotes.swift in Sources */,
 				12AACF6F5A3FDD457E11BB09 /* MarkdownText.swift in Sources */,

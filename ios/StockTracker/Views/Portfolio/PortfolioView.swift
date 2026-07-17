@@ -29,6 +29,9 @@ struct PortfolioView: View {
             case .trades: TradesView(market: market)
             case .dividends: DividendsView(market: market)
             }
+
+            // Pinned market-index strip — stays visible across all three tabs.
+            IndexBarView()
         }
         .screenBackground()
         .navigationTitle(market.displayName)

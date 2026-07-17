@@ -14,6 +14,7 @@ final class PortfolioStore: ObservableObject {
     @Published var earnings: [String: [EarningsPoint]] = [:]
     @Published var names: [String: String] = [:]
     @Published var markets: [MarketConfig] = []
+    @Published var indices: [IndexQuote] = []
 
     @Published var loading = true
     @Published var errorMessage: String?
@@ -21,6 +22,7 @@ final class PortfolioStore: ObservableObject {
 
     private let api = APIClient.shared
     private var pollTask: Task<Void, Never>?
+    private var streamTask: Task<Void, Never>?
 
     /// Everything needed to repaint the UI on next launch without the network.
     private struct Snapshot: Codable {
@@ -31,6 +33,7 @@ final class PortfolioStore: ObservableObject {
         var earnings: [String: [EarningsPoint]]
         var names: [String: String]
         var markets: [MarketConfig]
+        var indices: [IndexQuote]?  // optional: pre-index snapshots still decode
         var lastUpdated: Date?
     }
     private static let snapshotKey = "portfolio-snapshot"
@@ -52,6 +55,7 @@ final class PortfolioStore: ObservableObject {
             earnings = s.earnings
             names = s.names
             markets = s.markets
+            indices = s.indices ?? []
             lastUpdated = s.lastUpdated
             loading = false
         }
@@ -61,7 +65,7 @@ final class PortfolioStore: ObservableObject {
         DiskCache.save(
             Snapshot(trades: trades, dividends: dividends, holdings: holdings,
                      summaries: summaries, earnings: earnings, names: names,
-                     markets: markets, lastUpdated: lastUpdated),
+                     markets: markets, indices: indices, lastUpdated: lastUpdated),
             as: Self.snapshotKey
         )
     }
@@ -78,7 +82,11 @@ final class PortfolioStore: ObservableObject {
             async let s = api.getSummary()
             async let e = api.getEarningsHistory()
             async let n = api.getNames()
+            // Indices are decoration — fetched tolerantly so a missing/failing
+            // /api/indices (e.g. an older backend) can never block core data.
+            async let i = fetchIndicesOrKeep()
             let (tt, dd, hh, ss, ee, nn) = try await (t, d, h, s, e, n)
+            let ii = await i
             let (hh2, ss2) = await Self.applyingMIS(holdings: hh, summaries: ss,
                                                     twOpen: isOpen(.TW))
             guard seq == refreshSeq else { return }  // superseded by a newer refresh
@@ -88,6 +96,7 @@ final class PortfolioStore: ObservableObject {
             summaries = ss2
             earnings = ee
             names = nn
+            indices = ii
             errorMessage = nil
             lastUpdated = Date()
             saveSnapshot()
@@ -117,17 +126,34 @@ final class PortfolioStore: ObservableObject {
         do {
             async let h = api.getHoldings()
             async let s = api.getSummary()
+            async let i = fetchIndicesOrKeep()
             let (hh, ss) = try await (h, s)
+            let ii = await i
             let (hh2, ss2) = await Self.applyingMIS(holdings: hh, summaries: ss,
                                                     twOpen: isOpen(.TW))
             guard seq == refreshSeq else { return }  // superseded by a newer refresh
             holdings = hh2
             summaries = ss2
+            indices = ii
             lastUpdated = Date()
             errorMessage = nil
             saveSnapshot()
         } catch {
             // Keep showing stale data; surface only hard load failures.
+        }
+    }
+
+    /// Indices, or the current ones if the fetch fails. Never throws — the
+    /// strip must not take the dashboard down with it.
+    private func fetchIndicesOrKeep() async -> [IndexQuote] {
+        (try? await api.getIndices()) ?? indices
+    }
+
+    /// Re-pull just the index strip (after the user edits their index list).
+    func refreshIndices() async {
+        if let ii = try? await api.getIndices() {
+            indices = ii
+            saveSnapshot()
         }
     }
 
@@ -146,11 +172,87 @@ final class PortfolioStore: ObservableObject {
                 await self.refreshQuietly()
             }
         }
+        startStreaming()
     }
 
     func stopPolling() {
         pollTask?.cancel()
         pollTask = nil
+        streamTask?.cancel()
+        streamTask = nil
+    }
+
+    // MARK: - Real-time US prices (SSE fan-out of Yahoo's WebSocket)
+
+    /// Hold an SSE connection to /api/quotes/stream while a portfolio is on
+    /// screen. Each tick patches the matching US holding / index in place, so
+    /// US prices move the moment a trade prints instead of on the 5s poll.
+    /// Ticks only flow during regular US hours; outside them the connection
+    /// just idles on keep-alives. Reconnects with a short backoff.
+    private func startStreaming() {
+        guard streamTask == nil else { return }
+        streamTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await APIClient.shared.streamQuotes { tick in
+                        self?.apply(tick: tick)
+                    }
+                } catch {
+                    // Fall through to the retry sleep. Covers an older backend
+                    // without /api/quotes/stream (404) — retry slowly, the 5s
+                    // poll still keeps prices moving.
+                }
+                if Task.isCancelled { break }
+                try? await Task.sleep(nanoseconds: 20_000_000_000)
+            }
+        }
+    }
+
+    /// Patch one live tick into the published state, recomputing the touched
+    /// US holding and the USD summary with the backend's formulas (US exit
+    /// cost is 0 — see services/portfolio.py).
+    private func apply(tick: QuoteTick) {
+        // Index tick (^GSPC, ^TWII, …) → update the strip.
+        if tick.ticker.hasPrefix("^") {
+            if let idx = indices.firstIndex(where: { $0.symbol == tick.ticker }) {
+                indices[idx].price = tick.price
+                indices[idx].change = tick.change
+                indices[idx].changePct = tick.changePct
+            }
+            return
+        }
+
+        guard let i = holdings.firstIndex(where: {
+            $0.market == .US && $0.ticker.caseInsensitiveCompare(tick.ticker) == .orderedSame
+        }) else { return }
+
+        var h = holdings[i]
+        let mv = tick.price * h.shares
+        let unrealized = mv - h.costBasis
+        h.currentPrice = tick.price
+        h.marketValue = mv
+        h.exitCost = 0
+        h.unrealizedPl = unrealized
+        h.unrealizedPlPct = h.costBasis > 0 ? unrealized / h.costBasis * 100 : nil
+        if let pc = tick.prevClose, pc > 0 {
+            h.todayChange = (tick.price - pc) * h.shares
+            h.todayChangePct = (tick.price - pc) / pc * 100
+        }
+        holdings[i] = h
+
+        if let s = summaries.firstIndex(where: { $0.currency == "USD" }) {
+            let usd = holdings.filter { $0.currency == "USD" }
+            let totalValue = usd.reduce(0.0) { $0 + ($1.marketValue ?? 0) }
+            let totalPl = usd.reduce(0.0) { $0 + ($1.unrealizedPl ?? 0) }
+            let todayPl = usd.reduce(0.0) { $0 + ($1.todayChange ?? 0) }
+            summaries[s].totalValue = totalValue
+            summaries[s].totalPl = totalPl
+            summaries[s].totalPlPct = summaries[s].totalCost > 0
+                ? totalPl / summaries[s].totalCost * 100 : 0
+            summaries[s].todayPl = todayPl
+            let prevValue = totalValue - todayPl
+            summaries[s].todayPlPct = prevValue > 0 ? todayPl / prevValue * 100 : 0
+        }
     }
 
     func config(for market: MarketCode) -> MarketConfig? {
