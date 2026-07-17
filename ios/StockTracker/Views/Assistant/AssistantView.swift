@@ -74,6 +74,12 @@ final class AssistantViewModel: ObservableObject {
         }
         // UI-test hook: seed a sample formatted reply to screenshot the renderer.
         if ProcessInfo.processInfo.environment["UITEST_ASSISTANT_DEMO"] == "1" {
+            thinkingText = """
+            The user wants a status check on their Taiwan portfolio. I pulled the \
+            summary and holdings: total value NT$1.75M, up 1.83% today, with 2330 \
+            carrying most of the unrealized gain. I'll lead with the totals, then \
+            highlight the top contributors and dividends.
+            """
             messages = [
                 ChatMessage(role: "user", content: "How is my Taiwan portfolio doing?"),
                 ChatMessage(role: "assistant", content: """

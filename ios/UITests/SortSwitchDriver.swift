@@ -46,6 +46,17 @@ final class SortSwitchDriver: XCTestCase {
         }
     }
 
+    /// Open the Taiwan dashboard and screenshot its top (README screenshot).
+    func testDashboardScreenshot() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let taiwan = app.staticTexts["Taiwan"].firstMatch
+        XCTAssertTrue(taiwan.waitForExistence(timeout: 90), "Taiwan card not found")
+        taiwan.tap()
+        sleep(10)  // let live quotes land so the dashboard shows real numbers
+        snap(app, "dashboard")
+    }
+
     func testSwitchHoldingsSort() throws {
         let app = XCUIApplication()
         app.launch()
