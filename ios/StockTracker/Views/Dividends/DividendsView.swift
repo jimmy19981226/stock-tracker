@@ -283,12 +283,26 @@ private struct IncomeCalendarCard: View {
         }
     }
 
+    @State private var fetchedOnce = false
+
+    /// Stale-while-refresh: show the last saved calendar immediately, then
+    /// refresh (the first server-side build sweeps yfinance for every holding
+    /// and can take minutes on a cold backend).
     private func load() async {
-        guard calendar == nil else { return }
+        if calendar == nil {
+            calendar = DiskCache.load(DividendCalendar.self, name: "dividend-calendar")
+        }
+        guard !fetchedOnce else { return }
+        fetchedOnce = true
         do {
-            calendar = try await APIClient.shared.getDividendCalendar()
+            let fresh = try await APIClient.shared.getDividendCalendar()
+            calendar = fresh
+            DiskCache.save(fresh, as: "dividend-calendar")
         } catch {
-            failed = true  // older backend or transient error — hide the card
+            // Hide only if there's nothing at all to show; a stale projection
+            // beats an empty card. Retry next time the tab appears.
+            fetchedOnce = false
+            if calendar == nil { failed = true }
         }
     }
 }

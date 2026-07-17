@@ -50,12 +50,17 @@ final class APIClient {
     private func request<T: Decodable>(
         _ path: String,
         method: String = "GET",
-        body: Data? = nil
+        body: Data? = nil,
+        timeout: TimeInterval? = nil
     ) async throws -> T {
         var req = URLRequest(url: try url(path))
         req.httpMethod = method
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = body
+        // Heavy analytics endpoints (performance, dividend calendar) can take
+        // minutes on their very first build on a cold backend — give them
+        // room instead of failing at the session default.
+        if let timeout { req.timeoutInterval = timeout }
 
         let data = try await perform(&req, retryTransient: method == "GET")
         if T.self == EmptyResponse.self { return EmptyResponse() as! T }
@@ -243,11 +248,13 @@ final class APIClient {
     // MARK: - Dividend calendar & performance
 
     func getDividendCalendar() async throws -> DividendCalendar {
-        try await request("/api/dividends/calendar")
+        try await request("/api/dividends/calendar", timeout: 240)
     }
 
     func getPerformance(market: MarketCode, period: String) async throws -> PerformanceReport {
-        try await request("/api/portfolio/performance?market=\(market.rawValue)&period=\(period)")
+        try await request(
+            "/api/portfolio/performance?market=\(market.rawValue)&period=\(period)",
+            timeout: 240)
     }
 
     // MARK: - Indices & live quotes

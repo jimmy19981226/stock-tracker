@@ -14,17 +14,40 @@ Everything reads through stock_info's caches, so repeat requests are cheap.
 """
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
+from threading import Lock
 
 from sqlalchemy.orm import Session
 
 from ..database import Trade
 from . import portfolio, quotes, stock_info
 
+# First build sweeps yfinance for every holding (~5s on a fast IP, far worse
+# on a rate-limited cloud one), so the finished calendar is cached per user.
+# Payout schedules move slowly; 30 minutes keeps the tab instant.
+_CACHE_TTL = 1800.0
+_cache: dict[str, tuple[float, dict]] = {}
+_cache_lock = Lock()
+
 
 def build_dividend_calendar(db: Session, user_id: str) -> dict:
+    now = time.time()
+    with _cache_lock:
+        hit = _cache.get(user_id)
+        if hit and now - hit[0] < _CACHE_TTL:
+            return hit[1]
+
+    result = _build(db, user_id)
+    if result["months"] or result["upcoming"] or result["projected_annual"]:
+        with _cache_lock:
+            _cache[user_id] = (now, result)
+    return result
+
+
+def _build(db: Session, user_id: str) -> dict:
     trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     states = portfolio.compute_states(trades)
     ticker_market = {

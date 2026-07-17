@@ -19,12 +19,22 @@ from collections import defaultdict
 from datetime import date, datetime
 from typing import Iterable
 
+import time
+from threading import Lock
+
 from sqlalchemy.orm import Session
 
 from ..database import Dividend, Trade
 from . import portfolio, quotes, stock_info
 
 BENCHMARKS = {"TW": ("^TWII", "加權指數"), "US": ("^GSPC", "S&P 500")}
+
+# The first build triggers the full value-history sweep (one yfinance "max"
+# fetch per ticker ever traded) — minutes on a throttled cloud IP. Cache the
+# finished report per (user, market, period) so only the first hit pays.
+_CACHE_TTL = 900.0
+_cache: dict[tuple[str, str, str], tuple[float, dict]] = {}
+_cache_lock = Lock()
 
 
 def _xirr(flows: list[tuple[date, float]]) -> float | None:
@@ -79,6 +89,22 @@ def _daily_flows(
 
 
 def build_performance(db: Session, user_id: str, market: str, period: str) -> dict:
+    key = (user_id, market, period)
+    now = time.time()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < _CACHE_TTL:
+            return hit[1]
+    result = _build(db, user_id, market, period)
+    # Never cache an empty report — that's a failed value-history build
+    # (throttled Yahoo), not a fact.
+    if result["portfolio_series"]:
+        with _cache_lock:
+            _cache[key] = (now, result)
+    return result
+
+
+def _build(db: Session, user_id: str, market: str, period: str) -> dict:
     bench_symbol, bench_name = BENCHMARKS.get(market, BENCHMARKS["US"])
     empty = {
         "market": market,

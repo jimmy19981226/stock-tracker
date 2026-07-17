@@ -230,18 +230,34 @@ struct PerformanceCard: View {
 
     // MARK: - Loading
 
+    @State private var fetchedPeriods: Set<String> = []
+
+    private func cacheKey(_ p: String) -> String {
+        "performance-\(market.rawValue)-\(p)"
+    }
+
+    /// Stale-while-refresh: paint the last saved report instantly, then fetch
+    /// a fresh one (the first server-side build can take minutes on a cold
+    /// backend — a spinner that long reads as broken).
     private func load() async {
-        guard reports[period] == nil else { return }
+        if reports[period] == nil,
+           let cached = DiskCache.load(PerformanceReport.self, name: cacheKey(period)) {
+            reports[period] = cached
+        }
+        guard fetchedPeriods.insert(period).inserted else { return }
         loading = true
         defer { loading = false }
         do {
-            reports[period] = try await APIClient.shared.getPerformance(
+            let fresh = try await APIClient.shared.getPerformance(
                 market: market, period: period)
+            reports[period] = fresh
+            DiskCache.save(fresh, as: cacheKey(period))
         } catch let APIError.http(code, _) where code == 404 {
             unavailable = true  // older backend — hide the card
         } catch {
-            // Transient — leave the card in its "not enough history" state;
-            // switching periods or reopening retries.
+            // Transient (timeout on a first heavy build) — keep whatever is
+            // shown; allow a retry on the next appearance of this period.
+            fetchedPeriods.remove(period)
         }
     }
 }
