@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -223,196 +224,229 @@ def chat(
             for m in list(chat_obj.messages)[-MAX_HISTORY_TURNS:]
         ]
         focus_tickers = _detect_tickers([c for _, c in history_msgs])[:3]
-        portfolio_context = _build_context(db, user, focus_tickers=focus_tickers)
         chat_id = chat_obj.id
         chat_title = chat_obj.title
         db.commit()
 
-    system_prompt = _system_prompt(portfolio_context)
+    from ..services import ai_providers
 
-    def event_stream():
-        accumulated_text = ""
-        last_chunk = None
-        start_ts = time.time()
-        persisted = False
+    chosen_model = (x_ai_model or "").strip() or (
+        DEFAULT_MODEL if provider == "gemini" else ai_providers.DEFAULT_MODELS[provider]
+    )
 
-        def persist(final_content: str) -> None:
-            nonlocal persisted
-            if persisted:
-                return
-            persisted = True
-            try:
-                with SessionLocal() as db_local:
-                    db_local.add(
-                        ChatMessage(
-                            chat_id=chat_id,
-                            role="assistant",
-                            content=final_content,
-                        )
-                    )
-                    chat_db = db_local.get(Chat, chat_id)
-                    if chat_db is not None:
-                        chat_db.updated_at = datetime.utcnow()
-                    db_local.commit()
-            except Exception:
-                # Persistence failure shouldn't break the user-facing stream.
-                pass
-
-        def sse(payload: dict) -> str:
-            return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-        try:
-            yield sse({"type": "init", "chat_id": chat_id, "title": chat_title})
-
-            queries: list[str] = []
-
-            if provider == "gemini":
-                from google import genai
-                from google.genai import types
-
-                contents = [
-                    types.Content(
-                        role="user" if role == "user" else "model",
-                        parts=[types.Part(text=content)],
-                    )
-                    for role, content in history_msgs
-                ]
-                client = genai.Client(api_key=api_key)
-                stream_iter = client.models.generate_content_stream(
-                    model=(x_ai_model or "").strip() or DEFAULT_MODEL,
-                    config=types.GenerateContentConfig(
-                        system_instruction=system_prompt,
-                        temperature=0.4,
-                        max_output_tokens=1500,
-                        tools=[types.Tool(google_search=types.GoogleSearch())],
-                    ),
-                    contents=contents,
-                )
-
-                for chunk in stream_iter:
-                    last_chunk = chunk
-                    delta = getattr(chunk, "text", None) or ""
-                    if delta:
-                        accumulated_text += delta
-                        yield sse({"type": "chunk", "delta": delta})
-
-                # Apply grounding metadata to the assembled text. Byte indices in
-                # ``grounding_supports`` are positions in the cumulative response,
-                # which is exactly what ``accumulated_text`` is.
-                meta = None
-                try:
-                    cands = getattr(last_chunk, "candidates", None) or []
-                    if cands:
-                        meta = getattr(cands[0], "grounding_metadata", None)
-                except Exception:
-                    meta = None
-
-                final_text, sources_block = _apply_grounding_text(
-                    accumulated_text or "(no response)", meta
-                )
-                if sources_block:
-                    final_text = final_text.rstrip() + "\n\n" + sources_block
-
-                try:
-                    if meta is not None:
-                        queries = list(getattr(meta, "web_search_queries", None) or [])
-                except Exception:
-                    queries = []
-            else:
-                # OpenAI / Claude / NVIDIA — plain text streaming. NVIDIA NIM
-                # additionally gets DIY web grounding: a planner call decides
-                # the search queries, DuckDuckGo fetches the results, and the
-                # numbered sources go into the prompt with the same [N]
-                # citation contract the Gemini path uses.
-                from ..services import ai_providers
-
-                chosen_model = (x_ai_model or "").strip() or None
-                prompt_for_stream = system_prompt
-                sources: list[dict] = []
-
-                # DIY grounding for every non-Gemini provider (Gemini uses
-                # its native google_search tool). Grounding runs before any
-                # answer tokens — tell the UI what's happening so it doesn't
-                # look hung. Clients that don't know "status" events ignore
-                # them.
-                if provider in ("nvidia", "openai", "claude"):
-                    yield sse({"type": "status", "text": "Thinking…"})
-                    today = datetime.now(_TAIPEI).date().isoformat()
-                    queries = ai_providers.plan_search_queries(
-                        provider, api_key, chosen_model, user_text, today
-                    )
-                    if queries:
-                        yield sse({"type": "status", "text": "Searching the web…"})
-                        sources = ai_providers.search_web(queries)
-                    if sources:
-                        lines = [
-                            f"[{i}] {s['title']} — {s['url']}\n    {s['snippet']}"
-                            for i, s in enumerate(sources, 1)
-                        ]
-                        prompt_for_stream = (
-                            system_prompt
-                            + "\n\nWEB SEARCH RESULTS (fetched just now for this "
-                            "question). When a statement relies on one of these, "
-                            "append its marker like [1] or [2][3] right after the "
-                            "sentence. Don't write URLs yourself — a Sources list "
-                            "is appended automatically:\n"
-                            + "\n".join(lines)
-                        )
-
-                for delta in ai_providers.stream(
-                    provider, api_key, chosen_model, prompt_for_stream, history_msgs
-                ):
-                    if delta:
-                        accumulated_text += delta
-                        yield sse({"type": "chunk", "delta": delta})
-                final_text = accumulated_text or "(no response)"
-
-                if sources and accumulated_text:
-                    src_lines = ["**Sources:**"] + [
-                        f"{i}. [{s['title']}]({s['url']})"
-                        for i, s in enumerate(sources, 1)
-                    ]
-                    final_text = final_text.rstrip() + "\n\n" + "\n".join(src_lines)
-
-            elapsed_ms = int((time.time() - start_ts) * 1000)
-            meta_header = json.dumps(
-                {"queries": queries, "duration_ms": elapsed_ms},
-                ensure_ascii=False,
-            )
-            full_content = f"<!--meta:{meta_header}-->\n{final_text}"
-
-            persist(full_content)
-
-            yield sse(
-                {
-                    "type": "done",
-                    "content": full_content,
-                    "queries": queries,
-                    "duration_ms": elapsed_ms,
-                }
-            )
-        except GeneratorExit:
-            # Client disconnected (abort). Save whatever we have so the user
-            # doesn't lose a partial response on next chat load.
-            if accumulated_text and not persisted:
-                persist(
-                    "<!--meta:" + json.dumps({"queries": [], "interrupted": True})
-                    + "-->\n" + accumulated_text + "\n\n_(stopped)_"
-                )
-            raise
-        except Exception as exc:
-            yield sse(
-                {"type": "error", "detail": f"{type(exc).__name__}: {exc}"}
-            )
+    # Generation runs in a detached worker thread that persists the finished
+    # reply no matter what happens to this HTTP connection — so the app can be
+    # backgrounded / lose the stream and still find the full answer in the
+    # chat on return. The response below just tails the run's event buffer.
+    # The (potentially slow) portfolio-context build also happens inside the
+    # worker, against a warm cache — the stream opens with zero preparation.
+    run = _ChatRun(chat_id=chat_id, title=chat_title)
+    with _runs_lock:
+        _runs[chat_id] = run
+    threading.Thread(
+        target=_generate_run, daemon=True,
+        args=(run, provider, api_key, chosen_model, history_msgs,
+              focus_tickers, user),
+    ).start()
 
     return StreamingResponse(
-        event_stream(),
+        run.tail(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # disable proxy buffering
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Detached generation runs. One active run per chat; the SSE response tails
+# the buffer, and a second connection could too (e.g. after an app relaunch).
+# ---------------------------------------------------------------------------
+
+
+class _ChatRun:
+    """Event buffer for one in-flight generation, safe to tail from the SSE
+    generator while the worker thread appends."""
+
+    def __init__(self, chat_id: int, title: str):
+        self.chat_id = chat_id
+        self.title = title
+        self.cancelled = False
+        self._events: list[str] = []
+        self._done = False
+        self._cond = threading.Condition()
+
+    def emit(self, payload: dict) -> None:
+        data = f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        with self._cond:
+            self._events.append(data)
+            self._cond.notify_all()
+
+    def finish(self) -> None:
+        with self._cond:
+            self._done = True
+            self._cond.notify_all()
+
+    def tail(self):
+        idx = 0
+        while True:
+            with self._cond:
+                if idx >= len(self._events) and not self._done:
+                    self._cond.wait(timeout=15)
+                batch = self._events[idx:]
+                idx += len(batch)
+                done = self._done and idx >= len(self._events)
+            for event in batch:
+                yield event
+            if done:
+                return
+            if not batch:
+                # Periodic SSE comment so idle proxies don't cut the stream
+                # while a slow tool call runs.
+                yield ": keep-alive\n\n"
+
+
+_runs: dict[int, _ChatRun] = {}
+_runs_lock = threading.Lock()
+
+# Portfolio-context cache so the assistant is READY when the user hits send:
+# building the context fetches live quotes (and fundamentals for focus
+# tickers), which used to run synchronously before the stream opened. The
+# Assistant screen pre-warms the no-focus entry on open; sends within the TTL
+# start streaming with zero preparation.
+_CTX_TTL_SECONDS = 120.0
+_ctx_cache: dict[tuple[str, tuple], tuple[float, str]] = {}
+_ctx_lock = threading.Lock()
+_prewarm_inflight: set[str] = set()
+
+
+def _context_cached(user_id: str, focus_tickers: list[str]) -> str:
+    key = (user_id, tuple(focus_tickers))
+    now = time.time()
+    with _ctx_lock:
+        hit = _ctx_cache.get(key)
+        if hit and now - hit[0] < _CTX_TTL_SECONDS:
+            return hit[1]
+    try:
+        with SessionLocal() as db:
+            ctx = _build_context(db, user_id, focus_tickers=focus_tickers)
+    except Exception:
+        # A degraded context beats a failed chat — tools can fill the gaps.
+        return "{}"
+    with _ctx_lock:
+        _ctx_cache[key] = (time.time(), ctx)
+        for k in [k for k, (at, _) in _ctx_cache.items()
+                  if time.time() - at > _CTX_TTL_SECONDS]:
+            _ctx_cache.pop(k, None)
+    return ctx
+
+
+@router.post("/prewarm", status_code=204)
+def prewarm_ai(user: str = Depends(get_current_user)):
+    """Called when the Assistant screen opens. Wakes a cold backend and
+    pre-builds this user's chat context in the background, so the first
+    message starts streaming immediately instead of paying the quote /
+    fundamentals fetches at send time."""
+    with _ctx_lock:
+        if user in _prewarm_inflight:
+            return None
+        _prewarm_inflight.add(user)
+
+    def _work():
+        try:
+            _context_cached(user, [])
+        finally:
+            with _ctx_lock:
+                _prewarm_inflight.discard(user)
+
+    threading.Thread(target=_work, daemon=True).start()
+    return None
+
+
+def _persist_assistant(chat_id: int, content: str) -> None:
+    try:
+        with SessionLocal() as db_local:
+            db_local.add(ChatMessage(chat_id=chat_id, role="assistant",
+                                     content=content))
+            chat_db = db_local.get(Chat, chat_id)
+            if chat_db is not None:
+                chat_db.updated_at = datetime.utcnow()
+            db_local.commit()
+    except Exception:
+        # Persistence failure shouldn't kill the worker.
+        pass
+
+
+def _generate_run(run: _ChatRun, provider: str, api_key: str, model: str,
+                  history_msgs, focus_tickers, user_id: str) -> None:
+    from ..services import ai_tools
+
+    start_ts = time.time()
+    text = ""
+    try:
+        run.emit({"type": "init", "chat_id": run.chat_id, "title": run.title})
+        run.emit({"type": "status", "text": "Thinking…"})
+        system_prompt = _system_prompt(_context_cached(user_id, focus_tickers))
+        for kind, payload in ai_tools.run_tool_loop(
+            provider, api_key, model, system_prompt, history_msgs, user_id
+        ):
+            if run.cancelled:
+                break
+            if kind == "chunk":
+                text += payload
+                run.emit({"type": "chunk", "delta": payload})
+            elif kind == "thinking":
+                # Reasoning deltas — shown in the app's collapsible section,
+                # never part of the persisted reply.
+                run.emit({"type": "thinking", "delta": payload})
+            elif kind == "status":
+                run.emit({"type": "status", "text": payload})
+            elif kind == "action":
+                run.emit({"type": "action", "records": payload})
+
+        elapsed_ms = int((time.time() - start_ts) * 1000)
+        final_text = text or "(no response)"
+        if run.cancelled:
+            final_text = final_text.rstrip() + "\n\n_(stopped)_"
+        meta_header = json.dumps(
+            {"queries": [], "duration_ms": elapsed_ms}, ensure_ascii=False
+        )
+        full_content = f"<!--meta:{meta_header}-->\n{final_text}"
+        _persist_assistant(run.chat_id, full_content)
+        run.emit({"type": "done", "content": full_content, "queries": [],
+                  "duration_ms": elapsed_ms})
+    except Exception as exc:
+        # Keep whatever streamed before the failure.
+        if text:
+            _persist_assistant(
+                run.chat_id,
+                "<!--meta:" + json.dumps({"queries": [], "interrupted": True})
+                + "-->\n" + text,
+            )
+        run.emit({"type": "error", "detail": f"{type(exc).__name__}: {exc}"})
+    finally:
+        run.finish()
+        with _runs_lock:
+            _runs.pop(run.chat_id, None)
+
+
+@router.post("/chats/{chat_id}/stop", status_code=204)
+def stop_chat(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    """Cancel the chat's in-flight generation (the app's stop button). The
+    partial text streamed so far is persisted with a '(stopped)' marker."""
+    chat_obj = db.get(Chat, chat_id)
+    if chat_obj is None or chat_obj.user_id != user:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    with _runs_lock:
+        run = _runs.get(chat_id)
+    if run is not None:
+        run.cancelled = True
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -868,23 +902,31 @@ def _system_prompt(context_json: str) -> str:
     return (
         "You are a portfolio analysis assistant for a Taiwan stock tracker.\n"
         "Your primary source is the JSON in the CONTEXT block (the user's local\n"
-        "portfolio data). You ALSO have a Google Search tool available — use it\n"
-        "when the user asks about recent news, filings, macro events, analyst\n"
-        "commentary, or anything time-sensitive that the CONTEXT can't answer.\n"
+        "portfolio data). You ALSO have TOOLS — call them whenever you need data\n"
+        "beyond the snapshot: live quotes for ANY ticker, price history,\n"
+        "performance metrics (TWR/XIRR/benchmark), the dividend calendar,\n"
+        "net-worth history, the USD/TWD rate, market open/closed status, full\n"
+        "trade/dividend lists, and search_web for anything time-sensitive.\n"
+        "\n"
+        "Tool rules:\n"
+        "- Prefer CONTEXT for what it already answers; call tools for the rest.\n"
+        "  Never guess numbers a tool can fetch.\n"
+        "- search_web: use for recent news, earnings/dividend announcements,\n"
+        "  filings, sector trends, analyst views. Cite sources inline as\n"
+        "  markdown links and end with a short '**Sources:**' list of the URLs\n"
+        "  you actually used. Never fabricate URLs.\n"
+        "- add_trade / add_dividend: call ONLY when the user explicitly asks to\n"
+        "  record something and gave the needed numbers. The app then shows a\n"
+        "  confirmation card — tell the user to review it and tap Add. NEVER\n"
+        "  claim a record was saved; the user saves it from the card.\n"
         "\n"
         "Hard rules:\n"
         "- DO NOT give investment advice, buy/sell recommendations, or predictions.\n"
         "  Even when reporting analyst opinions found via search, frame them as\n"
         "  observations of what others said, never as your own recommendation.\n"
         "- For numeric facts about the user's holdings (shares, cost, P/L), trust\n"
-        "  the CONTEXT — never overwrite it with search results.\n"
-        "- Use search for: recent news, earnings announcements, dividend\n"
-        "  announcements, regulatory filings, sector trends, analyst price\n"
-        "  targets, and to fill gaps the CONTEXT doesn't cover.\n"
-        "- When you use search, briefly note what you found and that it came\n"
-        "  from the web (e.g. 'According to Reuters…'). Citation links are\n"
-        "  appended automatically — don't fabricate URLs.\n"
-        "- If neither CONTEXT nor search yields a confident answer, say so plainly.\n"
+        "  the CONTEXT and portfolio tools — never overwrite them with web results.\n"
+        "- If neither CONTEXT nor tools yield a confident answer, say so plainly.\n"
         "- TW holdings are in TWD (NT$); US holdings are in USD (US$) — use each\n"
         "  position's own currency and don't mix them in a single total. When\n"
         "  mentioning a TW ticker, include its Chinese name in parentheses if\n"
