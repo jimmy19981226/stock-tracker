@@ -4,9 +4,17 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import Dividend, get_db
 from ..schemas import DividendCreate, DividendOut
-from ..services import quotes
+from ..services import income, quotes
 
 router = APIRouter(prefix="/api/dividends", tags=["dividends"])
+
+
+@router.get("/calendar")
+def dividend_calendar(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
+    """除權息行事曆 — projected annual income, a 12-month forward calendar of
+    expected payments (from each holding's trailing payout schedule), and
+    known upcoming ex-dividend dates. See services/income.py."""
+    return income.build_dividend_calendar(db, user)
 
 
 def _to_out(d: Dividend) -> DividendOut:

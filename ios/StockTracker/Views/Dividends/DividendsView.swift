@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct DividendsView: View {
     let market: MarketCode
@@ -28,6 +29,8 @@ struct DividendsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
+                IncomeCalendarCard(market: market)
+                    .padding(.bottom, 16)
                 if dividends.isEmpty {
                     EmptyState(icon: "dollarsign.circle",
                                title: selectedYear != nil ? "No dividends in \(selectedYear!)" : "No dividends yet",
@@ -147,5 +150,145 @@ private struct DividendRow: View {
             Rectangle().fill(Theme.stroke).frame(height: 1)
         }
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Income calendar (除權息行事曆 + projected income)
+
+/// Card at the top of the Dividends tab: projected annual dividend income for
+/// this market, a 12-month bar chart of expected payments (each holding's
+/// trailing payout schedule projected forward), and known upcoming ex-dividend
+/// dates. Hides itself if the backend doesn't have /api/dividends/calendar.
+private struct IncomeCalendarCard: View {
+    let market: MarketCode
+    @EnvironmentObject private var store: PortfolioStore
+    @State private var calendar: DividendCalendar?
+    @State private var failed = false
+
+    private var currency: String { market.currencyCode }
+
+    private var projected: Double? {
+        calendar?.projectedAnnual.first { $0.currency == currency }?.amount
+    }
+
+    /// (month label, expected amount in this market's currency)
+    private var monthTotals: [(String, Double)] {
+        (calendar?.months ?? []).map { m in
+            (String(m.month.suffix(2)),
+             m.totals.first { $0.currency == currency }?.amount ?? 0)
+        }
+    }
+
+    private var upcoming: [DividendCalendar.Upcoming] {
+        (calendar?.upcoming ?? []).filter { $0.market == market }.prefix(4).map { $0 }
+    }
+
+    var body: some View {
+        if failed || (calendar != nil && projected == nil && upcoming.isEmpty) {
+            EmptyView()
+        } else {
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Income calendar")
+                        .font(.headline)
+                        .foregroundStyle(Theme.primaryText)
+
+                    if let calendar {
+                        if let projected {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Projected annual income")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Theme.mutedText)
+                                Text(Fmt.money(projected, currency: currency, digits: 0))
+                                    .font(.system(size: 26, weight: .bold, design: .rounded))
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.positive)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                            }
+                        }
+
+                        if monthTotals.contains(where: { $0.1 > 0 }) {
+                            Chart(monthTotals, id: \.0) { m in
+                                BarMark(x: .value("Month", m.0), y: .value("Amount", m.1))
+                                    .foregroundStyle(Theme.positive.opacity(0.75))
+                                    .cornerRadius(3)
+                            }
+                            .chartYAxis {
+                                AxisMarks(position: .trailing) { v in
+                                    AxisGridLine().foregroundStyle(Theme.stroke)
+                                    AxisValueLabel {
+                                        if let d = v.as(Double.self) {
+                                            Text(Fmt.compact(d))
+                                                .font(.system(size: 9))
+                                                .foregroundStyle(Theme.mutedText)
+                                        }
+                                    }
+                                }
+                            }
+                            .chartXAxis {
+                                AxisMarks { v in
+                                    AxisValueLabel {
+                                        if let s = v.as(String.self) {
+                                            Text(s)
+                                                .font(.system(size: 9))
+                                                .foregroundStyle(Theme.mutedText)
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(height: 110)
+                        }
+
+                        if !upcoming.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Upcoming ex-dividend dates")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Theme.mutedText)
+                                ForEach(upcoming, id: \.self) { u in
+                                    HStack {
+                                        Text(u.ticker)
+                                            .font(.system(.footnote, design: .rounded).weight(.bold))
+                                            .foregroundStyle(Theme.primaryText)
+                                        Text(store.name(for: u.ticker))
+                                            .font(.caption2)
+                                            .foregroundStyle(Theme.mutedText)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        if let amount = u.amount {
+                                            Text("≈\(Fmt.money(amount, currency: u.currency, digits: 0))")
+                                                .font(.system(.footnote, design: .rounded).weight(.semibold))
+                                                .monospacedDigit()
+                                                .foregroundStyle(Theme.positive)
+                                        }
+                                        Text(Fmt.prettyDate(u.exDate))
+                                            .font(.caption2)
+                                            .monospacedDigit()
+                                            .foregroundStyle(Theme.secondaryText)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text("Building income projection…")
+                                .font(.footnote)
+                                .foregroundStyle(Theme.mutedText)
+                        }
+                    }
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    private func load() async {
+        guard calendar == nil else { return }
+        do {
+            calendar = try await APIClient.shared.getDividendCalendar()
+        } catch {
+            failed = true  // older backend or transient error — hide the card
+        }
     }
 }

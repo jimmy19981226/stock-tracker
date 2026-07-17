@@ -255,6 +255,52 @@ def get_history(ticker: str, period: str = "1y") -> list[dict]:
     return bars
 
 
+_dividend_history_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def get_dividend_history(ticker: str) -> list[dict]:
+    """Per-share cash dividend payments, oldest first:
+    ``[{date, amount}]`` (date = ex-dividend date, amount per share).
+
+    Powers the dividend calendar's trailing-12-month income projection.
+    Cached like financials — payout schedules move slowly.
+    """
+    import yfinance as yf
+
+    now = time.time()
+    sym = resolve_symbol(ticker)
+    with _lock:
+        cached = _dividend_history_cache.get(sym)
+        if cached:
+            ttl = _FINANCIALS_TTL if cached[1] else _HISTORY_NEG_TTL
+            if now - cached[0] < ttl:
+                return cached[1]
+
+    series = None
+    for candidate in _history_symbol_candidates(sym):
+        try:
+            series = yf.Ticker(candidate).dividends
+        except Exception:
+            series = None
+        if series is not None and len(series):
+            break
+
+    out: list[dict] = []
+    if series is not None:
+        for idx, amount in series.items():
+            try:
+                if amount == amount and float(amount) > 0:  # NaN guard
+                    d = idx.date().isoformat() if hasattr(idx, "date") else str(idx)[:10]
+                    out.append({"date": d, "amount": float(amount)})
+            except Exception:
+                continue
+    out.sort(key=lambda r: r["date"])
+
+    with _lock:
+        _dividend_history_cache[sym] = (now, out)
+    return out
+
+
 def get_taiex_history(period: str = "1y") -> list[dict]:
     """TAIEX (台股加權) daily history for benchmark comparison."""
     return get_history("^TWII", period)

@@ -171,6 +171,72 @@ struct QuoteTick {
     let changePct: Double?
 }
 
+// MARK: - Dividend calendar (除權息行事曆 + projected income)
+
+struct CurrencyAmount: Codable, Hashable {
+    let currency: String
+    let amount: Double
+}
+
+struct DividendCalendar: Codable {
+    let projectedAnnual: [CurrencyAmount]
+    let months: [Month]
+    let upcoming: [Upcoming]
+
+    struct Item: Codable, Hashable {
+        let ticker: String
+        let market: MarketCode
+        let currency: String
+        let amount: Double
+        let perShare: Double?
+    }
+    struct Month: Codable, Hashable {
+        let month: String          // "2026-08"
+        let items: [Item]
+        let totals: [CurrencyAmount]
+    }
+    struct Upcoming: Codable, Hashable {
+        let ticker: String
+        let market: MarketCode
+        let currency: String
+        let exDate: String
+        let amount: Double?
+        let perShare: Double?
+    }
+}
+
+// MARK: - Performance (TWR / XIRR / benchmark / 期間績效)
+
+struct PerformanceReport: Codable {
+    let market: MarketCode
+    let currency: String
+    let period: String
+    let twrPct: Double?
+    let twrAnnualizedPct: Double?
+    let xirrPct: Double?
+    let periodPl: Double?
+    let portfolioSeries: [PctPoint]
+    let benchmark: Benchmark
+    let monthly: [MonthlyPL]
+
+    struct PctPoint: Codable, Hashable {
+        let date: String
+        let pct: Double
+    }
+    struct Benchmark: Codable {
+        let symbol: String
+        let name: String
+        let returnPct: Double?
+        let series: [PctPoint]
+    }
+    struct MonthlyPL: Codable, Hashable, Identifiable {
+        var id: String { month }
+        let month: String          // "2026-04"
+        let pl: Double
+        let returnPct: Double?
+    }
+}
+
 // MARK: - AI image import (parse a brokerage screenshot into records)
 
 struct ParsedTradeRow: Codable, Hashable {

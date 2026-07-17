@@ -27,6 +27,7 @@ struct DashboardView: View {
                 SummaryCard(summary: store.summary(for: market), currency: currency)
                 PortfolioValueCard(market: market,
                                    liveTotal: store.summary(for: market)?.totalValue)
+                PerformanceCard(market: market)
                 EarningsCard(points: store.earnings(for: market), currency: currency)
                 HoldingsSection(holdings: visibleHoldings, store: store,
                                 searching: !query.isEmpty)

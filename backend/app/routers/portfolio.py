@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import Dividend, Trade, get_db
-from ..services import portfolio, quotes
+from ..services import performance, portfolio, quotes
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -71,6 +71,20 @@ def get_value_history(
     if period not in _VALUE_PERIODS:
         period = "1y"
     return portfolio.build_value_history(db, user, market=market, period=period)
+
+
+@router.get("/performance")
+def get_performance(
+    market: str = Query("TW", pattern="^(TW|US)$"),
+    period: str = Query("1y"),
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    """TWR / XIRR / benchmark comparison / monthly P&L for one market.
+    See services/performance.py."""
+    if period not in _VALUE_PERIODS:
+        period = "1y"
+    return performance.build_performance(db, user, market=market, period=period)
 
 
 @router.get("/names")

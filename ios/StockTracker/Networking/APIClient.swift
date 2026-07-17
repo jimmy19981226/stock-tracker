@@ -240,6 +240,16 @@ final class APIClient {
         }
     }
 
+    // MARK: - Dividend calendar & performance
+
+    func getDividendCalendar() async throws -> DividendCalendar {
+        try await request("/api/dividends/calendar")
+    }
+
+    func getPerformance(market: MarketCode, period: String) async throws -> PerformanceReport {
+        try await request("/api/portfolio/performance?market=\(market.rawValue)&period=\(period)")
+    }
+
     // MARK: - Indices & live quotes
 
     private struct IndexSymbolsPayload: Codable { let symbols: [String] }
