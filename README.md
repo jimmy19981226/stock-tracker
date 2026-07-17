@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a streaming AI assistant (your choice of **OpenAI, Gemini, or Claude**) that analyzes your portfolio and can search the web.
+A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (your choice of **OpenAI, Gemini, or Claude**) that calls 14 typed tools over your portfolio, shows its reasoning, keeps generating in the background, and can draft trades for one-tap confirmation.
 
 </div>
 
@@ -78,9 +78,13 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 
 ### ✦ AI assistant
 - **Choose your model** — OpenAI, Google Gemini, or Anthropic Claude, each with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server).
-- **Streaming replies** rendered as **Claude-style Markdown** — headings, bold, lists, code blocks, blockquotes — with an animated typing indicator.
-- **Portfolio-aware** — every chat sends your live holdings + light fundamentals; mention a ticker and its monthly revenue + quarterly margins are attached so the model answers with real numbers.
-- **Web-search grounding (Gemini)** — ask for the latest news and Gemini searches the web, with inline `[N]` citations linking to each source.
+- **Tool calling (14 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, live quotes for *any* ticker, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, USD/TWD, market hours, and web search. Each call shows a live status line ("Reading holdings…").
+- **Add records by chat** — "I bought 100 shares of 2330 at 1050 today" makes the assistant draft the trade into an in-chat **confirmation card**; nothing is saved until you tap Add.
+- **Visible reasoning** — Claude extended thinking and Gemini thought summaries stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle).
+- **Background generation** — replies keep generating server-side if you switch apps or lock the screen; the finished answer is waiting when you come back. The stop button cancels the server run too.
+- **Always ready** — opening the Assistant pre-warms the backend and pre-builds your portfolio context, so the first message streams immediately.
+- **Streaming replies** rendered as **Claude-style Markdown** in a serif reading voice — headings, bold, lists, code blocks, blockquotes, tables — with a shimmering thinking indicator.
+- **Portfolio-aware** — every chat carries a snapshot of your holdings + light fundamentals; mention a ticker and its monthly revenue + quarterly margins are attached so the model answers with real numbers.
 - **Chat history** — past conversations are saved; reopen one, delete with a swipe, or clear them all.
 
 ### 🛠 Trade & dividend management
@@ -395,7 +399,9 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | POST   | /api/markets/{code}/holidays        | add a market closure (date, name?) — no redeploy |
 | DELETE | /api/markets/{code}/holidays/{date} | remove a market closure                     |
 | GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
-| POST   | /api/ai/chat                        | SSE stream (`init`→`chunk`→`done`); provider via `X-AI-Provider`/`X-AI-Key` (OpenAI / Gemini / Claude) |
+| POST   | /api/ai/chat                        | SSE stream (`init`→`status`/`thinking`/`chunk`/`action`→`done`); tool-calling loop, runs detached server-side; provider via `X-AI-Provider`/`X-AI-Key` |
+| POST   | /api/ai/chats/{id}/stop             | cancel that chat's in-flight generation (partial reply persisted) |
+| POST   | /api/ai/prewarm                     | wake backend + pre-build chat context (called when the Assistant opens) |
 | POST   | /api/ai/parse-records               | upload an image/PDF (+ optional `instructions` note), get `{trades, dividends, notes}` back — read-only, nothing written to DB |
 | GET    | /api/ai/chats                       | list saved conversations, newest first      |
 | GET    | /api/ai/chats/{id}                  | fetch one conversation with all messages    |
@@ -421,14 +427,15 @@ The **Assistant** tab gives natural-language Q&A over your portfolio. Pick your 
 - Every open position with **light fundamentals** (sector, P/E, EPS, market cap, 52-week range, dividend yield, beta, 1-year analyst target, earnings / ex-div dates).
 - Every trade and dividend you've recorded.
 - For tickers you mention in the question (or in recent turns): **24 months of monthly revenue with YoY %** and **8 quarters of revenue / EPS / margins**.
-- **Anything live on the web** via Gemini's built-in Google Search tool — recent news, regulatory filings, analyst commentary, macro events, conference call summaries.
+- **Whatever its tools return** — 14 typed tools cover portfolio reads (summary, holdings, trades, dividends), market data (live quote for any ticker, price history, FX, market hours), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history), DuckDuckGo **web search** with self-cited sources, and two write actions (`add_trade` / `add_dividend`) that only ever *propose* records for an in-chat confirm card.
 
 This means questions like *"is 2330's gross margin improving?"* or *"compare 2330's price to its 1-year analyst target"* return tables with real numbers from your data — not generic boilerplate. Ask *"what's the latest news on 2330?"* and Gemini searches the web, writes a summary, and **inline citation chips** link each claim back to its source.
 
-### Streaming + citations
+### Streaming, tools & background runs
 
-- The backend streams Server-Sent Events: `init` → `chunk` (per token) → `done` (canonical content; Gemini adds `[N]` markers + a Sources block). It routes by `X-AI-Provider` / `X-AI-Key`; Gemini can fall back to the server's `GOOGLE_AI_API_KEY`.
-- The iOS app consumes the stream with `URLSession.bytes`, renders partial **Markdown** live with an animated typing indicator, then swaps in the final content. Gemini citation source URLs are shortened to their domain.
+- The backend streams Server-Sent Events: `init` → `status` (tool progress) / `thinking` (reasoning deltas) / `chunk` (answer tokens) / `action` (proposed records) → `done`. It routes by `X-AI-Provider` / `X-AI-Key`; Gemini can fall back to the server's `GOOGLE_AI_API_KEY`.
+- Generation runs in a **detached server-side worker** — if the app is backgrounded or loses the stream, the reply still completes and persists; the app recovers it automatically on return. `POST /api/ai/chats/{id}/stop` cancels the run.
+- The iOS app consumes the stream with `URLSession.bytes`, renders partial **Markdown** live (serif reading voice), streams reasoning into a collapsible section, and turns `action` events into the same confirm card the image import uses.
 
 ### Persistent chat history
 
@@ -439,10 +446,12 @@ This means questions like *"is 2330's gross margin improving?"* or *"compare 233
 
 ### What it can / can't do
 
-- ✅ Answer questions from your local data + per-ticker fundamentals (and, with Gemini, live web search).
-- ✅ With Gemini, cite every web-sourced claim with a clickable inline link to its source.
-- ✅ Stream responses token-by-token over SSE.
+- ✅ Answer questions from your local data + per-ticker fundamentals + live tool calls (quotes, history, performance, web search — all providers).
+- ✅ Cite web-sourced claims as markdown links with a Sources list.
+- ✅ Draft trades/dividends you dictate into a confirm card (you tap Add to save).
+- ✅ Stream responses token-by-token over SSE, with visible reasoning where the provider exposes it (Claude, Gemini).
 - ❌ Won't give buy/sell recommendations or price predictions, even when relaying analyst opinions found via search — those are framed as observations, never advice.
+- ❌ Won't write to your portfolio directly — write tools only ever propose records for your confirmation.
 
 ### Privacy tradeoff
 
