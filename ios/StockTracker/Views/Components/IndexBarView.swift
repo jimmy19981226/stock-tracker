@@ -31,20 +31,18 @@ struct IndexBarView: View {
                 Rectangle().fill(Theme.stroke).frame(height: 1)
 
                 if expanded {
-                    ScrollView {
-                        VStack(spacing: 10) {
-                            ForEach(indices) { q in
-                                NavigationLink(value: q) {
-                                    IndexDetailCard(quote: q, detail: details[q.symbol])
-                                }
-                                .buttonStyle(.plain)
-                                .task { await loadDetail(q.symbol) }
+                    // Fixed (non-scrolling) panel — every card fully visible.
+                    VStack(spacing: 10) {
+                        ForEach(indices) { q in
+                            NavigationLink(value: q) {
+                                IndexDetailCard(quote: q, detail: details[q.symbol])
                             }
+                            .buttonStyle(.plain)
+                            .task { await loadDetail(q.symbol) }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 10)
                     }
-                    .frame(maxHeight: min(CGFloat(indices.count) * 96 + 10, 300))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
                 }
 
                 HStack(spacing: 0) {
