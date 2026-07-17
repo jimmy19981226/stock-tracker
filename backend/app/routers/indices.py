@@ -50,9 +50,14 @@ KNOWN_NAMES = {
     "^GDAXI": "DAX",
 }
 
-# Which market's session an index belongs to — drives the "is this live or a
-# close" dot in the UI. Default is US; TW-listed indices are tagged TW.
+# Which market page an index appears on (TW page vs US page in the app).
+# TW-listed symbols are tagged TW; everything else (US + other global
+# indices) shows on the US page.
 _TW_INDICES = {"^TWII", "^TWOII"}
+
+
+def _index_market(sym: str) -> str:
+    return "TW" if sym in _TW_INDICES or sym.endswith((".TW", ".TWO")) else "US"
 
 
 def _key(user_id: str) -> str:
@@ -99,7 +104,7 @@ def get_indices(db: Session = Depends(get_db), user: str = Depends(get_current_u
             {
                 "symbol": sym,
                 "name": KNOWN_NAMES.get(sym) or (q.name if q else sym) or sym,
-                "market": "TW" if sym in _TW_INDICES else "US",
+                "market": _index_market(sym),
                 "price": price,
                 "change": change,
                 "change_pct": (change / prev * 100) if change is not None and prev else None,

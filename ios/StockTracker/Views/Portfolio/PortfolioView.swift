@@ -30,14 +30,20 @@ struct PortfolioView: View {
             case .dividends: DividendsView(market: market)
             }
 
-            // Pinned market-index strip — stays visible across all three tabs.
-            IndexBarView()
+            // Pinned market-index strip — stays visible across all three tabs
+            // and shows only this market's indices.
+            IndexBarView(market: market)
         }
         .screenBackground()
         .navigationTitle(market.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: Holding.self) { h in
             StockDetailView(ticker: h.ticker, market: market)
+        }
+        // Tapping an index (strip or expanded card) opens the same detail
+        // page a stock gets — chart, day stats, everything that applies.
+        .navigationDestination(for: IndexQuote.self) { q in
+            StockDetailView(ticker: q.symbol, market: q.market)
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
