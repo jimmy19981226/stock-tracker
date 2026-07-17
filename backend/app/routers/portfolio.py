@@ -99,22 +99,31 @@ def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_use
 
     now = time.time()
     with _names_lock:
-        if (
-            _names_cache["key"] == all_tickers
-            and _names_cache["value"]
-            and now - _names_cache["at"] < _NAMES_TTL_SECONDS
-        ):
-            return dict(_names_cache["value"])
+        cached = dict(_names_cache["value"])
+        cached_at = _names_cache["at"]
+        fresh = bool(cached) and now - cached_at < _NAMES_TTL_SECONDS
+        if fresh and _names_cache["key"] == all_tickers:
+            return cached
 
-    quote_map = quotes.get_quotes(all_tickers)
-    names = {
+    # Within the TTL, only fetch tickers the cache doesn't know yet — names
+    # essentially never change, and refetching the full lifetime ticker set
+    # whenever the set grew is what made saving a trade with a NEW ticker
+    # take tens of seconds.
+    to_fetch = [t for t in all_tickers if not cached.get(t)] if fresh else list(all_tickers)
+    quote_map = quotes.get_quotes(to_fetch) if to_fetch else {}
+    fetched = {
         t: (quote_map[t].name if t in quote_map and quote_map[t].name else "")
-        for t in all_tickers
+        for t in to_fetch
     }
+    names = {t: cached.get(t) or fetched.get(t, "") for t in all_tickers}
     # Only cache once we actually have names (don't pin a failed/empty fetch).
+    # An incremental merge keeps the old timestamp so the TTL still forces a
+    # full refresh on schedule.
     if any(names.values()):
         with _names_lock:
-            _names_cache.update({"key": all_tickers, "at": now, "value": names})
+            _names_cache.update(
+                {"key": all_tickers, "at": cached_at if fresh else now, "value": names}
+            )
     return names
 
 

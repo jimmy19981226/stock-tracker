@@ -1,12 +1,12 @@
 from collections import defaultdict
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import Trade, get_db
 from ..schemas import TradeCreate, TradeOut
-from ..services import quotes
+from ..services import idempotency, quotes
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -95,7 +95,12 @@ def create_trade(
     payload: TradeCreate,
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    # A retried delivery of an attempt that already landed → replay the
+    # original response instead of inserting a duplicate.
+    if (replayed := idempotency.replay(user, idempotency_key)) is not None:
+        return replayed
     ticker = payload.ticker.strip().upper()
     trade = Trade(
         type=payload.type,
@@ -111,7 +116,9 @@ def create_trade(
     db.add(trade)
     db.commit()
     db.refresh(trade)
-    return _to_out(trade, _status_of(db, trade))
+    out = _to_out(trade, _status_of(db, trade))
+    idempotency.remember(user, idempotency_key, out)
+    return out
 
 
 @router.put("/{trade_id}", response_model=TradeOut)

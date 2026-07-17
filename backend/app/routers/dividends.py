@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import Dividend, get_db
 from ..schemas import DividendCreate, DividendOut
-from ..services import income, quotes
+from ..services import idempotency, income, quotes
 
 router = APIRouter(prefix="/api/dividends", tags=["dividends"])
 
@@ -49,7 +49,12 @@ def create_dividend(
     payload: DividendCreate,
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    # A retried delivery of an attempt that already landed → replay the
+    # original response instead of inserting a duplicate.
+    if (replayed := idempotency.replay(user, idempotency_key)) is not None:
+        return replayed
     ticker = payload.ticker.strip().upper()
     d = Dividend(
         ticker=ticker,
@@ -62,7 +67,9 @@ def create_dividend(
     db.add(d)
     db.commit()
     db.refresh(d)
-    return _to_out(d)
+    out = _to_out(d)
+    idempotency.remember(user, idempotency_key, out)
+    return out
 
 
 @router.put("/{dividend_id}", response_model=DividendOut)

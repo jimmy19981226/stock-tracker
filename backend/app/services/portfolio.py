@@ -132,13 +132,55 @@ def _ticker_markets(db: Session, user_id: str) -> dict[str, str]:
     return out
 
 
+# Single-flight for the live-quote sweep. /holdings and /summary each build
+# holdings, and the app requests both at once — without this, two identical
+# relay→MIS→Yahoo sweeps race on every refresh tick (and usually both miss
+# the sources' 5s caches). Whoever takes the per-key lock fetches; everyone
+# else waits briefly and reuses the result.
+_QUOTES_REUSE_SECONDS = 2.0
+_quotes_results: dict[tuple[str, ...], tuple[float, dict]] = {}
+_quotes_flight: dict[tuple[str, ...], Lock] = {}
+_quotes_flight_lock = Lock()
+
+
+def _get_quotes_shared(tickers: list[str]) -> dict:
+    key = tuple(sorted(set(tickers)))
+    if not key:
+        return {}
+
+    def _cached() -> dict | None:
+        with _quotes_flight_lock:
+            hit = _quotes_results.get(key)
+        return hit[1] if hit and time.time() - hit[0] < _QUOTES_REUSE_SECONDS else None
+
+    result = _cached()
+    if result is not None:
+        return result
+    with _quotes_flight_lock:
+        flight = _quotes_flight.setdefault(key, Lock())
+    with flight:
+        result = _cached()
+        if result is not None:
+            return result
+        result = quotes.get_quotes(list(key))
+        now = time.time()
+        with _quotes_flight_lock:
+            _quotes_results[key] = (now, result)
+            # Drop expired ticker sets so old keys don't accumulate.
+            for k in [k for k, (at, _) in _quotes_results.items()
+                      if now - at > _QUOTES_REUSE_SECONDS]:
+                _quotes_results.pop(k, None)
+                _quotes_flight.pop(k, None)
+        return result
+
+
 def build_holdings(db: Session, user_id: str) -> list[dict]:
     trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     states = compute_states(trades)
     ticker_market = {t.ticker: (t.market or quotes.market_of(t.ticker)) for t in trades}
 
     open_tickers = [t for t, st in states.items() if st.shares > 1e-9]
-    quote_map = quotes.get_quotes(open_tickers)
+    quote_map = _get_quotes_shared(open_tickers)
 
     out: list[dict] = []
     for ticker, st in states.items():
