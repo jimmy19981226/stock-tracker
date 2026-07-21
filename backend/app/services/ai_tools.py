@@ -317,7 +317,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         if q is None:
             return {"error": f"No quote found for {ticker!r}"}, None
         return {"quote": {
-            "ticker": ticker, "symbol": q.symbol, "name": q.name,
+            "ticker": ticker, "symbol": q.symbol,
+            "name": quotes.display_name(ticker, fallback=q.name),
             "price": q.price, "previous_close": q.previous_close,
             "currency": q.currency, "day_open": q.day_open,
             "day_high": q.day_high, "day_low": q.day_low, "volume": q.volume,

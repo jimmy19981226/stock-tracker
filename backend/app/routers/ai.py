@@ -1194,7 +1194,8 @@ def _build_context(db: Session, user_id: str, focus_tickers: list[str] | None = 
         focus_payload.append({
             "ticker": tkr,
             "symbol": sym,
-            "name": (quote.name if quote else None) or f.get("short_name") or f.get("long_name"),
+            "name": quotes.display_name(tkr, fallback=(
+                (quote.name if quote else None) or f.get("short_name") or f.get("long_name") or "")),
             "is_held": tkr.upper() in held_tickers,
             "current_price": quote.price if quote else None,
             "fundamentals": {k: v for k, v in f.items() if v is not None},

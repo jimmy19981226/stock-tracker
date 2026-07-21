@@ -11,7 +11,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from ..database import Dividend, Trade
-from . import fx, quotes, stock_info
+from . import fx, quotes
 
 
 # --- TW exit-cost estimate ----------------------------------------------
@@ -222,16 +222,10 @@ def build_holdings(db: Session, user_id: str) -> list[dict]:
             if current_price is not None and prev_close is not None and prev_close > 0
             else None
         )
-        # TW display name is always the Chinese short name (FinMind), never
-        # whatever the live quote source happened to answer with — Yahoo's
-        # fallback name for TW tickers is English, which reads wrong here.
-        display_name = (
-            stock_info.get_tw_chinese_name(ticker) if market == "TW" else None
-        ) or (quote.name if quote else "")
         out.append(
             {
                 "ticker": ticker,
-                "name": display_name,
+                "name": quotes.display_name(ticker, fallback=quote.name if quote else ""),
                 "currency": currency,
                 "market": market,
                 "shares": st.shares,

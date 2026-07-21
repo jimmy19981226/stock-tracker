@@ -188,7 +188,8 @@ def stock_detail(
     return {
         "ticker": ticker,
         "symbol": quotes.resolve_symbol(ticker),
-        "name": quote.name if quote else (fundamentals.get("short_name") or fundamentals.get("long_name") or ""),
+        "name": quotes.display_name(ticker, fallback=quote.name if quote else (
+            fundamentals.get("short_name") or fundamentals.get("long_name") or "")),
         "live": live,
         "fundamentals": fundamentals,
         "position": position,

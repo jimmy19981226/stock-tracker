@@ -57,6 +57,24 @@ def detect_currency(ticker: str) -> str:
     return currency_of(market_of(ticker))
 
 
+def display_name(ticker: str, fallback: str = "") -> str:
+    """Best display name for a ticker.
+
+    TW tickers always get the Traditional-Chinese short name (FinMind's
+    TaiwanStockInfo, e.g. ``2330`` -> 台積電) — independent of whichever quote
+    source actually answered. Without this, a cloud deploy with no quote
+    relay configured silently falls back to Yahoo for TW quotes too, whose
+    name (and yfinance's short/long name) is English, which reads wrong here.
+    Falls back to ``fallback`` (typically a live quote's own name) otherwise.
+    """
+    if market_of(ticker) == "TW":
+        from . import stock_info  # lazy: stock_info imports from this module
+        name = stock_info.get_tw_chinese_name(ticker)
+        if name:
+            return name
+    return fallback
+
+
 @dataclass
 class QuoteData:
     symbol: str
