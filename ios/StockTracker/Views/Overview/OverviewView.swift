@@ -31,7 +31,7 @@ struct OverviewView: View {
                         MarketCard(
                             market: market,
                             summary: store.summary(for: market),
-                            isOpen: store.isOpen(market)
+                            session: store.session(for: market)
                         )
                         .cardStyle()
                     }
@@ -110,6 +110,9 @@ private struct NetWorthCard: View {
     let overview: PortfolioOverview?
 
     private let trAccent = Color(red: 0.655, green: 0.545, blue: 0.98)
+    // Cyan accent so Unrealized P&L reads as its own category, matching the
+    // "Unrealized" breakdown stat color on each MarketCard below.
+    private let unrealizedAccent = Color(red: 0.30, green: 0.78, blue: 0.92)
 
     /// Combined Total Return (unrealized + realized + dividends) across both
     /// markets, in TWD (US leg converted at the current FX rate).
@@ -124,6 +127,21 @@ private struct NetWorthCard: View {
     private var combinedTotalReturnUsd: Double? {
         guard let tr = combinedTotalReturn, let fx = overview?.fx.usdTwd, fx != 0 else { return nil }
         return tr / fx
+    }
+
+    /// Combined unrealized P&L only (open positions' gain/loss), across both
+    /// markets, in TWD (US leg converted at the current FX rate).
+    private var combinedUnrealizedPl: Double? {
+        guard let o = overview else { return nil }
+        let tw = o.tw?.totalPl
+        let us = o.us?.totalPl
+        if tw == nil && us == nil { return nil }
+        let fx = o.fx.usdTwd ?? 0
+        return (tw ?? 0) + (us ?? 0) * fx
+    }
+    private var combinedUnrealizedPlUsd: Double? {
+        guard let up = combinedUnrealizedPl, let fx = overview?.fx.usdTwd, fx != 0 else { return nil }
+        return up / fx
     }
     /// The FX rate's as-of date, formatted (e.g. "Jun 21, 2026").
     private var fxDateText: String? {
@@ -163,38 +181,23 @@ private struct NetWorthCard: View {
                 }
             }
 
-            if let tr = combinedTotalReturn {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text("TOTAL RETURN")
-                            .font(.caption2.weight(.bold))
-                            .tracking(0.5)
-                            .foregroundStyle(trAccent)
-                        Text(Fmt.signedMoney(tr, currency: "TWD", digits: 0))
-                            .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .foregroundStyle(Theme.pl(tr))
-                            .minimumScaleFactor(0.7)
-                            .lineLimit(1)
-                            .rollingNumber(tr)
-                        if let usd = combinedTotalReturnUsd {
-                            Text("≈ \(Fmt.signedMoney(usd, currency: "USD"))")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(Theme.secondaryText)
-                                .rollingNumber(usd)
-                        }
+            if combinedUnrealizedPl != nil || combinedTotalReturn != nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let up = combinedUnrealizedPl {
+                        returnBadge(label: "UNREALIZED P&L", value: up,
+                                    usdValue: combinedUnrealizedPlUsd, accent: unrealizedAccent)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(trAccent.opacity(0.12))
-                    .overlay(Capsule().stroke(trAccent.opacity(0.30), lineWidth: 1))
-                    .clipShape(Capsule())
+                    if let tr = combinedTotalReturn {
+                        returnBadge(label: "TOTAL RETURN", value: tr,
+                                    usdValue: combinedTotalReturnUsd, accent: trAccent)
 
-                    // Definition + the FX rate's as-of date.
-                    Text("Unrealized + realized + dividends"
-                         + (fxDateText.map { " · FX rate as of \($0)" } ?? ""))
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
+                        // Definition + the FX rate's as-of date.
+                        Text("Unrealized + realized + dividends"
+                             + (fxDateText.map { " · FX rate as of \($0)" } ?? ""))
+                            .font(.caption2)
+                            .foregroundStyle(Theme.mutedText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(.top, 4)
             }
@@ -207,6 +210,36 @@ private struct NetWorthCard: View {
             "\(Fmt.bigMoney(overview?.combined.twd, currency: "TWD")), "
             + "about \(Fmt.bigMoney(overview?.combined.usd, currency: "USD"))"
         )
+    }
+
+    /// A capsule stat: label, TWD amount, and its USD equivalent — used for
+    /// both the unrealized-only and total-return combined figures.
+    private func returnBadge(label: String, value: Double, usdValue: Double?,
+                             accent: Color) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.caption2.weight(.bold))
+                .tracking(0.5)
+                .foregroundStyle(accent)
+            Text(Fmt.signedMoney(value, currency: "TWD", digits: 0))
+                .font(.system(.subheadline, design: .rounded).weight(.bold))
+                .foregroundStyle(Theme.pl(value))
+                .minimumScaleFactor(0.7)
+                .lineLimit(1)
+                .rollingNumber(value)
+            if let usd = usdValue {
+                Text("≈ \(Fmt.signedMoney(usd, currency: "USD"))")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.secondaryText)
+                    .lineLimit(1)
+                    .rollingNumber(usd)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(accent.opacity(0.12))
+        .overlay(Capsule().stroke(accent.opacity(0.30), lineWidth: 1))
+        .clipShape(Capsule())
     }
 }
 
@@ -335,7 +368,20 @@ private struct TotalEarnedCard: View {
 private struct MarketCard: View {
     let market: MarketCode
     let summary: CurrencySummary?
-    let isOpen: Bool
+    let session: MarketSession
+
+    // Amber for the extended-hours sessions (US pre-market/after-hours) so
+    // they read as distinct from a fully "open" green — same tone as the
+    // Dividends accent elsewhere on this screen.
+    private static let extendedHoursColor = Color(red: 1.0, green: 0.72, blue: 0.25)
+
+    private var dotColor: Color {
+        switch session {
+        case .open: return Theme.positive
+        case .preMarket, .afterHours: return Self.extendedHoursColor
+        case .closed: return Theme.mutedText
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -347,9 +393,9 @@ private struct MarketCard: View {
                         .foregroundStyle(Theme.primaryText)
                     HStack(spacing: 5) {
                         Circle()
-                            .fill(isOpen ? Theme.positive : Theme.mutedText)
+                            .fill(dotColor)
                             .frame(width: 6, height: 6)
-                        Text(isOpen ? "Market open" : "Market closed")
+                        Text(session.label)
                             .font(.caption)
                             .foregroundStyle(Theme.secondaryText)
                         Text("· \(summary?.holdingsCount ?? 0) positions")

@@ -14,6 +14,7 @@ stream text, progress labels, and confirm cards with one protocol.
 """
 from __future__ import annotations
 
+import base64
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -466,17 +467,42 @@ def run_tool_loop(provider: str, api_key: str, model: str, system_prompt: str,
     return _openai_loop(provider, api_key, model, system_prompt, history, user_id)
 
 
+def _openai_user_content(content: str, image: bytes | None, mime: str | None,
+                         vision: bool):
+    """Plain text, or an OpenAI-style multipart content list when an image is
+    attached. ``vision=False`` (NVIDIA NIM's free-tier text models) drops the
+    image and tells the model one was attached, rather than sending bytes it
+    can't understand."""
+    if not image:
+        return content
+    if not vision:
+        note = "[The user attached an image, but this model can't view images." \
+               " Ask them to describe it, or switch to Gemini/OpenAI/Claude.]"
+        return f"{content}\n{note}" if content else note
+    parts: list[dict] = []
+    if content:
+        parts.append({"type": "text", "text": content})
+    b64 = base64.b64encode(image).decode()
+    parts.append({"type": "image_url",
+                 "image_url": {"url": f"data:{mime or 'image/jpeg'};base64,{b64}"}})
+    return parts
+
+
 def _openai_loop(provider: str, api_key: str, model: str, system_prompt: str,
                  history, user_id: str):
-    """OpenAI and NVIDIA NIM (OpenAI-compatible)."""
+    """OpenAI and NVIDIA NIM (OpenAI-compatible). NVIDIA's free-tier models are
+    text-only, so images are only forwarded for the real OpenAI provider."""
     base_url = ai_providers.NVIDIA_BASE_URL if provider == "nvidia" else None
     client = ai_providers._openai_client(api_key, base_url=base_url, timeout=120.0)
     extra = ai_providers._nim_extra_body(model) if provider == "nvidia" else None
+    vision = provider == "openai"
 
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
-    for role, content in history:
-        messages.append({"role": "assistant" if role == "assistant" else "user",
-                         "content": content})
+    for role, content, image, mime in history:
+        messages.append({
+            "role": "assistant" if role == "assistant" else "user",
+            "content": _openai_user_content(content, image, mime, vision),
+        })
 
     for _ in range(MAX_TOOL_ROUNDS):
         stream = client.chat.completions.create(
@@ -524,14 +550,30 @@ def _openai_loop(provider: str, api_key: str, model: str, system_prompt: str,
                              "content": _result_json(result)})
 
 
+def _claude_content(content: str, image: bytes | None, mime: str | None):
+    """Plain text, or an Anthropic-style content block list with the image
+    first (Claude reads images best when they precede the caption text)."""
+    if not image:
+        return content
+    parts: list[dict] = [{
+        "type": "image",
+        "source": {"type": "base64", "media_type": mime or "image/jpeg",
+                   "data": base64.b64encode(image).decode()},
+    }]
+    if content:
+        parts.append({"type": "text", "text": content})
+    return parts
+
+
 def _claude_loop(api_key: str, model: str, system_prompt: str,
                  history, user_id: str):
     import anthropic
 
     client = anthropic.Anthropic(api_key=api_key)
     messages = [
-        {"role": "assistant" if role == "assistant" else "user", "content": content}
-        for role, content in history
+        {"role": "assistant" if role == "assistant" else "user",
+         "content": _claude_content(content, image, mime)}
+        for role, content, image, mime in history
     ]
     if not messages:
         return
@@ -593,10 +635,19 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
     from google.genai import types
 
     client = genai.Client(api_key=api_key)
+
+    def _parts(content: str, image: bytes | None, mime: str | None):
+        parts = []
+        if content:
+            parts.append(types.Part(text=content))
+        if image:
+            parts.append(types.Part.from_bytes(data=image, mime_type=mime or "image/jpeg"))
+        return parts
+
     contents = [
         types.Content(role="user" if role == "user" else "model",
-                      parts=[types.Part(text=content)])
-        for role, content in history
+                      parts=_parts(content, image, mime))
+        for role, content, image, mime in history
     ]
 
     def _config(with_thoughts: bool):

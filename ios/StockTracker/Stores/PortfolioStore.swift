@@ -289,6 +289,11 @@ final class PortfolioStore: ObservableObject {
         MarketHours.isOpen(config(for: market))
     }
 
+    /// Richer than `isOpen` — surfaces US pre-market/after-hours separately.
+    func session(for market: MarketCode) -> MarketSession {
+        MarketHours.session(for: config(for: market), marketCode: market)
+    }
+
     // MARK: - Per-market slices
 
     func currency(for market: MarketCode) -> String { market.currencyCode }

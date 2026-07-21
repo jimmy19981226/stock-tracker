@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import Dividend, Trade, get_db
-from ..services import performance, portfolio, quotes
+from ..services import performance, portfolio, quotes, stock_info
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -111,10 +111,17 @@ def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_use
     # take tens of seconds.
     to_fetch = [t for t in all_tickers if not cached.get(t)] if fresh else list(all_tickers)
     quote_map = quotes.get_quotes(to_fetch) if to_fetch else {}
-    fetched = {
-        t: (quote_map[t].name if t in quote_map and quote_map[t].name else "")
-        for t in to_fetch
-    }
+
+    def _display_name(t: str) -> str:
+        quote_name = quote_map[t].name if t in quote_map and quote_map[t].name else ""
+        # TW display name is always the Chinese short name (FinMind), never
+        # whatever the live quote source answered — Yahoo's fallback name
+        # for TW tickers is English, which reads wrong here.
+        if quotes.market_of(t) == "TW":
+            return stock_info.get_tw_chinese_name(t) or quote_name
+        return quote_name
+
+    fetched = {t: _display_name(t) for t in to_fetch}
     names = {t: cached.get(t) or fetched.get(t, "") for t in all_tickers}
     # Only cache once we actually have names (don't pin a failed/empty fetch).
     # An incremental merge keeps the old timestamp so the TTL still forces a

@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 // Codable models mirroring the FastAPI schemas (see frontend/src/api.ts). The
 // API speaks snake_case; the shared decoder/encoder in APIClient uses the
@@ -272,6 +273,58 @@ struct AiStatus: Codable {
 struct ChatMessage: Codable, Hashable {
     let role: String   // "user" | "assistant"
     let content: String
+    /// A data URL (`data:image/jpeg;base64,...`) when an image was attached
+    /// to this turn — present on server-loaded history. Locally-composed
+    /// messages (not yet round-tripped) instead populate `localImage` below.
+    var image: String? = nil
+
+    /// The just-picked image for a message this device is about to send /
+    /// just sent, before the server round-trip would give us `image` back.
+    /// Not Codable (never persisted or decoded) — purely a local UI hint.
+    var localImage: UIImage? = nil
+
+    enum CodingKeys: String, CodingKey { case role, content, image }
+
+    init(role: String, content: String, image: String? = nil, localImage: UIImage? = nil) {
+        self.role = role
+        self.content = content
+        self.image = image
+        self.localImage = localImage
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        role = try c.decode(String.self, forKey: .role)
+        content = try c.decode(String.self, forKey: .content)
+        image = try c.decodeIfPresent(String.self, forKey: .image)
+        localImage = nil
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(role, forKey: .role)
+        try c.encode(content, forKey: .content)
+        try c.encodeIfPresent(image, forKey: .image)
+    }
+
+    static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
+        lhs.role == rhs.role && lhs.content == rhs.content && lhs.image == rhs.image
+    }
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(role)
+        hasher.combine(content)
+        hasher.combine(image)
+    }
+
+    /// A UIImage for display, whichever source has it — the locally-picked
+    /// image before send, or the server's base64 data URL after reload.
+    var displayImage: UIImage? {
+        if let localImage { return localImage }
+        guard let image, let comma = image.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(image[image.index(after: comma)...]))
+        else { return nil }
+        return UIImage(data: data)
+    }
 }
 
 struct ChatSummary: Codable, Identifiable, Hashable {

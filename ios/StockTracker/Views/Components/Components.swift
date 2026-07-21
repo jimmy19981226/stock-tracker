@@ -22,10 +22,12 @@ struct PLBadge: View {
         HStack(spacing: 4) {
             if let value, !compact {
                 Text(Fmt.signedMoney(value, currency: currency))
+                    .lineLimit(1)
                     .rollingNumber(value)
             }
             if let pct {
                 Text(Fmt.pct(pct))
+                    .lineLimit(1)
                     .rollingNumber(pct)
             }
         }
@@ -53,14 +55,16 @@ struct ChangeLine: View {
                 .font(.system(size: 10, weight: .bold))
             if let value {
                 Text(Fmt.signedMoney(value, currency: currency))
+                    .lineLimit(1)
                     .rollingNumber(value)
             }
             if let pct {
                 Text("(\(Fmt.pct(pct)))")
+                    .lineLimit(1)
                     .rollingNumber(pct)
             }
             if !suffix.isEmpty {
-                Text(suffix).foregroundStyle(Theme.secondaryText)
+                Text(suffix).foregroundStyle(Theme.secondaryText).lineLimit(1)
             }
         }
         .font(.system(.subheadline, design: .rounded).weight(.semibold))
@@ -85,6 +89,8 @@ struct StatBlock: View {
             Text(value)
                 .font(.system(.subheadline, design: .rounded).weight(.semibold))
                 .foregroundStyle(valueColor)
+                .minimumScaleFactor(0.75)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .trailing)
     }

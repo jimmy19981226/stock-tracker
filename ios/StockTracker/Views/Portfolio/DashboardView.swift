@@ -32,6 +32,8 @@ struct DashboardView: View {
                 PerformanceCard(market: market)
                 EarningsCard(points: store.earnings(for: market), currency: currency)
                     .cardStyle()
+                AllocationCard(holdings: store.holdings(for: market), store: store)
+                    .cardStyle()
                 HoldingsSection(holdings: visibleHoldings, store: store,
                                 searching: !query.isEmpty)
                     .cardStyle()
@@ -166,7 +168,7 @@ private struct PortfolioValueCard: View {
     /// curve ends at this value so it always matches the big number above —
     /// the backend's last point is a delayed daily close.
     var liveTotal: Double?
-    @State private var period: ValuePeriod = .threeMonth
+    @State private var period: ValuePeriod = .max
     @State private var points: [ValuePoint] = []
     @State private var loading = true
     @State private var scrubDate: Date?
@@ -425,6 +427,139 @@ private struct EarningsCard: View {
     }
 }
 
+// MARK: - Allocation
+
+/// What each position is worth as a share of this market's total — a donut
+/// plus a legend list. Colors are assigned by a stable hash of the ticker
+/// (not by sort rank), so a position keeps its color across refreshes even
+/// as today's moves reshuffle the order — see the categorical-palette rule
+/// in the dataviz skill ("color follows the entity, never its rank").
+private struct AllocationCard: View {
+    let holdings: [Holding]
+    let store: PortfolioStore
+
+    // Fixed-order categorical palette (validated for CVD-safety at 8 slots,
+    // dark-surface steps — this app is dark-mode only). Beyond the top 7
+    // positions, the remainder folds into a neutral "Other" slice rather than
+    // generating a 9th hue.
+    private static let palette: [Color] = [
+        Color(red: 0.2235, green: 0.5294, blue: 0.8980),  // blue
+        Color(red: 0.8510, green: 0.3490, blue: 0.1490),  // orange
+        Color(red: 0.0980, green: 0.6196, blue: 0.4392),  // aqua
+        Color(red: 0.7882, green: 0.5216, blue: 0.0000),  // yellow
+        Color(red: 0.8353, green: 0.3176, blue: 0.5059),  // magenta
+        Color(red: 0.0000, green: 0.5137, blue: 0.0000),  // green
+        Color(red: 0.5647, green: 0.5216, blue: 0.9137),  // violet
+    ]
+    private static let otherColor = Theme.mutedText
+    private static let maxSlices = 7
+
+    private struct Slice: Identifiable {
+        let id: String
+        let ticker: String
+        let name: String
+        let value: Double
+        let pct: Double
+        let color: Color
+    }
+
+    /// A stable (non-randomized) hash so a ticker always lands on the same
+    /// palette slot across app launches — `String.hashValue` is salted per
+    /// process and would make colors flicker between sessions.
+    private static func slot(for ticker: String) -> Color {
+        var hash: UInt32 = 2166136261
+        for byte in ticker.utf8 {
+            hash ^= UInt32(byte)
+            hash = hash &* 16777619
+        }
+        return palette[Int(hash % UInt32(palette.count))]
+    }
+
+    private var totalValue: Double {
+        holdings.reduce(0) { $0 + ($1.marketValue ?? 0) }
+    }
+
+    private var slices: [Slice] {
+        let total = totalValue
+        guard total > 0 else { return [] }
+        let sorted = holdings.sorted { ($0.marketValue ?? 0) > ($1.marketValue ?? 0) }
+        let head = sorted.prefix(Self.maxSlices)
+        let tail = sorted.dropFirst(Self.maxSlices)
+
+        var out = head.map { h -> Slice in
+            let v = h.marketValue ?? 0
+            return Slice(id: h.ticker, ticker: h.ticker, name: store.name(for: h.ticker),
+                        value: v, pct: v / total * 100, color: Self.slot(for: h.ticker))
+        }
+        if !tail.isEmpty {
+            let otherValue = tail.reduce(0.0) { $0 + ($1.marketValue ?? 0) }
+            out.append(Slice(id: "__other__", ticker: "Other", name: "\(tail.count) more",
+                             value: otherValue, pct: otherValue / total * 100,
+                             color: Self.otherColor))
+        }
+        return out
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader("Allocation")
+            if slices.isEmpty {
+                EmptyState(icon: "chart.pie", title: "No positions",
+                          message: "Add a trade to see your allocation.")
+            } else {
+                HStack(alignment: .center, spacing: 20) {
+                    Chart(slices) { s in
+                        SectorMark(angle: .value("Value", s.value),
+                                  innerRadius: .ratio(0.62), angularInset: 1.5)
+                            .foregroundStyle(s.color)
+                            .cornerRadius(3)
+                    }
+                    .chartLegend(.hidden)
+                    .frame(width: 130, height: 130)
+
+                    // Direct labels beside each swatch — text stays neutral
+                    // ink; only the swatch carries the categorical color.
+                    // Ticker and % never truncate; the name gives way first
+                    // (a TW short name is a few CJK characters, but a US
+                    // holding's name can run long) — capped at 7 + "Other"
+                    // rows regardless of how many positions exist, so this
+                    // column's height never grows past ~8 rows.
+                    VStack(alignment: .leading, spacing: 9) {
+                        ForEach(slices) { s in
+                            HStack(spacing: 6) {
+                                Circle().fill(s.color).frame(width: 8, height: 8)
+                                Text(s.ticker)
+                                    .font(.system(.caption, design: .rounded).weight(.bold))
+                                    .foregroundStyle(Theme.primaryText)
+                                    .lineLimit(1)
+                                    .layoutPriority(2)
+                                if !s.name.isEmpty {
+                                    Text(s.name)
+                                        .font(.caption2)
+                                        .foregroundStyle(Theme.secondaryText)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .layoutPriority(0)
+                                }
+                                Spacer(minLength: 6)
+                                // Plain share of portfolio — not a signed
+                                // change, so no Fmt.pct (which prefixes "+").
+                                Text(String(format: "%.1f%%", s.pct))
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(Theme.secondaryText)
+                                    .lineLimit(1)
+                                    .layoutPriority(2)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 // MARK: - Holdings
 
 /// How the holdings list is ordered. "Value" mirrors the backend's default;
@@ -564,37 +699,42 @@ private struct HoldingRow: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
-                    // Solid pill = current price, colored by today's move,
-                    // with today's % change alongside when the market's given
-                    // us one.
-                    HStack(spacing: 5) {
-                        Text(Fmt.money(holding.currentPrice, currency: holding.currency))
-                            .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .rollingNumber(holding.currentPrice)
-                        // Hidden when flat/no data (a wall of 0.00% after
-                        // hours says nothing).
-                        if let p = holding.todayChangePct, p != 0 {
-                            Text(Fmt.pct(p))
-                                .font(.system(.caption2, design: .rounded).weight(.bold))
-                                .opacity(0.9)
-                                .rollingNumber(p)
-                        }
+                    // Solid pill = current price, colored by today's move.
+                    Text(Fmt.money(holding.currentPrice, currency: holding.currency))
+                        .font(.system(.subheadline, design: .rounded).weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .rollingNumber(holding.currentPrice)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Theme.pl(holding.todayChange) == Theme.mutedText
+                                    ? Theme.cardElevated : Theme.pl(holding.todayChange))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .animation(.snappy(duration: 0.5), value: Theme.pl(holding.todayChange))
+                    // Today's move in $ and % — its own line so it has room
+                    // to read clearly instead of squeezing into the pill.
+                    // Hidden when flat/no data (a wall of 0.00 / 0.00% after
+                    // hours says nothing).
+                    if let c = holding.todayChange, let p = holding.todayChangePct, p != 0 {
+                        Text("\(Fmt.signedMoney(c, currency: holding.currency)) (\(Fmt.pct(p)))")
+                            .font(.system(.caption2, design: .rounded).weight(.semibold))
+                            .foregroundStyle(Theme.pl(c))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .rollingNumber(c)
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Theme.pl(holding.todayChange) == Theme.mutedText
-                                ? Theme.cardElevated : Theme.pl(holding.todayChange))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .animation(.snappy(duration: 0.5), value: Theme.pl(holding.todayChange))
                     // What the position is worth — the number checked most.
                     Text(Fmt.money(holding.marketValue, currency: holding.currency, digits: 0))
                         .font(.system(.caption, design: .rounded).weight(.semibold))
                         .foregroundStyle(Theme.secondaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .rollingNumber(holding.marketValue)
                     Text(Fmt.pct(holding.unrealizedPlPct))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.pl(holding.unrealizedPlPct))
+                        .lineLimit(1)
                         .rollingNumber(holding.unrealizedPlPct)
                 }
             }

@@ -57,7 +57,9 @@ A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + V
 - **Two portfolios, one app** — Taiwan (TWD) and US (USD) holdings are tracked separately, each with their own dashboard, trades, and dividends. Market is detected from the ticker format (numeric → TW, letters → US).
 - **Overview landing page** — a TW card and a US card showing each market's value, total P/L, and today's move. Tap a card to enter that portfolio; the back button returns you to the overview.
 - **Combined net worth** — both portfolios summed into a single figure shown in **both NT$ and US$**, with the live USD↔TWD rate. The number flashes green/red as it ticks.
+- **Combined unrealized P&L** — the Overview also shows unrealized P&L alone (open positions' gain/loss, US converted to NT$ at the live rate) alongside the all-in Total Return figure, so you can see them separately.
 - **Color-coded P&L** — gains render green, losses red, across the net worth, market cards, summary, and every holding.
+- **US pre-market / after-hours status** — the US market card shows "Pre-Market" / "After Hours" during NYSE/Nasdaq's real extended sessions (an amber dot, distinct from the green "Market open"), instead of collapsing straight to "Market closed". Taiwan cash equities have no analogous evening session, so the TW card stays open/closed only.
 - **DB-driven market config** — trading hours, holidays, currency, and timezone for each market live in the database (`markets` + `market_holidays` tables), not hardcoded, so the open/closed status is correct per market and editable without a redeploy.
 
 ### 📊 Live portfolio dashboard
@@ -66,7 +68,8 @@ A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + V
 - Per-currency summary grid: market value, unrealized P/L, realized P/L, dividends, and today's move (accent-colored)
 - Unrealized P/L is **net of estimated exit costs** (sell commission + transaction tax), so it matches your broker's 損益試算 / 獲利率 rather than the gross gain
 - **Cumulative earnings chart** (Swift Charts) stacking realized P/L + dividends
-- **Holdings list** — each position with shares, market value, live price, and unrealized P&L, sortable by market value, today's move, or gain %
+- **Allocation donut** — what each position is worth as a share of that market's total, colored by a fixed, CVD-safe categorical palette keyed to the ticker (stable across refreshes/re-sorts, not by rank), with a legend directly labeling each slice's ticker, name (Chinese for TW), and %; positions past the top 7 fold into "Other" so the legend never grows past 8 rows
+- **Holdings list** — each position with shares, market value, live price, today's move in **both $ and %**, and unrealized P&L, sortable by market value, today's move, or gain %
 
 Holdings/summary refresh while a portfolio is on screen — every 5 s while that market is open, 60 s otherwise.
 
@@ -80,6 +83,7 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 - **Choose your model** — OpenAI, Google Gemini, or Anthropic Claude, each with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server).
 - **Tool calling (14 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, live quotes for *any* ticker, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, USD/TWD, market hours, and web search. Each call shows a live status line ("Reading holdings…").
 - **Add records by chat** — "I bought 100 shares of 2330 at 1050 today" makes the assistant draft the trade into an in-chat **confirmation card**; nothing is saved until you tap Add.
+- **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and the model reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still call `add_trade`/`add_dividend` from what it reads once the market's confirmed. Works on Gemini, OpenAI, and Claude; NVIDIA NIM's free-tier models are text-only and get a polite fallback note instead of silently ignoring the photo. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
 - **Visible reasoning** — Claude extended thinking and Gemini thought summaries stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle).
 - **Background generation** — replies keep generating server-side if you switch apps or lock the screen; the finished answer is waiting when you come back. The stop button cancels the server run too.
 - **Always ready** — opening the Assistant pre-warms the backend and pre-builds your portfolio context, so the first message streams immediately.
@@ -331,6 +335,7 @@ returns the Chinese name (台積電) and bid/ask/volume; Yahoo returns the Engli
 - **Market detection** — a ticker's format decides its market: numeric codes (`2330`, `00919`, `00937B`) → **TW / TWD**, alphabetic symbols (`NVDA`, `BRK.B`) → **US / USD**. Each trade/dividend also carries an explicit `market` column.
 - **Ticker resolution** — bare 4-6 digit TW codes auto-suffix to `xxxx.TW`; US symbols resolve directly.
 - **Live quotes** — TW tickers go to **TWSE MIS** (batched into one HTTP call per refresh, probing both `tse_` 上市 and `otc_` 上櫃 prefixes); US tickers go to **Yahoo**. Both are cached ~5 s server-side so the 5 s client poll tracks the broker closely without hammering either source.
+- **TW stock names are always Traditional Chinese** — sourced from FinMind's `TaiwanStockInfo` dataset (e.g. `2330` → 台積電), independent of which quote source actually answered. Without this, a cloud deploy with no quote relay configured falls back to Yahoo for TW quotes too, whose name field is English — this keeps the display name correct either way.
 - **Combined net worth** — the Overview sums both portfolios into one figure shown in NT$ **and** US$, converting with a live USD↔TWD rate (Yahoo, cached). If a market that holds positions is missing a live value, the combined total blanks rather than showing a fabricated number.
 - **Cost basis** — FIFO (first-in, first-out), matching US broker 1099 reporting. A sell consumes the oldest lots first; realized P/L is proceeds minus those lots' cost (minus fees), and the remaining lots are the cost basis of shares still held.
 - **Market value** — `current_price × shares`, gross. Matches 資產市值 / 總現值 in most TW broker apps.
@@ -399,7 +404,7 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | POST   | /api/markets/{code}/holidays        | add a market closure (date, name?) — no redeploy |
 | DELETE | /api/markets/{code}/holidays/{date} | remove a market closure                     |
 | GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
-| POST   | /api/ai/chat                        | SSE stream (`init`→`status`/`thinking`/`chunk`/`action`→`done`); tool-calling loop, runs detached server-side; provider via `X-AI-Provider`/`X-AI-Key` |
+| POST   | /api/ai/chat                        | multipart (`message` + optional `chat_id` + optional image `file`) → SSE stream (`init`→`status`/`thinking`/`chunk`/`action`→`done`); tool-calling loop, runs detached server-side; provider via `X-AI-Provider`/`X-AI-Key` |
 | POST   | /api/ai/chats/{id}/stop             | cancel that chat's in-flight generation (partial reply persisted) |
 | POST   | /api/ai/prewarm                     | wake backend + pre-build chat context (called when the Assistant opens) |
 | POST   | /api/ai/parse-records               | upload an image/PDF (+ optional `instructions` note), get `{trades, dividends, notes}` back — read-only, nothing written to DB |
@@ -449,13 +454,14 @@ This means questions like *"is 2330's gross margin improving?"* or *"compare 233
 - ✅ Answer questions from your local data + per-ticker fundamentals + live tool calls (quotes, history, performance, web search — all providers).
 - ✅ Cite web-sourced claims as markdown links with a Sources list.
 - ✅ Draft trades/dividends you dictate into a confirm card (you tap Add to save).
+- ✅ Read a photo you attach in the conversation (Gemini, OpenAI, Claude) and ask which market it's about if that's unclear.
 - ✅ Stream responses token-by-token over SSE, with visible reasoning where the provider exposes it (Claude, Gemini).
 - ❌ Won't give buy/sell recommendations or price predictions, even when relaying analyst opinions found via search — those are framed as observations, never advice.
 - ❌ Won't write to your portfolio directly — write tools only ever propose records for your confirmation.
 
 ### Privacy tradeoff
 
-When you ask a question, your portfolio JSON + ticker fundamentals are sent to your chosen provider (OpenAI / Gemini / Anthropic) for inference, using **your own key**; with Gemini it may also issue Google Search queries. Market quotes still happen on your backend. The assistant is entirely opt-in — with no provider key set it's disabled and the rest of the app works normally.
+When you ask a question, your portfolio JSON + ticker fundamentals are sent to your chosen provider (OpenAI / Gemini / Anthropic) for inference, using **your own key**; with Gemini it may also issue Google Search queries. Any photo you attach in the conversation is sent the same way (as an inline image, not stored by the provider beyond that call) and is replayed on later turns of the same chat so follow-up questions about it still work. Market quotes still happen on your backend. The assistant is entirely opt-in — with no provider key set it's disabled and the rest of the app works normally.
 
 > **Free tier note:** Google may use your prompts to improve their models on the free Gemini API tier. Switch to billing-enabled Vertex AI / Cloud if that's a dealbreaker.
 

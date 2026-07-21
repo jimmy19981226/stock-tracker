@@ -16,9 +16,15 @@ final class AssistantViewModel: ObservableObject {
     @Published var status: AiStatus?
     @Published var error: String?
 
-    // Image-import flow inside the chat: attach → parse → review card → add.
-    @Published var importImage: UIImage?
-    @Published var isParsingImport = false
+    // A photo staged in the compose bar — attached but not yet sent. The user
+    // can still type a prompt to go with it; only Send actually uploads it.
+    @Published var pendingAttachment: UIImage?
+    private var pendingAttachmentData: Data?
+
+    // Confirm-card flow for proposed trades/dividends: the assistant (reading
+    // either typed text or an attached image) calls add_trade/add_dividend,
+    // the server emits an "action" event, and this card lets the user review
+    // before anything is actually saved.
     @Published var pendingImport: ParsedRecords?
     @Published var importTradeOn: [Bool] = []
     @Published var importDividendOn: [Bool] = []
@@ -117,16 +123,21 @@ final class AssistantViewModel: ObservableObject {
     }
 
     var canSend: Bool {
-        !input.trimmingCharacters(in: .whitespaces).isEmpty && !isStreaming
+        guard !isStreaming else { return false }
+        return !input.trimmingCharacters(in: .whitespaces).isEmpty || pendingAttachment != nil
     }
 
     func send() {
         let text = input.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty, !isStreaming else { return }
+        let attachedImage = pendingAttachment
+        let attachedData = pendingAttachmentData
+        guard !isStreaming, !text.isEmpty || attachedData != nil else { return }
         input = ""
+        pendingAttachment = nil
+        pendingAttachmentData = nil
         error = nil
         recoverTask?.cancel()
-        messages.append(ChatMessage(role: "user", content: text))
+        messages.append(ChatMessage(role: "user", content: text, localImage: attachedImage))
         isStreaming = true
         streamingText = ""
         thinkingText = ""
@@ -141,6 +152,7 @@ final class AssistantViewModel: ObservableObject {
                 try await APIClient.shared.streamChat(
                     chatId: chatId,
                     message: text,
+                    image: attachedData,
                     onInit: { [weak self] id, _ in
                         guard let self, !Task.isCancelled else { return }
                         self.chatId = id
@@ -226,6 +238,7 @@ final class AssistantViewModel: ObservableObject {
         error = nil
         endBackgroundTask()
         cancelImport()
+        removeAttachment()
     }
 
     deinit {
@@ -274,40 +287,29 @@ final class AssistantViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Image import (in-chat)
+    // MARK: - Image attach (in-chat)
 
-    func handlePickedImage(_ rawData: Data) async {
+    /// Stage a picked photo in the compose bar. Nothing is uploaded yet — the
+    /// user can still type a prompt to go with it; Send uploads both together.
+    func attachImage(_ rawData: Data) {
         error = nil
-        var data = rawData
+        guard let img = UIImage(data: rawData) else {
+            self.error = "Couldn't read that image"
+            return
+        }
         // Downscale large photos so the upload stays small.
-        if let img = UIImage(data: data) {
-            let maxDim: CGFloat = 2200
-            let scale = min(1, maxDim / max(img.size.width, img.size.height))
-            let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
-            let renderer = UIGraphicsImageRenderer(size: target)
-            let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: target)) }
-            importImage = resized
-            data = resized.jpegData(compressionQuality: 0.8) ?? data
-        }
-        isParsingImport = true
-        pendingImport = nil
-        do {
-            let result = try await APIClient.shared.parseRecords(imageData: data)
-            pendingImport = result
-            importTradeOn = Array(repeating: true, count: result.trades.count)
-            importDividendOn = Array(repeating: true, count: result.dividends.count)
-            if result.trades.isEmpty && result.dividends.isEmpty {
-                let note = result.notes.isEmpty
-                    ? "I couldn't find any trades or dividends in that image. Try a clearer screenshot."
-                    : result.notes
-                messages.append(ChatMessage(role: "assistant", content: note))
-                cancelImport()
-            }
-        } catch {
-            self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
-            cancelImport()
-        }
-        isParsingImport = false
+        let maxDim: CGFloat = 2200
+        let scale = min(1, maxDim / max(img.size.width, img.size.height))
+        let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: target)
+        let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: target)) }
+        pendingAttachment = resized
+        pendingAttachmentData = resized.jpegData(compressionQuality: 0.8) ?? rawData
+    }
+
+    func removeAttachment() {
+        pendingAttachment = nil
+        pendingAttachmentData = nil
     }
 
     func submitImport(store: PortfolioStore) async {
@@ -348,11 +350,9 @@ final class AssistantViewModel: ObservableObject {
     }
 
     func cancelImport() {
-        importImage = nil
         pendingImport = nil
         importTradeOn = []
         importDividendOn = []
-        isParsingImport = false
         isSubmittingImport = false
     }
 
@@ -514,7 +514,7 @@ struct AssistantView: View {
             photoItem = nil
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self) {
-                    await vm.handlePickedImage(data)
+                    vm.attachImage(data)
                 } else {
                     vm.error = "Couldn't read that image"
                 }
@@ -594,21 +594,8 @@ struct AssistantView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
-                    // In-chat image import: attached image → parsing → review card.
-                    if let img = vm.importImage {
-                        HStack {
-                            Spacer(minLength: 60)
-                            Image(uiImage: img)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(maxHeight: 180)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                    }
-                    if vm.isParsingImport {
-                        ThinkingIndicator(text: "Reading your image…", icon: "photo.viewfinder")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    // The assistant proposed trades/dividends (from typed text
+                    // or a read image) — review card, nothing saved yet.
                     if vm.pendingImport != nil {
                         ImportReviewCard(vm: vm, store: store)
                     }
@@ -637,7 +624,7 @@ struct AssistantView: View {
             .onChange(of: vm.thinkingText) { _, _ in
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
-            .onChange(of: vm.isParsingImport) { _, _ in
+            .onChange(of: vm.pendingAttachment == nil) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: vm.pendingImport == nil) { _, _ in
@@ -714,42 +701,67 @@ struct AssistantView: View {
     }
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
-            // Attach a brokerage screenshot — AI extracts trades/dividends in-chat.
-            PhotosPicker(selection: $photoItem, matching: .images) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(vm.isParsingImport ? Theme.mutedText : Theme.secondaryText)
-            }
-            .disabled(vm.isParsingImport || vm.isSubmittingImport)
-
-            // Send button lives inside the field pill (ChatGPT-style), and
-            // becomes a stop button while a reply is streaming.
-            HStack(alignment: .bottom, spacing: 6) {
-                TextField("Ask about your portfolio…", text: $vm.input, axis: .vertical)
-                    .focused($inputFocused)
-                    .lineLimit(1...5)
-                    .padding(.leading, 6)
-                    .padding(.vertical, 5)
-                Button {
-                    if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
-                } label: {
-                    Image(systemName: vm.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(vm.isStreaming ? Theme.primaryText
-                                         : vm.canSend ? Theme.accent : Theme.mutedText)
-                        .contentTransition(.symbolEffect(.replace))
+        VStack(alignment: .leading, spacing: 8) {
+            // Staged photo — attached but not sent yet. Type a prompt to go
+            // with it (or leave it blank) and hit Send to upload both together.
+            if let attachment = vm.pendingAttachment {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(uiImage: attachment)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 56, height: 56)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Spacer()
+                    Button {
+                        withAnimation(.snappy(duration: 0.3)) { vm.removeAttachment() }
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundStyle(Theme.mutedText, Theme.cardElevated)
+                    }
                 }
-                .disabled(!vm.isStreaming && !vm.canSend)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(Theme.cardElevated.opacity(0.9))
-            .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 21, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-            )
+
+            HStack(spacing: 10) {
+                // Attach a photo — the AI reads it in-conversation (a stock
+                // chart, a trade confirmation, a brokerage statement…).
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(vm.isSubmittingImport ? Theme.mutedText : Theme.secondaryText)
+                }
+                .disabled(vm.isSubmittingImport)
+
+                // Send button lives inside the field pill (ChatGPT-style), and
+                // becomes a stop button while a reply is streaming.
+                HStack(alignment: .bottom, spacing: 6) {
+                    TextField(vm.pendingAttachment == nil ? "Ask about your portfolio…" : "Add a note (optional)…",
+                             text: $vm.input, axis: .vertical)
+                        .focused($inputFocused)
+                        .lineLimit(1...5)
+                        .padding(.leading, 6)
+                        .padding(.vertical, 5)
+                    Button {
+                        if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
+                    } label: {
+                        Image(systemName: vm.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(vm.isStreaming ? Theme.primaryText
+                                             : vm.canSend ? Theme.accent : Theme.mutedText)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .disabled(!vm.isStreaming && !vm.canSend)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Theme.cardElevated.opacity(0.9))
+                .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            }
         }
         .padding(12)
         // Frosted compose bar over the gradient — matches the index strip
@@ -868,26 +880,49 @@ private struct ChatBubble: View {
     let message: ChatMessage
     private var isUser: Bool { message.role == "user" }
     private var content: String { Self.stripMeta(message.content) }
+    // Independent of vm.isStreaming by design — an attached photo stays
+    // tappable to review full-screen even while the reply is generating.
+    @State private var showFullScreen = false
 
     var body: some View {
         if isUser {
-            HStack {
-                Spacer(minLength: 40)
-                Text(content)
-                    .font(.subheadline.weight(.medium))
-                    // Black text — readable on every accent style (incl. gold).
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    // Slight top-lit gradient so the bubble reads as a lit
-                    // surface, not a flat color chip.
-                    .background(
-                        LinearGradient(
-                            colors: [Theme.accent.opacity(0.92), Theme.accent],
-                            startPoint: .top, endPoint: .bottom)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .textSelection(.enabled)
+            VStack(alignment: .trailing, spacing: 6) {
+                if let img = message.displayImage {
+                    HStack {
+                        Spacer(minLength: 40)
+                        Button { showFullScreen = true } label: {
+                            Image(uiImage: img)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 180, height: 180)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .fullScreenCover(isPresented: $showFullScreen) {
+                        FullScreenImageViewer(image: img)
+                    }
+                }
+                if !content.isEmpty {
+                    HStack {
+                        Spacer(minLength: 40)
+                        Text(content)
+                            .font(.subheadline.weight(.medium))
+                            // Black text — readable on every accent style (incl. gold).
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            // Slight top-lit gradient so the bubble reads as a lit
+                            // surface, not a flat color chip.
+                            .background(
+                                LinearGradient(
+                                    colors: [Theme.accent.opacity(0.92), Theme.accent],
+                                    startPoint: .top, endPoint: .bottom)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .textSelection(.enabled)
+                    }
+                }
             }
         } else {
             // Assistant replies render as full-width formatted Markdown in the
@@ -1030,6 +1065,38 @@ private struct ImportReviewCard: View {
             }
             .padding(.vertical, 8)
             Rectangle().fill(Theme.stroke).frame(height: 1)
+        }
+    }
+}
+
+/// Full-screen, pinch-to-zoom review of a chat-attached photo. Tap the image
+/// or the close button to dismiss; works whether the image is still local
+/// (just picked/sent) or reloaded from a past chat's persisted history.
+private struct FullScreenImageViewer: View {
+    let image: UIImage
+    @Environment(\.dismiss) private var dismiss
+    @State private var zoom: CGFloat = 1
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(zoom)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { zoom = max(1, min($0, 4)) }
+                        .onEnded { _ in withAnimation(.snappy) { if zoom < 1.05 { zoom = 1 } } }
+                )
+                .onTapGesture { dismiss() }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Button { dismiss() } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.white, Color.black.opacity(0.4))
+            }
+            .padding(20)
         }
     }
 }

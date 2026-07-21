@@ -15,6 +15,7 @@ data.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -49,11 +50,9 @@ MAX_TITLE_LEN = 60
 class Message(BaseModel):
     role: Literal["user", "assistant"]
     content: str
-
-
-class ChatRequest(BaseModel):
-    chat_id: int | None = None
-    message: str = Field(..., min_length=1)
+    # A data URL (``data:image/jpeg;base64,...``) when the user attached an
+    # image to this turn; omitted otherwise.
+    image: str | None = None
 
 
 class ChatSummary(BaseModel):
@@ -112,6 +111,12 @@ def list_chats(db: Session = Depends(get_db), user: str = Depends(get_current_us
     ]
 
 
+def _image_data_url(m: ChatMessage) -> str | None:
+    if not m.image_data:
+        return None
+    return f"data:{m.image_mime or 'image/jpeg'};base64,{m.image_data}"
+
+
 @router.get("/chats/{chat_id}", response_model=ChatDetail)
 def get_chat(chat_id: int, db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     chat = db.get(Chat, chat_id)
@@ -122,7 +127,10 @@ def get_chat(chat_id: int, db: Session = Depends(get_db), user: str = Depends(ge
         title=chat.title,
         created_at=chat.created_at,
         updated_at=chat.updated_at,
-        messages=[Message(role=m.role, content=m.content) for m in chat.messages],
+        messages=[
+            Message(role=m.role, content=m.content, image=_image_data_url(m))
+            for m in chat.messages
+        ],
     )
 
 
@@ -152,15 +160,29 @@ def delete_chat(chat_id: int, db: Session = Depends(get_db), user: str = Depends
     db.commit()
 
 
+CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 8 MB cap, matches parse-records
+CHAT_IMAGE_MIMES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+
+
 @router.post("/chat")
-def chat(
-    req: ChatRequest,
+async def chat(
+    message: str = Form(""),
+    chat_id: int | None = Form(None),
+    file: UploadFile | None = File(None),
     x_ai_provider: str = Header(default="gemini"),
     x_ai_key: str | None = Header(default=None),
     x_ai_model: str | None = Header(default=None),
     user: str = Depends(get_current_user),
 ):
     """Stream the assistant's reply as Server-Sent Events.
+
+    ``multipart/form-data`` so a photo can ride alongside the text: ``message``
+    (may be empty if ``file`` is attached), optional ``chat_id``, and an
+    optional image ``file`` (the user snapped/picked a stock or trade
+    screenshot). The model sees the image inline in this turn — and again on
+    every later turn, since it's replayed from the persisted history — so it
+    can answer follow-ups about it. It's told to ask which market (TW/US) the
+    image is about when that isn't obvious, rather than guess.
 
     The provider (``X-AI-Provider``: ``gemini`` | ``openai`` | ``claude`` |
     ``nvidia``), the user's own key (``X-AI-Key``), and the requested model
@@ -195,35 +217,75 @@ def chat(
         }
         raise HTTPException(status_code=503, detail=hints[provider])
 
-    user_text = req.message.strip()
-    if not user_text:
+    user_text = message.strip()
+
+    image_bytes: bytes | None = None
+    image_mime: str | None = None
+    if file is not None and (file.filename or file.content_type):
+        image_mime = (file.content_type or "").lower().strip()
+        if image_mime not in CHAT_IMAGE_MIMES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported image type: {image_mime or 'unknown'}. "
+                       "Allowed: PNG, JPG, WEBP.",
+            )
+        # "image/jpg" isn't a real IANA type; some providers (Claude) reject
+        # it as a media_type even though browsers/iOS send it. Normalize once
+        # here so every downstream consumer (storage, providers) sees the
+        # canonical value.
+        if image_mime == "image/jpg":
+            image_mime = "image/jpeg"
+        image_bytes = await file.read()
+        if len(image_bytes) == 0:
+            image_bytes = None
+            image_mime = None
+        elif len(image_bytes) > CHAT_IMAGE_MAX_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Image too large ({len(image_bytes) / 1e6:.1f} MB). "
+                       f"Max {CHAT_IMAGE_MAX_BYTES // (1024 * 1024)} MB.",
+            )
+
+    if not user_text and not image_bytes:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     # Phase 1: persist the user message and snapshot what the generator needs.
     # Done synchronously so the user message survives even if streaming aborts.
     with SessionLocal() as db:
-        if req.chat_id is None:
-            chat_obj = Chat(title=_derive_title(user_text), user_id=user)
+        if chat_id is None:
+            chat_obj = Chat(
+                title=_derive_title(user_text or "Shared a photo"), user_id=user)
             db.add(chat_obj)
             db.flush()
         else:
-            chat_obj = db.get(Chat, req.chat_id)
+            chat_obj = db.get(Chat, chat_id)
             if chat_obj is None or chat_obj.user_id != user:
                 raise HTTPException(status_code=404, detail="Chat not found")
             if chat_obj.title == "New chat" and not chat_obj.messages:
-                chat_obj.title = _derive_title(user_text)
+                chat_obj.title = _derive_title(user_text or "Shared a photo")
 
-        db.add(ChatMessage(chat_id=chat_obj.id, role="user", content=user_text))
+        db.add(ChatMessage(
+            chat_id=chat_obj.id, role="user", content=user_text,
+            image_mime=image_mime,
+            image_data=base64.b64encode(image_bytes).decode() if image_bytes else None,
+        ))
         db.flush()
 
         # Strip the internal <!--meta:{...}--> headers from persisted replies
         # before replaying them to the model — models imitate what they see
         # in history and start emitting fake meta lines into visible answers.
+        # Each turn's image (if any) is decoded back so the model can still
+        # see it on later turns (e.g. "is that the TW or US listing?").
         history_msgs = [
-            (m.role, _META_HEADER_RE.sub("", m.content))
+            (
+                m.role,
+                _META_HEADER_RE.sub("", m.content),
+                base64.b64decode(m.image_data) if m.image_data else None,
+                m.image_mime,
+            )
             for m in list(chat_obj.messages)[-MAX_HISTORY_TURNS:]
         ]
-        focus_tickers = _detect_tickers([c for _, c in history_msgs])[:3]
+        focus_tickers = _detect_tickers([c for _, c, _, _ in history_msgs])[:3]
         chat_id = chat_obj.id
         chat_title = chat_obj.title
         db.commit()
@@ -919,6 +981,21 @@ def _system_prompt(context_json: str) -> str:
         "  record something and gave the needed numbers. The app then shows a\n"
         "  confirmation card — tell the user to review it and tap Add. NEVER\n"
         "  claim a record was saved; the user saves it from the card.\n"
+        "\n"
+        "Image rules (the user may attach a photo of a stock chart, quote,\n"
+        "position, or trade confirmation):\n"
+        "- First work out which market it's about: Taiwan-listed (numeric ticker\n"
+        "  like 2330, NT$/TWD amounts, a Chinese company name, or a TW broker\n"
+        "  app like Fubon/Cathay/元大/國泰) vs US-listed (letter ticker like AAPL,\n"
+        "  US$/USD amounts, or a US broker app like Robinhood/Schwab/Fidelity).\n"
+        "- If the image and conversation don't make the market clear (e.g. a\n"
+        "  bare ticker or number with no currency/company/broker context, or a\n"
+        "  company that's cross-listed in both), STOP and ASK the user which\n"
+        "  market/currency it is — do not guess, and do not call add_trade or\n"
+        "  add_dividend until they've confirmed.\n"
+        "- Once the market is clear, treat figures in that market's currency and\n"
+        "  proceed normally (including offering to log a trade/dividend if the\n"
+        "  user asks and the image gives you the needed numbers).\n"
         "\n"
         "Hard rules:\n"
         "- DO NOT give investment advice, buy/sell recommendations, or predictions.\n"

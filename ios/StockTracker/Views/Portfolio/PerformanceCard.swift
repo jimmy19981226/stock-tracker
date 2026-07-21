@@ -12,7 +12,7 @@ struct PerformanceCard: View {
     let market: MarketCode
 
     @State private var reports: [String: PerformanceReport] = [:]
-    @State private var period = "1y"
+    @State private var period = "max"
     @State private var loading = false
     @State private var unavailable = false
 

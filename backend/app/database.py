@@ -125,6 +125,10 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    # An image the user attached to this turn (base64-encoded), so reopening a
+    # past chat still shows it. NULL for every message without one.
+    image_mime: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    image_data: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")
 
@@ -278,10 +282,27 @@ def _ensure_user_id_columns() -> None:
                 )
 
 
+def _ensure_chat_image_columns() -> None:
+    """Add the ``image_mime``/``image_data`` columns to an existing
+    chat_messages table (see ``_ensure_market_column`` for why this is
+    needed alongside ``create_all``). Idempotent; valid on SQLite and
+    Postgres."""
+    insp = inspect(engine)
+    if "chat_messages" not in set(insp.get_table_names()):
+        return  # fresh DB — create_all already added the columns
+    cols = {c["name"] for c in insp.get_columns("chat_messages")}
+    with engine.begin() as conn:
+        if "image_mime" not in cols:
+            conn.execute(text("ALTER TABLE chat_messages ADD COLUMN image_mime VARCHAR(40)"))
+        if "image_data" not in cols:
+            conn.execute(text("ALTER TABLE chat_messages ADD COLUMN image_data TEXT"))
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_market_column()
     _ensure_user_id_columns()
+    _ensure_chat_image_columns()
     seed_markets()
 
 

@@ -312,6 +312,52 @@ def get_taiex_history(period: str = "1y") -> list[dict]:
 
 _FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 
+# TW company Chinese short names (FinMind TaiwanStockInfo) — a name
+# essentially never changes, so one refresh a day is plenty.
+_TW_NAMES_TTL = 24 * 3600.0
+_tw_names_cache: dict[str, str] = {}
+_tw_names_at = 0.0
+
+
+def get_tw_chinese_name(ticker: str) -> str | None:
+    """Traditional-Chinese short name for a TW ticker (e.g. ``2330`` ->
+    ``台積電``), from FinMind's ``TaiwanStockInfo`` dataset.
+
+    Deliberately independent of the live quote source: TWSE MIS returns the
+    Chinese name, but a cloud-hosted backend with no quote relay configured
+    silently falls back to Yahoo for TW quotes too, whose name is English —
+    so tying the display name to whichever quote source answered would show
+    the wrong language depending on deployment. This is always Chinese."""
+    _ensure_tw_names_loaded()
+    return _tw_names_cache.get(_bare_tw(ticker))
+
+
+def _ensure_tw_names_loaded() -> None:
+    global _tw_names_at
+    now = time.time()
+    with _lock:
+        if _tw_names_cache and now - _tw_names_at < _TW_NAMES_TTL:
+            return
+    url = f"{_FINMIND_URL}?" + urllib.parse.urlencode({"dataset": "TaiwanStockInfo"})
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = json.loads(resp.read())
+    except Exception:
+        return  # keep serving the stale cache (if any) rather than blank it out
+
+    fresh: dict[str, str] = {}
+    for r in payload.get("data") or []:
+        sid = str(r.get("stock_id") or "").strip()
+        name = str(r.get("stock_name") or "").strip()
+        if sid and name:
+            fresh[sid] = name
+    if fresh:
+        with _lock:
+            _tw_names_cache.clear()
+            _tw_names_cache.update(fresh)
+            _tw_names_at = now
+
 
 def get_monthly_revenue(ticker: str, months: int = 24) -> list[dict]:
     """Last `months` months of revenue from FinMind (free tier, no key

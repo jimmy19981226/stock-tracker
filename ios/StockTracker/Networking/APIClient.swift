@@ -368,9 +368,15 @@ final class APIClient {
     /// Callbacks are @MainActor: they mutate @Published view-model state, and
     /// invoking them from the SSE read loop's background executor let UIKit
     /// race a keyboard dismissal against off-main layout — freezing the chat.
+    ///
+    /// `image` (if any) rides along as a multipart file — the backend reads
+    /// it inline for this turn (and replays it on later turns from history),
+    /// so the assistant can analyze a photo of a stock/trade in-conversation.
     func streamChat(
         chatId: Int?,
         message: String,
+        image: Data? = nil,
+        imageMimeType: String = "image/jpeg",
         onInit: @escaping @MainActor (Int, String) -> Void,
         onChunk: @escaping @MainActor (String) -> Void,
         onDone: @escaping @MainActor (String, [String]) -> Void,
@@ -380,13 +386,32 @@ final class APIClient {
     ) async throws {
         var req = URLRequest(url: try url("/api/ai/chat"))
         req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         await Self.attachAuth(&req)
         Self.attachAIProvider(&req)
-        var payload: [String: Any] = ["message": message]
-        if let chatId { payload["chat_id"] = chatId }
-        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        body.appendString("--\(boundary)\r\n")
+        body.appendString("Content-Disposition: form-data; name=\"message\"\r\n\r\n")
+        body.appendString(message)
+        body.appendString("\r\n")
+        if let chatId {
+            body.appendString("--\(boundary)\r\n")
+            body.appendString("Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n")
+            body.appendString(String(chatId))
+            body.appendString("\r\n")
+        }
+        if let image {
+            body.appendString("--\(boundary)\r\n")
+            body.appendString("Content-Disposition: form-data; name=\"file\"; filename=\"upload.jpg\"\r\n")
+            body.appendString("Content-Type: \(imageMimeType)\r\n\r\n")
+            body.append(image)
+            body.appendString("\r\n")
+        }
+        body.appendString("--\(boundary)--\r\n")
+        req.httpBody = body
 
         var (bytes, resp) = try await session.bytes(for: req)
         guard var http = resp as? HTTPURLResponse else {
