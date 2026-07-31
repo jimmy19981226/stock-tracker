@@ -1,7 +1,8 @@
 import time
 from threading import Lock
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -15,9 +16,15 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 # the result so that heavy fetch happens at most once per TTL (keyed by the
 # ticker set, so a newly-added ticker still refreshes immediately).
 _NAMES_TTL_SECONDS = 600.0
-_names_cache: dict = {"key": None, "at": 0.0, "value": {}}
+# Keyed by user_id: a single shared entry made two users evict each other's
+# names on every poll, so neither ever got a cache hit.
+_names_cache: dict[str, dict] = {}
 # Guards _names_cache against concurrent read-modify-write from the threadpool.
 _names_lock = Lock()
+
+
+def _names_entry(user: str) -> dict:
+    return _names_cache.get(user) or {"key": None, "at": 0.0, "value": {}}
 
 
 @router.get("/holdings")
@@ -87,6 +94,45 @@ def get_performance(
     return performance.build_performance(db, user, market=market, period=period)
 
 
+class BenchmarkUpdate(BaseModel):
+    market: str = Field(..., pattern="^(TW|US)$")
+    # Any Yahoo-resolvable symbol: an index (^TWII), a TW ETF by bare code
+    # (0050), or a US ticker (QQQ). Empty resets the market to its default.
+    symbol: str = Field("", max_length=12)
+
+
+@router.get("/benchmark")
+def get_benchmark(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
+    """The caller's benchmark per market, plus the picker's preset list."""
+    chosen = performance.get_benchmarks(db, user)
+    return {
+        "benchmarks": chosen,
+        "defaults": performance.DEFAULT_BENCHMARKS,
+        "presets": {
+            market: [{"symbol": s, "name": n} for s, n in rows]
+            for market, rows in performance.BENCHMARK_PRESETS.items()
+        },
+        "names": {m: performance.benchmark_name(s) for m, s in chosen.items()},
+    }
+
+
+@router.put("/benchmark")
+def set_benchmark(
+    payload: BenchmarkUpdate,
+    db: Session = Depends(get_db),
+    user: str = Depends(get_current_user),
+):
+    """Point one market's performance comparison at a different symbol."""
+    try:
+        chosen = performance.set_benchmark(db, user, payload.market, payload.symbol)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        "benchmarks": chosen,
+        "names": {m: performance.benchmark_name(s) for m, s in chosen.items()},
+    }
+
+
 @router.get("/names")
 def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_user)):
     """Ticker → short-name map for every ticker the user has touched.
@@ -99,10 +145,11 @@ def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_use
 
     now = time.time()
     with _names_lock:
-        cached = dict(_names_cache["value"])
-        cached_at = _names_cache["at"]
+        entry = _names_entry(user)
+        cached = dict(entry["value"])
+        cached_at = entry["at"]
         fresh = bool(cached) and now - cached_at < _NAMES_TTL_SECONDS
-        if fresh and _names_cache["key"] == all_tickers:
+        if fresh and entry["key"] == all_tickers:
             return cached
 
     # Within the TTL, only fetch tickers the cache doesn't know yet — names
@@ -123,9 +170,9 @@ def get_names(db: Session = Depends(get_db), user: str = Depends(get_current_use
     # full refresh on schedule.
     if any(names.values()):
         with _names_lock:
-            _names_cache.update(
-                {"key": all_tickers, "at": cached_at if fresh else now, "value": names}
-            )
+            _names_cache[user] = {
+                "key": all_tickers, "at": cached_at if fresh else now, "value": names
+            }
     return names
 
 

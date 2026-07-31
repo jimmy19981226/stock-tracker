@@ -29,8 +29,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
+from ..auth import get_current_user, require_signed_in_user
 from ..database import Chat, ChatMessage, Dividend, SessionLocal, Trade, get_db
+from ..database import utcnow as db_utcnow
 from ..services import portfolio, quotes, stock_info
 
 
@@ -164,6 +165,15 @@ CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 8 MB cap, matches parse-records
 CHAT_IMAGE_MIMES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
 
 
+def _reject_image_if_too_large(size: int | None) -> None:
+    if size is not None and size > CHAT_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image too large ({size / 1e6:.1f} MB). "
+                   f"Max {CHAT_IMAGE_MAX_BYTES // (1024 * 1024)} MB.",
+        )
+
+
 @router.post("/chat")
 async def chat(
     message: str = Form(""),
@@ -235,16 +245,15 @@ async def chat(
         # canonical value.
         if image_mime == "image/jpg":
             image_mime = "image/jpeg"
+        # Check the declared size first — reading an oversized upload just to
+        # measure it is exactly the memory blow-up the cap exists to prevent.
+        _reject_image_if_too_large(file.size)
         image_bytes = await file.read()
         if len(image_bytes) == 0:
             image_bytes = None
             image_mime = None
-        elif len(image_bytes) > CHAT_IMAGE_MAX_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Image too large ({len(image_bytes) / 1e6:.1f} MB). "
-                       f"Max {CHAT_IMAGE_MAX_BYTES // (1024 * 1024)} MB.",
-            )
+        else:
+            _reject_image_if_too_large(len(image_bytes))
 
     if not user_text and not image_bytes:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
@@ -433,7 +442,7 @@ def _persist_assistant(chat_id: int, content: str) -> None:
                                      content=content))
             chat_db = db_local.get(Chat, chat_id)
             if chat_db is not None:
-                chat_db.updated_at = datetime.utcnow()
+                chat_db.updated_at = db_utcnow()
             db_local.commit()
     except Exception:
         # Persistence failure shouldn't kill the worker.
@@ -652,8 +661,12 @@ def _agent_prompt(context_json: str, view: str | None, today: str) -> str:
 
 
 @router.post("/agent")
-def agent_plan(req: AgentRequest, user: str = Depends(get_current_user)):
+def agent_plan(req: AgentRequest, user: str = Depends(require_signed_in_user)):
     """Plan a UI-driving action sequence for the agentic assistant.
+
+    Sign-in required — unlike /chat (which prefers the caller's own X-AI-Key),
+    this always spends the server's GOOGLE_AI_API_KEY, so an anonymous caller
+    would be billing Gemini to the deployment.
 
     Returns ``{mode, reply, steps}``. ``mode == "chat"`` (with empty steps)
     means "this is a question, not an action" — the frontend then calls the

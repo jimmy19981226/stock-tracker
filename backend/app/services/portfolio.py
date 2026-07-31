@@ -530,6 +530,20 @@ _value_history_lock = Lock()
 _value_history_builds: dict[tuple[str, str], Lock] = {}
 
 
+def invalidate_user(user_id: str) -> None:
+    """Drop this user's cached derived series after their trade/dividend log
+    changes. Without it, recording a trade left the net-worth chart and the
+    performance report showing the pre-edit portfolio until the caches aged out
+    — up to 30 minutes of a user staring at a number they just corrected."""
+    with _value_history_lock:
+        for key in [k for k in _value_history_cache if k[0] == user_id]:
+            _value_history_cache.pop(key, None)
+    # Lazy: performance imports this module at load time.
+    from . import performance
+
+    performance.invalidate_user(user_id)
+
+
 def _window_start(period: str) -> str:
     """First charted day for a period tab (ISO), used to slice the full
     series. MAX keeps everything."""

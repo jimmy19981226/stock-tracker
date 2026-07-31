@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import Dividend, get_db
 from ..schemas import DividendCreate, DividendOut
-from ..services import idempotency, income, quotes
+from ..services import idempotency, income, portfolio, quotes
 
 router = APIRouter(prefix="/api/dividends", tags=["dividends"])
 
@@ -66,6 +66,9 @@ def create_dividend(
     )
     db.add(d)
     db.commit()
+    # The dividend log changed — drop cached earnings/performance series so
+    # the charts reflect this edit right away rather than after the TTL.
+    portfolio.invalidate_user(user)
     db.refresh(d)
     out = _to_out(d)
     idempotency.remember(user, idempotency_key, out)
@@ -92,6 +95,9 @@ def update_dividend(
     d.notes = payload.notes
     d.market = payload.market or quotes.market_of(d.ticker)
     db.commit()
+    # The dividend log changed — drop cached earnings/performance series so
+    # the charts reflect this edit right away rather than after the TTL.
+    portfolio.invalidate_user(user)
     db.refresh(d)
     return _to_out(d)
 
@@ -111,4 +117,7 @@ def delete_dividend(
         raise HTTPException(status_code=404, detail="Dividend not found")
     db.delete(d)
     db.commit()
+    # The dividend log changed — drop cached earnings/performance series so
+    # the charts reflect this edit right away rather than after the TTL.
+    portfolio.invalidate_user(user)
     return None

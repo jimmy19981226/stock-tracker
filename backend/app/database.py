@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from sqlalchemy import create_engine, inspect, text, String, Float, Date, DateTime, Integer, Text, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, Session, relationship
 from pathlib import Path
@@ -44,6 +44,16 @@ engine = _make_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
+def utcnow() -> datetime:
+    """Naive UTC timestamp for the DateTime columns below.
+
+    ``datetime.utcnow()`` is deprecated from Python 3.12, but every timestamp
+    column here is naive, so we strip the tzinfo rather than start writing
+    aware values into naive columns (which changes how Postgres compares them).
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -62,7 +72,7 @@ class Trade(Base):
     # Which portfolio this belongs to: "TW" (TWD) or "US" (USD). server_default
     # is what backfills existing rows when the column is added by the migration.
     market: Mapped[str] = mapped_column(String(2), nullable=False, server_default="TW")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     # Owner. "legacy" for rows created before auth existed / by the un-authenticated
     # web app; "google:<sub>" once a signed-in user owns them. See app/auth.py.
     user_id: Mapped[str] = mapped_column(
@@ -79,7 +89,7 @@ class Dividend(Base):
     pay_date: Mapped[date] = mapped_column(Date, nullable=False)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     market: Mapped[str] = mapped_column(String(2), nullable=False, server_default="TW")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     user_id: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default="legacy", index=True
     )
@@ -91,7 +101,7 @@ class Metadata(Base):
     key: Mapped[str] = mapped_column(String(50), primary_key=True)
     value: Mapped[str] = mapped_column(String(500))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utcnow, onupdate=utcnow
     )
 
 
@@ -100,9 +110,9 @@ class Chat(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False, default="New chat")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
     user_id: Mapped[str] = mapped_column(
         String(255), nullable=False, server_default="legacy", index=True
@@ -124,7 +134,7 @@ class ChatMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     # An image the user attached to this turn (base64-encoded), so reopening a
     # past chat still shows it. NULL for every message without one.
     image_mime: Mapped[str | None] = mapped_column(String(40), nullable=True)

@@ -26,10 +26,15 @@ _HEADERS = {
     )
 }
 _TTL_SECONDS = 300.0  # FX moves slowly; one fetch per 5 min is plenty
+# How long to stop attempting a live fetch after one fails. Without this, an
+# unreachable Yahoo makes EVERY caller pay the 8s timeout above — and this runs
+# inside build_overview, which the dashboards poll every few seconds.
+_FAIL_TTL_SECONDS = 60.0
 _META_KEY = "fx_usd_twd"
 
 _lock = Lock()
-_cache: tuple[float, float, str] | None = None  # (fetched_at, rate, asof_iso)
+_cache: tuple[float, float, str] | None = None  # (expires_at, rate, asof_iso)
+_retry_after = 0.0  # no live fetch attempts before this timestamp
 
 
 def _fetch_live() -> tuple[float, str] | None:
@@ -88,27 +93,57 @@ def _persist(rate: float, asof: str) -> None:
         pass
 
 
+def get_usd_twd_history(period: str = "1y") -> list[dict]:
+    """Daily USD→TWD closes as ``[{date, rate}]``, oldest first.
+
+    The combined net-worth curve needs the rate that applied on each historical
+    day. Converting the whole US leg at *today's* rate silently rewrites every
+    past point — a 5% FX move restates years of history by 5%. Yahoo serves the
+    pair as ``TWD=X``; the fetch rides stock_info's cache, so this is cheap.
+    """
+    from . import stock_info
+
+    bars = stock_info.get_history("TWD=X", period)
+    return [
+        {"date": b["date"], "rate": b["close"]}
+        for b in bars
+        if b.get("close")
+    ]
+
+
 def get_usd_twd() -> tuple[float | None, str | None]:
     """Return ``(rate, asof_iso)`` where ``rate`` is TWD per 1 USD.
 
     ``(None, None)`` only when there is no live value AND no persisted
     fallback — callers must treat that as "combined total unavailable"."""
-    global _cache
+    global _cache, _retry_after
     now = time.time()
     with _lock:
-        if _cache and now - _cache[0] < _TTL_SECONDS:
+        if _cache and now < _cache[0]:
             return _cache[1], _cache[2]
+        if now < _retry_after:
+            # Another caller's fetch is in flight or just failed. Serve the last
+            # known rate (stale beats an 8s stall) rather than piling on.
+            return (_cache[1], _cache[2]) if _cache else (None, None)
+        # Claim this attempt under the lock, so concurrent callers fall into the
+        # branch above instead of stampeding Yahoo with identical requests.
+        _retry_after = now + _FAIL_TTL_SECONDS
 
     live = _fetch_live()
     if live is not None:
         rate, asof = live
         _persist(rate, asof)
         with _lock:
-            _cache = (now, rate, asof)
+            _cache = (time.time() + _TTL_SECONDS, rate, asof)
+            _retry_after = 0.0
         return rate, asof
 
-    # Live fetch failed — fall back to the last good value we stored.
+    # Live fetch failed — fall back to the last good value we stored, and hold
+    # it for the backoff window so the next caller doesn't re-hit the DB either.
     persisted = _load_persisted()
     if persisted is not None:
-        return persisted
+        rate, asof = persisted
+        with _lock:
+            _cache = (time.time() + _FAIL_TTL_SECONDS, rate, asof)
+        return rate, asof
     return None, None
