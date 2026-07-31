@@ -171,7 +171,7 @@ private struct IndexDetailCard: View {
                 Chart(closes, id: \.0) { point in
                     LineMark(x: .value("i", point.0), y: .value("close", point.1))
                         .lineStyle(StrokeStyle(lineWidth: 1.8))
-                        .foregroundStyle(Theme.pl(quote.change))
+                        .foregroundStyle(Theme.plMark(quote.change))
                         .interpolationMethod(.catmullRom)
                 }
                 .chartXAxis(.hidden)

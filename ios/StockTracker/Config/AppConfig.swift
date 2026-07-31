@@ -6,6 +6,19 @@ import Foundation
 /// point at a local dev backend (http://127.0.0.1:8011 in the simulator) or a
 /// self-hosted one.
 enum AppConfig {
+    /// Marketing version + build, read from the bundle so there is exactly one
+    /// source of truth: `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in
+    /// ios/project.yml. Bump those (and add a CHANGELOG.md entry) when shipping
+    /// — nothing here needs editing.
+    static var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+    }
+    static var build: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
+    /// "1.1.0 (7)" — what the splash and Settings show.
+    static var versionDisplay: String { "\(version) (\(build))" }
+
     private static let key = "api.baseURL"
     static let defaultBaseURL = "https://ai-stock-studio.onrender.com"
 

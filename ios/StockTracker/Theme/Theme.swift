@@ -40,6 +40,26 @@ enum Theme {
     /// and stays legible on the dark surface.
     static func wash(_ color: Color) -> Color { color.opacity(0.14) }
 
+    // Chart-stroke variants of the P&L colours. The brand green (#00C805) is a
+    // fully saturated hue: as a 2px stroke on a near-black plot it glows rather
+    // than reads, and a glowing curve pulls rank over the figures it's meant to
+    // support. These are the same hues stepped slightly deeper so the line sits
+    // *in* the image instead of floating above it.
+    //
+    // Deliberately separate from `positive`/`negative`: every value, badge and
+    // label keeps the brand colours exactly as they were. This applies to marks
+    // only, and reverting it is a two-line change.
+    static let positiveMark = Color(red: 0.13, green: 0.72, blue: 0.31)
+    static let negativeMark = Color(red: 0.91, green: 0.34, blue: 0.14)
+
+    /// `pl(_:)` for chart marks.
+    static func plMark(_ value: Double?) -> Color {
+        guard let v = value, !v.isNaN else { return mutedText }
+        if v > 0 { return positiveMark }
+        if v < 0 { return negativeMark }
+        return secondaryText
+    }
+
     /// Green when up, red when down, muted when flat/unknown.
     static func pl(_ value: Double?) -> Color {
         guard let v = value, !v.isNaN else { return mutedText }

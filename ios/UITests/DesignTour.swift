@@ -61,6 +61,42 @@ final class DesignTour: XCTestCase {
         return nil
     }
 
+    /// The splash only shows for ~1.2s, which is too tight to race with a
+    /// screenshot reliably — assert on the label instead.
+    func testSplashShowsVersion() throws {
+        let app = makeApp()
+        app.launch()
+        let version = app.staticTexts
+            .matching(NSPredicate(format: "label BEGINSWITH 'Version'")).firstMatch
+        XCTAssertTrue(version.waitForExistence(timeout: 6),
+                      "No version label on the splash screen")
+        print("SPLASH_VERSION_LABEL=\(version.label)")
+        snap(app, "splash-version")
+    }
+
+    /// Settings, reached from the Overview toolbar.
+    func testSettings() throws {
+        let app = makeApp()
+        app.launch()
+        _ = app.staticTexts["Taiwan"].firstMatch.waitForExistence(timeout: 120)
+        sleep(3)
+        let gear = app.buttons.matching(identifier: "gearshape.fill").firstMatch
+        if gear.waitForExistence(timeout: 8), gear.isHittable {
+            gear.tap()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
+        sleep(3)
+        snap(app, "settings-top")
+        // Open the folded developer section too.
+        let advanced = app.staticTexts["ADVANCED"].firstMatch
+        if advanced.waitForExistence(timeout: 5) {
+            advanced.tap()
+            sleep(1)
+            snap(app, "settings-advanced")
+        }
+    }
+
     /// Just the market dashboard — the quick loop while iterating on that screen.
     func testDashboardOnly() throws {
         let app = makeApp()

@@ -457,7 +457,7 @@ private struct ChartCard: View {
         let markers = makeMarkers(bars: bars, range: dateRange)
         let avgCost = avgCostLine(bars: bars)
         let up = (bars.last?.close ?? 0) >= (bars.first?.close ?? 0)
-        let color = up ? Theme.positive : Theme.negative
+        let color = up ? Theme.positiveMark : Theme.negativeMark
 
         VStack(spacing: 12) {
             UnderlineTabs(
@@ -477,7 +477,7 @@ private struct ChartCard: View {
                         AreaMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
                             .interpolationMethod(.monotone)
                             .foregroundStyle(
-                                LinearGradient(colors: [color.opacity(0.18), .clear],
+                                LinearGradient(colors: [color.opacity(0.14), .clear],
                                                startPoint: .top, endPoint: .bottom)
                             )
                     }

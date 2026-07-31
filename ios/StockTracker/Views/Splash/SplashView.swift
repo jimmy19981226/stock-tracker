@@ -20,6 +20,18 @@ struct SplashView: View {
                     .foregroundStyle(.white)
                     .opacity(appear ? 1 : 0)
             }
+
+            // Version pinned to the bottom, quiet enough not to compete with
+            // the mark. Reads straight from the bundle, so it can never drift
+            // from what was actually built.
+            VStack {
+                Spacer()
+                Text("Version \(AppConfig.versionDisplay)")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Theme.mutedText)
+                    .opacity(appear ? 1 : 0)
+                    .padding(.bottom, 28)
+            }
         }
         .onAppear {
             withAnimation(.spring(response: 0.7, dampingFraction: 0.6)) { appear = true }

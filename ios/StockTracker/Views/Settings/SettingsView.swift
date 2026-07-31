@@ -14,98 +14,31 @@ struct SettingsView: View {
     @State private var deviceMISUp: Bool?
     @State private var loadingSources = false
 
+    /// Developer plumbing stays folded away by default. A backend URL and an
+    /// OAuth client id are things you set once, if ever — giving them the same
+    /// prominence as your account made the screen read as a config file.
+    @State private var showAdvanced = false
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Account") {
-                    HStack(spacing: 12) {
-                        Image(systemName: auth.user?.isGuest == false ? "person.crop.circle.fill" : "person.crop.circle")
-                            .font(.system(size: 32))
-                            .foregroundStyle(Theme.accent)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(auth.user?.name ?? "Guest")
-                                .font(.headline)
-                            if let email = auth.user?.email, !email.isEmpty {
-                                Text(email).font(.caption).foregroundStyle(Theme.secondaryText)
-                            }
-                        }
-                    }
-                    Button(auth.user?.isGuest == false ? "Sign out" : "Sign in with Google") {
-                        if auth.user?.isGuest == false { auth.signOut() }
-                        else { Task { await auth.signInWithGoogle() } }
-                        dismiss()
-                    }
-                    .foregroundStyle(auth.user?.isGuest == false ? Theme.negative : Theme.accent)
-                }
+            ScrollView {
+                VStack(spacing: 14) {
+                    accountCard
+                    aiCard
+                    marketDataCard
+                    advancedCard
 
-                Section {
-                    NavigationLink {
-                        AIProviderSettingsView()
-                    } label: {
-                        HStack {
-                            Label("AI Assistant", systemImage: "sparkles")
-                            Spacer()
-                            Text(AISettings.activeProvider.displayName)
-                                .font(.caption)
-                                .foregroundStyle(Theme.secondaryText)
-                        }
-                    }
-                } header: {
-                    Text("AI")
-                } footer: {
-                    Text("Choose OpenAI, Gemini or Claude and use your own API key.")
+                    // Version lives here as well as on the splash — Settings is
+                    // where people actually go looking for it, and both read the
+                    // same bundle values so they can't disagree.
+                    Text("AI Stock Studio · Version \(AppConfig.versionDisplay)")
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.mutedText)
+                        .padding(.top, Theme.Space.xs)
                 }
-
-                Section {
-                    sourceRow(name: "TWSE MIS",
-                              covers: "Real-time · Taiwan stocks",
-                              info: deviceMISUp.map { QuoteSourceInfo(available: $0, via: nil, realtime: true) })
-                    sourceRow(name: "Yahoo Finance",
-                              covers: "Delayed · US stocks + TW fallback",
-                              info: quoteSources?.yahoo)
-                } header: {
-                    Text("Market Data")
-                } footer: {
-                    Text("TWSE MIS serves real-time Taiwan quotes when reachable. Yahoo Finance covers US stocks at all times and fills in for Taiwan when MIS is unavailable.")
-                }
-
-                Section {
-                    TextField("123-abc.apps.googleusercontent.com", text: $googleClientID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                } header: {
-                    Text("Google OAuth Client ID")
-                } footer: {
-                    Text("Required for Google sign-in. Create an iOS OAuth client in Google Cloud Console for bundle id com.aistockstudio.app.")
-                }
-
-                Section {
-                    TextField("http://127.0.0.1:8011", text: $baseURL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                } header: {
-                    Text("Backend URL")
-                } footer: {
-                    Text("Simulator can use 127.0.0.1. On a real iPhone, use your Mac's LAN IP, e.g. http://192.168.1.20:8011, and start uvicorn with --host 0.0.0.0.")
-                }
-
-                Section {
-                    Button {
-                        Task { await testConnection() }
-                    } label: {
-                        HStack {
-                            Text("Test connection")
-                            Spacer()
-                            if checking { ProgressView() }
-                            else if let r = checkResult {
-                                Text(r).foregroundStyle(r == "OK" ? Theme.positive : Theme.negative)
-                            }
-                        }
-                    }
-                }
+                .padding(16)
+                .padding(.bottom, 40)
             }
-            .scrollContentBackground(.hidden)
             .background(Theme.backgroundGradient.ignoresSafeArea())
             .task { await loadQuoteSources() }
             .navigationTitle("Settings")
@@ -132,6 +65,187 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Cards
+
+    /// Identity leads the screen: who you're signed in as, and the one action
+    /// that changes it.
+    private var accountCard: some View {
+        let signedIn = auth.user?.isGuest == false
+        return Card {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                HStack(spacing: Theme.Space.m) {
+                    Image(systemName: signedIn ? "person.crop.circle.fill" : "person.crop.circle")
+                        .font(.system(size: 34))
+                        .foregroundStyle(signedIn ? Theme.accent : Theme.mutedText)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(auth.user?.name ?? "Guest")
+                            .font(Theme.Typo.section)
+                            .foregroundStyle(Theme.primaryText)
+                            .lineLimit(1)
+                        Text(auth.user.map { $0.email.isEmpty ? "Not signed in" : $0.email }
+                             ?? "Not signed in")
+                            .font(Theme.Typo.caption)
+                            .foregroundStyle(Theme.mutedText)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                Button {
+                    if signedIn { auth.signOut() }
+                    else { Task { await auth.signInWithGoogle() } }
+                    dismiss()
+                } label: {
+                    Text(signedIn ? "Sign out" : "Sign in with Google")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(signedIn ? Theme.negative : Color.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(signedIn ? Theme.wash(Theme.negative) : Theme.accent)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var aiCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                settingsLabel("ASSISTANT")
+                NavigationLink { AIProviderSettingsView() } label: {
+                    HStack(spacing: Theme.Space.m) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 30, height: 30)
+                            .background(Theme.wash(Theme.accent))
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("AI provider")
+                                .font(Theme.Typo.value)
+                                .foregroundStyle(Theme.primaryText)
+                            Text("OpenAI, Gemini or Claude — with your own key")
+                                .font(Theme.Typo.micro)
+                                .foregroundStyle(Theme.mutedText)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        Spacer(minLength: Theme.Space.s)
+                        Text(AISettings.activeProvider.displayName)
+                            .font(Theme.Typo.caption)
+                            .foregroundStyle(Theme.secondaryText)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var marketDataCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                settingsLabel("MARKET DATA")
+                sourceRow(name: "TWSE MIS",
+                          covers: "Real-time · Taiwan stocks",
+                          info: deviceMISUp.map { QuoteSourceInfo(available: $0, via: nil, realtime: true) })
+                sourceRow(name: "Yahoo Finance",
+                          covers: "Delayed · US stocks + TW fallback",
+                          info: quoteSources?.yahoo)
+                Text("MIS serves real-time Taiwan quotes when reachable. Yahoo covers US at all times and fills in for Taiwan when MIS is unavailable.")
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Backend URL, OAuth client id and the connection test — folded away.
+    private var advancedCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                Button {
+                    withAnimation(.snappy(duration: 0.28)) { showAdvanced.toggle() }
+                } label: {
+                    HStack {
+                        settingsLabel("ADVANCED")
+                        Spacer()
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.mutedText)
+                            .rotationEffect(.degrees(showAdvanced ? 0 : -90))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if showAdvanced {
+                    field("Backend URL", text: $baseURL,
+                          placeholder: "http://127.0.0.1:8011", url: true,
+                          hint: "Simulator can use 127.0.0.1. On a real iPhone use your Mac's LAN IP and start uvicorn with --host 0.0.0.0.")
+                    field("Google OAuth client ID", text: $googleClientID,
+                          placeholder: "123-abc.apps.googleusercontent.com", url: false,
+                          hint: "Required for Google sign-in. Create an iOS OAuth client for bundle id com.aistockstudio.app.")
+                    Button {
+                        Task { await testConnection() }
+                    } label: {
+                        HStack(spacing: Theme.Space.s) {
+                            Text("Test connection")
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Theme.accent)
+                            Spacer()
+                            if checking {
+                                ProgressView().controlSize(.small)
+                            } else if let r = checkResult {
+                                Text(r)
+                                    .font(Theme.Typo.caption)
+                                    .foregroundStyle(r == "OK" ? Theme.positive : Theme.negative)
+                            }
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, Theme.Space.m)
+                        .background(Theme.cardElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func settingsLabel(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.Typo.label)
+            .tracking(0.8)
+            .foregroundStyle(Theme.mutedText)
+    }
+
+    private func field(_ title: String, text: Binding<String>,
+                       placeholder: String, url: Bool, hint: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.secondaryText)
+            TextField(placeholder, text: text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(url ? .URL : .default)
+                .font(.system(size: 14, design: .monospaced))
+                .foregroundStyle(Theme.primaryText)
+                .padding(.vertical, 10)
+                .padding(.horizontal, Theme.Space.m)
+                .background(Theme.cardElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            Text(hint)
+                .font(Theme.Typo.micro)
+                .foregroundStyle(Theme.mutedText)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

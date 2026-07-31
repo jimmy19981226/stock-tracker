@@ -363,7 +363,7 @@ private struct TotalEarnedCard: View {
         if rows.count >= 2 {
             let dateRange = (rows.first?.date ?? .now)...(rows.last?.date ?? .now)
             let lineColor: Color = (rows.last?.total ?? 0) >= (rows.first?.total ?? 0)
-                ? Theme.positive : Theme.negative
+                ? Theme.positiveMark : Theme.negativeMark
 
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader("Total earned") {
@@ -383,7 +383,7 @@ private struct TotalEarnedCard: View {
                         AreaMark(x: .value("Date", row.date), y: .value("Total", row.total))
                             .interpolationMethod(.monotone)
                             .foregroundStyle(
-                                LinearGradient(colors: [lineColor.opacity(0.18), .clear],
+                                LinearGradient(colors: [lineColor.opacity(0.14), .clear],
                                                startPoint: .top, endPoint: .bottom)
                             )
                     }
