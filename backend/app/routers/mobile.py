@@ -20,8 +20,10 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Literal
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
+
+from ..auth import require_signed_in_user
 
 # Reuse the parser we already wrote for the desktop paperclip so phone
 # uploads go through the exact same Gemini pipeline + JSON schema.
@@ -48,6 +50,7 @@ PARSE_STATUS = Literal["pending", "received", "parsing", "ready", "error"]
 class _Session:
     token: str
     created_at: float
+    owner: str = ""  # user_id that minted it; only they may poll/delete it
     status: PARSE_STATUS = "pending"
     file_bytes: bytes | None = None
     file_mime: str | None = None
@@ -73,6 +76,15 @@ def _purge_expired(now: float | None = None) -> None:
         ]
         for t in expired:
             _sessions.pop(t, None)
+
+
+def _reject_if_too_large(size: int | None) -> None:
+    if size is not None and size > PARSE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({size / 1e6:.1f} MB). "
+                   f"Max {PARSE_MAX_BYTES // (1024 * 1024)} MB.",
+        )
 
 
 def _detect_lan_ip() -> str:
@@ -116,10 +128,23 @@ def _backend_origin() -> str:
     return f"http://{_detect_lan_ip()}:{port}"
 
 
+def _owned_session(token: str, user: str) -> _Session:
+    """The caller's session, or 404. Returning 404 (not 403) for someone else's
+    token keeps this from confirming which tokens exist."""
+    with _sessions_lock:
+        sess = _sessions.get(token)
+    if sess is None or sess.owner != user:
+        raise HTTPException(status_code=404, detail="Session expired or unknown")
+    return sess
+
+
 @router.post("/sessions")
-def create_session():
+def create_session(user: str = Depends(require_signed_in_user)):
     """Mint a new upload session. Desktop UI renders the returned ``url``
-    as a QR + plain-text fallback, then polls ``GET /api/mobile/sessions/{token}``."""
+    as a QR + plain-text fallback, then polls ``GET /api/mobile/sessions/{token}``.
+
+    Sign-in required: each session ultimately spends the server's Gemini key
+    (see ``_run_parse``), so this must not be reachable anonymously."""
     api_key = os.environ.get("GOOGLE_AI_API_KEY")
     if not api_key:
         raise HTTPException(
@@ -129,7 +154,7 @@ def create_session():
 
     _purge_expired()
     token = secrets.token_urlsafe(16)
-    sess = _Session(token=token, created_at=time.time())
+    sess = _Session(token=token, created_at=time.time(), owner=user)
     with _sessions_lock:
         if len(_sessions) >= MAX_LIVE_SESSIONS:
             raise HTTPException(
@@ -148,15 +173,12 @@ def create_session():
 
 
 @router.get("/sessions/{token}")
-def session_status(token: str):
+def session_status(token: str, user: str = Depends(require_signed_in_user)):
     """Desktop polls this. When the phone has uploaded, the first poll
     after upload runs the Gemini parse and caches it; subsequent polls
     return the cached result."""
     _purge_expired()
-    with _sessions_lock:
-        sess = _sessions.get(token)
-    if sess is None:
-        raise HTTPException(status_code=404, detail="Session expired or unknown")
+    sess = _owned_session(token, user)
 
     # If the phone has uploaded but we haven't parsed yet, kick off the
     # parse on this poll. Only ONE poller should run Gemini, so we capture
@@ -193,16 +215,22 @@ def session_status(token: str):
 
 
 @router.delete("/sessions/{token}", status_code=204)
-def delete_session(token: str):
+def delete_session(token: str, user: str = Depends(require_signed_in_user)):
     """Desktop calls this when the user closes the modal or the records
     have been imported, freeing the in-memory bytes."""
+    _owned_session(token, user)
     with _sessions_lock:
         _sessions.pop(token, None)
 
 
 @router.post("/sessions/{token}/file")
 async def upload_file(token: str, file: UploadFile = File(...)):
-    """Phone hits this from the mobile upload page."""
+    """Phone hits this from the mobile upload page.
+
+    Deliberately NOT behind ``require_signed_in_user``: the phone scanned a QR
+    code and has no credentials. The 128-bit ``secrets.token_urlsafe(16)``
+    token IS the capability here — it's unguessable, single-purpose, expires in
+    5 minutes, and can only ever hand bytes to the session that minted it."""
     _purge_expired()
     with _sessions_lock:
         sess = _sessions.get(token)
@@ -216,14 +244,14 @@ async def upload_file(token: str, file: UploadFile = File(...)):
             detail=f"Unsupported file type: {mime or 'unknown'}.",
         )
 
+    # Reject on the declared size BEFORE reading, so an oversized upload can't
+    # be pulled into memory in the first place; the post-read check stays as a
+    # backstop for clients that don't send a length.
+    _reject_if_too_large(file.size)
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file.")
-    if len(raw) > PARSE_MAX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large ({len(raw) / 1e6:.1f} MB). Max {PARSE_MAX_BYTES // (1024 * 1024)} MB.",
-        )
+    _reject_if_too_large(len(raw))
 
     with sess.lock:
         sess.file_bytes = raw

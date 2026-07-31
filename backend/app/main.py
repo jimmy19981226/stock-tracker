@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -35,7 +36,18 @@ SEED_FILE = (
     Path(__file__).resolve().parent.parent / "data" / "seed" / "portfolio.xlsx"
 )
 
-app = FastAPI(title="AI Stock Studio", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Startup work. An async lifespan (not the deprecated @app.on_event) —
+    live_quotes.start() must run on the already-running event loop, since it
+    creates the Yahoo WebSocket listener (see services/live_quotes.py)."""
+    init_db()
+    _seed_from_disk()
+    live_quotes.start()
+    yield
+
+
+app = FastAPI(title="AI Stock Studio", version="0.1.0", lifespan=lifespan)
 
 # Local dev origins plus any extra origins from FRONTEND_ORIGINS (comma-
 # separated), e.g. the deployed frontend's URL: "https://stock-tracker.vercel.app".
@@ -65,19 +77,6 @@ async def _quote_source_pref(request, call_next):
         return await call_next(request)
     finally:
         quote_service.source_preference.reset(token)
-
-
-@app.on_event("startup")
-def _startup() -> None:
-    init_db()
-    _seed_from_disk()
-
-
-@app.on_event("startup")
-async def _start_live_quotes() -> None:
-    # Async handler: the Yahoo WebSocket listener must be created on the
-    # running event loop (see services/live_quotes.py).
-    live_quotes.start()
 
 
 def _seed_from_disk() -> None:

@@ -40,6 +40,22 @@ def get_current_user(authorization: str | None = Header(default=None)) -> str:
     return user_id
 
 
+def require_signed_in_user(authorization: str | None = Header(default=None)) -> str:
+    """Like ``get_current_user``, but REJECTS the anonymous ``legacy`` caller.
+
+    ``get_current_user`` deliberately falls back to the shared ``legacy`` bucket
+    so the pre-auth web app keeps working on read/write of its own data. That is
+    the wrong default for endpoints that spend a *server-owned* resource — the
+    ``GOOGLE_AI_API_KEY`` — because the backend is on the public internet, so
+    anyone with the URL could bill Gemini calls to the deployment's key. Those
+    endpoints depend on this instead.
+    """
+    user_id = get_current_user(authorization)
+    if user_id == LEGACY_USER:
+        raise HTTPException(status_code=401, detail="Sign in to use this feature.")
+    return user_id
+
+
 def _verify_google_token(token: str) -> str:
     try:
         from google.auth.transport import requests as google_requests

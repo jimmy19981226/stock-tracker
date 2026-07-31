@@ -271,6 +271,22 @@ final class APIClient {
             timeout: 240)
     }
 
+    /// Which symbol each market's performance is measured against, plus the
+    /// picker presets.
+    func getBenchmarks() async throws -> BenchmarkSettings {
+        try await request("/api/portfolio/benchmark")
+    }
+
+    private struct BenchmarkPayload: Encodable { let market: String; let symbol: String }
+
+    /// Point one market at a different benchmark. An empty `symbol` resets it
+    /// to the default (加權指數 for TW, S&P 500 for US).
+    @discardableResult
+    func setBenchmark(market: MarketCode, symbol: String) async throws -> BenchmarkSettings {
+        try await send("/api/portfolio/benchmark", method: "PUT",
+                       body: BenchmarkPayload(market: market.rawValue, symbol: symbol))
+    }
+
     // MARK: - Indices & live quotes
 
     private struct IndexSymbolsPayload: Codable { let symbols: [String] }

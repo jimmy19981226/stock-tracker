@@ -42,7 +42,7 @@ struct DividendsView: View {
                         Text(selectedYear != nil ? "Dividends received in \(String(selectedYear!))" : "Dividends received")
                             .font(.subheadline)
                             .foregroundStyle(Theme.secondaryText)
-                        Text(Fmt.money(total, currency: market.currencyCode))
+                        Text(Fmt.amount(total, currency: market.currencyCode))
                             .font(.system(size: 32, weight: .bold, design: .rounded))
                             .foregroundStyle(Theme.positive)
                             .lineLimit(1)
@@ -144,12 +144,12 @@ private struct DividendRow: View {
                         .foregroundStyle(Theme.mutedText)
                 }
                 Spacer()
-                Text("+\(Fmt.money(dividend.amount, currency: dividend.currency))")
+                Text("+\(Fmt.amount(dividend.amount, currency: dividend.currency))")
                     .font(.system(.subheadline, design: .rounded).weight(.bold))
                     .foregroundStyle(Theme.positive)
             }
             .padding(.vertical, 12)
-            Rectangle().fill(Theme.stroke).frame(height: 1)
+            Theme.rowSeparator
         }
         .contentShape(Rectangle())
     }

@@ -10,7 +10,14 @@ extension View {
     }
 }
 
-/// A solid green/red price pill (Robinhood-style) used on rows and headers.
+/// A green/red change chip used on rows and headers.
+///
+/// Previously a solid saturated block with white text, which made a minor stat
+/// (a market's -0.32% day) the loudest thing on the screen and read as a
+/// warning. Now the colour lives in the text over a faint wash of itself, plus
+/// a direction triangle — so it stays unmistakable, carries direction without
+/// relying on hue alone, and sits at the visual weight a supporting stat
+/// deserves.
 struct PLBadge: View {
     let value: Double?
     let pct: Double?
@@ -18,10 +25,16 @@ struct PLBadge: View {
     var compact: Bool = false
 
     var body: some View {
-        let color = Theme.pl(value ?? pct)
-        HStack(spacing: 4) {
+        let raw = value ?? pct
+        let color = Theme.pl(raw)
+        let flat = (raw ?? 0) == 0 || raw == nil
+        HStack(spacing: 3) {
+            if !flat {
+                Image(systemName: (raw ?? 0) > 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                    .font(.system(size: 8, weight: .black))
+            }
             if let value, !compact {
-                Text(Fmt.signedMoney(value, currency: currency))
+                Text(Fmt.signedAmount(value, currency: currency))
                     .lineLimit(1)
                     .rollingNumber(value)
             }
@@ -31,13 +44,25 @@ struct PLBadge: View {
                     .rollingNumber(pct)
             }
         }
-        .font(.system(.subheadline, design: .rounded).weight(.bold))
-        .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(color == Theme.mutedText ? Theme.cardElevated : color)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .font(.system(size: 13, weight: .bold, design: .rounded))
+        .foregroundStyle(color)
+        // Compact is the inline form used beside a row's headline value, where
+        // even a faint wash still reads as a block and out-shouts the number it
+        // annotates. There the colour and the triangle carry it on their own.
+        .modifier(ChipBackground(color: flat ? Theme.secondaryText : color,
+                                 enabled: !compact))
         .animation(.snappy(duration: 0.5), value: color)
+    }
+}
+
+/// Applies the chip wash only when asked, so one component can render both the
+/// standalone (washed) and inline (bare) forms.
+private struct ChipBackground: ViewModifier {
+    let color: Color
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled { content.chip(color) } else { content }
     }
 }
 
@@ -54,7 +79,7 @@ struct ChangeLine: View {
             Image(systemName: (value ?? pct ?? 0) >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
                 .font(.system(size: 10, weight: .bold))
             if let value {
-                Text(Fmt.signedMoney(value, currency: currency))
+                Text(Fmt.signedAmount(value, currency: currency))
                     .lineLimit(1)
                     .rollingNumber(value)
             }

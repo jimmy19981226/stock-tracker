@@ -24,6 +24,10 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                // The market's total leads the screen on the lit background,
+                // not inside a card — same move as the Overview hero. A box
+                // around the headline figure demoted it to one panel among six.
+                DashboardHero(summary: store.summary(for: market), currency: currency)
                 SummaryCard(summary: store.summary(for: market), currency: currency)
                     .cardStyle()
                 PortfolioValueCard(market: market,
@@ -46,15 +50,41 @@ struct DashboardView: View {
     }
 }
 
+// MARK: - Hero
+
+/// This market's total value, sitting directly on the background with today's
+/// and all-time moves under it. Split out of SummaryCard so the figure can lead
+/// the screen instead of being boxed with the supporting stats.
+private struct DashboardHero: View {
+    let summary: CurrencySummary?
+    let currency: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
+                .font(.system(size: 46, weight: .bold, design: .rounded))
+                .tracking(-1.0)
+                .foregroundStyle(Theme.primaryText)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .rollingNumber(summary?.totalValue)
+                .shadow(color: .black.opacity(0.45), radius: 16, y: 5)
+            ChangeLine(value: summary?.todayPl, pct: summary?.todayPlPct,
+                       currency: currency)
+            ChangeLine(value: summary?.totalPl, pct: summary?.totalPlPct,
+                       currency: currency, suffix: "All time")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+    }
+}
+
 // MARK: - Summary
 
 private struct SummaryCard: View {
     let summary: CurrencySummary?
     let currency: String
-
-    // Violet accent so Total Return reads as a distinct category from the
-    // green/red P&L rows (mirrors the web dashboard).
-    private let trAccent = Color(red: 0.655, green: 0.545, blue: 0.98)
 
     // Total Return = unrealized (totalPl) + realized + dividends.
     // totalEarned already = realized + dividends (computed by the backend).
@@ -69,90 +99,86 @@ private struct SummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Big bold value with a colored change line under it.
-            VStack(alignment: .leading, spacing: 5) {
-                Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.primaryText)
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
-                    .rollingNumber(summary?.totalValue)
-                ChangeLine(value: summary?.todayPl, pct: summary?.todayPlPct,
-                           currency: currency)
-                ChangeLine(value: summary?.totalPl, pct: summary?.totalPlPct,
-                           currency: currency, suffix: "All time")
-            }
-
-            // Flat stat rows with hairline separators.
-            VStack(spacing: 0) {
+            // The headline figure now lives in DashboardHero above this card.
+            // Stat rows. Separated by rhythm, not by a rule under each one — a
+            // hairline between every row reads as a dated table, and the eye
+            // groups them perfectly well on spacing alone.
+            VStack(spacing: 2) {
                 statRow("Realized P&L",
-                        Fmt.signedMoney(summary?.realizedPl, currency: currency),
+                        Fmt.signedAmount(summary?.realizedPl, currency: currency),
                         Theme.pl(summary?.realizedPl), raw: summary?.realizedPl)
                 statRow("Dividends",
-                        Fmt.money(summary?.dividends, currency: currency),
+                        Fmt.amount(summary?.dividends, currency: currency),
                         Theme.primaryText, raw: summary?.dividends)
                 statRow("Cost basis",
-                        Fmt.money(summary?.totalCost, currency: currency),
+                        Fmt.amount(summary?.totalCost, currency: currency),
                         Theme.primaryText, raw: summary?.totalCost)
                 statRow("Earned this year",
-                        Fmt.signedMoney(summary?.yearEarned, currency: currency),
-                        Theme.pl(summary?.yearEarned), raw: summary?.yearEarned,
-                        last: true)
+                        Fmt.signedAmount(summary?.yearEarned, currency: currency),
+                        Theme.pl(summary?.yearEarned), raw: summary?.yearEarned)
             }
 
-            // Distinct Total Return band.
+            // Total Return closes the card. It used to wear a violet label and
+            // a violet-bordered box — a third accent competing with the blue
+            // chrome and the green/red values for no semantic reason. It's the
+            // card's conclusion, so it earns its weight from a heavier value
+            // and a plain elevated surface instead of its own colour.
             if let tr = totalReturn {
-                HStack(spacing: 5) {
-                    Text("TOTAL RETURN")
-                        .font(.caption2.weight(.bold))
-                        .tracking(0.5)
-                        .foregroundStyle(trAccent)
-                    Text(currency)  // unit: TWD / USD
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Theme.mutedText)
-                    Spacer()
-                    // Whole dollars + scale-to-fit: a 7-figure return used to
-                    // wrap its trailing cents onto a second line.
-                    Text(Fmt.signedMoney(tr, currency: currency, digits: 0))
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(Theme.pl(tr))
-                        .minimumScaleFactor(0.7)
-                        .lineLimit(1)
-                        .rollingNumber(tr)
-                    if let p = totalReturnPct {
-                        Text(Fmt.pct(p))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.mutedText)
-                            .rollingNumber(p)
+                // Two clean lines: the figure gets the first row to itself, the
+                // definition sits under the label. Packing all four into one
+                // row forced the caption to wrap and left it colliding with
+                // the value.
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
+                        Text("TOTAL RETURN")
+                            .font(Theme.Typo.label)
+                            .tracking(0.6)
+                            .foregroundStyle(Theme.secondaryText)
+                        Spacer(minLength: Theme.Space.s)
+                        Text(Fmt.signedAmount(tr, currency: currency))
+                            .font(.system(size: 19, weight: .bold, design: .rounded))
+                            .foregroundStyle(Theme.pl(tr))
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
+                            .rollingNumber(tr)
+                        if let p = totalReturnPct {
+                            Text(Fmt.pct(p))
+                                .font(Theme.Typo.caption)
+                                .foregroundStyle(Theme.mutedText)
+                                .lineLimit(1)
+                                .rollingNumber(p)
+                        }
                     }
+                    Text("Unrealized + realized + dividends")
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(Theme.mutedText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(trAccent.opacity(0.10))
-                .overlay(RoundedRectangle(cornerRadius: 10)
-                    .stroke(trAccent.opacity(0.30), lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .padding(.horizontal, Theme.Space.l)
+                .padding(.vertical, Theme.Space.m)
+                .background(Theme.cardElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func statRow(_ label: String, _ value: String, _ color: Color,
-                         raw: Double? = nil, last: Bool = false) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(label)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.secondaryText)
-                Spacer()
-                Text(value)
-                    .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                    .foregroundStyle(color)
-                    .rollingNumber(raw)
-            }
-            .padding(.vertical, 11)
-            if !last { Rectangle().fill(Theme.stroke).frame(height: 1) }
+                         raw: Double? = nil) -> some View {
+        HStack {
+            Text(label)
+                .font(Theme.Typo.body)
+                .foregroundStyle(Theme.secondaryText)
+            Spacer(minLength: Theme.Space.s)
+            Text(value)
+                .font(Theme.Typo.value)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .rollingNumber(raw)
         }
+        .statRow()
     }
 }
 
@@ -251,7 +277,7 @@ private struct PortfolioValueCard: View {
                         AreaMark(x: .value("Date", row.date), y: .value("Value", row.total))
                             .interpolationMethod(.monotone)
                             .foregroundStyle(
-                                LinearGradient(colors: [lineColor.opacity(0.18), .clear],
+                                LinearGradient(colors: [lineColor.opacity(0.14), .clear],
                                                startPoint: .top, endPoint: .bottom)
                             )
                     }
@@ -362,12 +388,12 @@ private struct EarningsCard: View {
         let rows = makeRows()
         let dateRange = (rows.first?.date ?? .now)...(rows.last?.date ?? .now)
         let lineColor: Color = (rows.last?.total ?? 0) >= (rows.first?.total ?? 0)
-            ? Theme.positive : Theme.negative
+            ? Theme.positiveMark : Theme.negativeMark
 
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader("Earnings") {
                 if let last = rows.last {
-                    Text(Fmt.signedMoney(last.total, currency: currency))
+                    Text(Fmt.signedAmount(last.total, currency: currency))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .foregroundStyle(Theme.pl(last.total))
                 }
@@ -386,7 +412,7 @@ private struct EarningsCard: View {
                         AreaMark(x: .value("Date", row.date), y: .value("Total", row.total))
                             .interpolationMethod(.monotone)
                             .foregroundStyle(
-                                LinearGradient(colors: [lineColor.opacity(0.18), .clear],
+                                LinearGradient(colors: [lineColor.opacity(0.14), .clear],
                                                startPoint: .top, endPoint: .bottom)
                             )
                     }
@@ -400,7 +426,7 @@ private struct EarningsCard: View {
                             .annotation(position: .top,
                                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                                 ChartScrubTip(date: sel.date,
-                                              value: Fmt.signedMoney(sel.total, currency: currency))
+                                              value: Fmt.signedAmount(sel.total, currency: currency))
                             }
                         PointMark(x: .value("Date", sel.date), y: .value("Total", sel.total))
                             .symbolSize(50)
@@ -410,7 +436,7 @@ private struct EarningsCard: View {
                 .chartXSelection(value: $scrubDate)
                 // Tick as the scrub dot snaps from point to point.
                 .sensoryFeedback(.selection, trigger: nearestRow(to: scrubDate, in: rows)?.date)
-                .chartYAxis(.hidden)
+                .moneyValueScale(currency: currency)
                 .chartXAxis {
                     AxisMarks(values: Fmt.axisDates(from: dateRange.lowerBound,
                                                     to: dateRange.upperBound)) { value in
@@ -700,7 +726,7 @@ private struct HoldingRow: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 4) {
                     // Solid pill = current price, colored by today's move.
-                    Text(Fmt.money(holding.currentPrice, currency: holding.currency))
+                    Text(Fmt.price(holding.currentPrice, currency: holding.currency))
                         .font(.system(.subheadline, design: .rounded).weight(.bold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -717,7 +743,7 @@ private struct HoldingRow: View {
                     // Hidden when flat/no data (a wall of 0.00 / 0.00% after
                     // hours says nothing).
                     if let c = holding.todayChange, let p = holding.todayChangePct, p != 0 {
-                        Text("\(Fmt.signedMoney(c, currency: holding.currency)) (\(Fmt.pct(p)))")
+                        Text("\(Fmt.signedAmount(c, currency: holding.currency)) (\(Fmt.pct(p)))")
                             .font(.system(.caption2, design: .rounded).weight(.semibold))
                             .foregroundStyle(Theme.pl(c))
                             .lineLimit(1)
@@ -740,7 +766,7 @@ private struct HoldingRow: View {
             }
             .padding(.vertical, 12)
             if showsSeparator {
-                Rectangle().fill(Theme.stroke).frame(height: 1)
+                Theme.rowSeparator
             }
         }
         .contentShape(Rectangle())

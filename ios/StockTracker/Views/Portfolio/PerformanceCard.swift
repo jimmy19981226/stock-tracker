@@ -15,6 +15,8 @@ struct PerformanceCard: View {
     @State private var period = "max"
     @State private var loading = false
     @State private var unavailable = false
+    @State private var benchmarks: BenchmarkSettings?
+    @State private var switchingBenchmark = false
 
     private static let periods: [(String, String)] =
         [("3mo", "3M"), ("6mo", "6M"), ("ytd", "YTD"), ("1y", "1Y"), ("max", "MAX")]
@@ -67,6 +69,7 @@ struct PerformanceCard: View {
                 }
             }
             .task(id: period) { await load() }
+            .task { await loadBenchmarks() }
         }
     }
 
@@ -133,6 +136,8 @@ struct PerformanceCard: View {
     private func comparisonChart(_ r: PerformanceReport) -> some View {
         let pts = chartPoints(r)
         if pts.count >= 4 {
+            let first = pts.map(\.date).min() ?? Date()
+            let last = pts.map(\.date).max() ?? Date()
             Chart(pts) { p in
                 LineMark(x: .value("Date", p.date), y: .value("%", p.pct))
                     .foregroundStyle(by: .value("Series", p.series))
@@ -156,10 +161,10 @@ struct PerformanceCard: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 4)) { v in
+                AxisMarks(values: Fmt.axisDates(from: first, to: last)) { v in
                     AxisValueLabel {
                         if let d = v.as(Date.self) {
-                            Text(d, format: .dateTime.month(.abbreviated))
+                            Text(d, format: Fmt.axisFormat(from: first, to: last))
                                 .font(.system(size: 9))
                                 .foregroundStyle(Theme.mutedText)
                         }
@@ -169,7 +174,7 @@ struct PerformanceCard: View {
             .chartLegend(position: .top, alignment: .leading) {
                 HStack(spacing: 12) {
                     legendDot(color: Theme.accent, label: "Portfolio")
-                    legendDot(color: .white.opacity(0.45), label: r.benchmark.name)
+                    benchmarkPicker(current: r.benchmark.name)
                 }
             }
             .frame(height: 170)
@@ -182,6 +187,46 @@ struct PerformanceCard: View {
             Text(label).font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(Theme.secondaryText)
         }
+    }
+
+    /// The benchmark legend doubles as its picker — tap the name you're being
+    /// compared against to compare against something else. Kept in the legend
+    /// rather than Settings so it sits right next to the line it controls.
+    @ViewBuilder
+    private func benchmarkPicker(current: String) -> some View {
+        let presets = benchmarks?.presets(for: market) ?? []
+        let selected = benchmarks?.symbol(for: market)
+        Menu {
+            ForEach(presets) { p in
+                Button {
+                    Task { await switchBenchmark(to: p.symbol) }
+                } label: {
+                    // Checkmark on the active one so the menu reads as a radio
+                    // group. An empty systemImage still reserves space, so the
+                    // inactive rows use a bare Text instead.
+                    if p.symbol == selected {
+                        Label(p.name, systemImage: "checkmark")
+                    } else {
+                        Text(p.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Circle().fill(Color.white.opacity(0.45)).frame(width: 6, height: 6)
+                Text(current).font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.secondaryText)
+                if switchingBenchmark {
+                    ProgressView().controlSize(.mini)
+                } else if !presets.isEmpty {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(Theme.mutedText)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .disabled(presets.isEmpty || switchingBenchmark)
     }
 
     // MARK: - Monthly P&L bars (期間績效)
@@ -234,6 +279,33 @@ struct PerformanceCard: View {
 
     private func cacheKey(_ p: String) -> String {
         "performance-\(market.rawValue)-\(p)"
+    }
+
+    /// Tolerant: an older backend without /api/portfolio/benchmark just leaves
+    /// the legend as a plain (unpickable) label.
+    private func loadBenchmarks() async {
+        benchmarks = try? await APIClient.shared.getBenchmarks()
+    }
+
+    /// Switch this market's comparison symbol and re-pull every period. The
+    /// benchmark is part of each report, so all cached tabs are stale — drop
+    /// them (memory AND disk) rather than let a tab switch show a mismatched
+    /// legend and curve.
+    private func switchBenchmark(to symbol: String) async {
+        guard symbol != benchmarks?.symbol(for: market), !switchingBenchmark else { return }
+        switchingBenchmark = true
+        defer { switchingBenchmark = false }
+        do {
+            benchmarks = try await APIClient.shared.setBenchmark(market: market, symbol: symbol)
+        } catch {
+            return  // leave the current benchmark in place
+        }
+        for p in Self.periods.map(\.0) {
+            DiskCache.remove(name: cacheKey(p))
+        }
+        reports.removeAll()
+        fetchedPeriods.removeAll()
+        await load()
     }
 
     /// Stale-while-refresh: paint the last saved report instantly, then fetch

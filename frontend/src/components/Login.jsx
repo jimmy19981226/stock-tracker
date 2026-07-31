@@ -24,7 +24,9 @@ export default function Login({ onSuccess }) {
   return (
     <div className="centered">
       <form className="card login" onSubmit={submit}>
-        <div className="brand">✦ AI Stock Studio</div>
+        <div className="brand">
+          <span className="brand-mark">✦</span> AI Stock Studio
+        </div>
         <h1>Portfolio dashboard</h1>
         <p className="sub">Enter the dashboard password to view the portfolio.</p>
         <input

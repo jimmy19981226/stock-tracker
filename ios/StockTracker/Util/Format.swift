@@ -38,6 +38,56 @@ enum Fmt {
         return "\(sign)\(money(v, currency: currency, digits: digits))"
     }
 
+    // MARK: - Amounts vs prices
+    //
+    // A money *amount* (P&L, cost basis, dividends received, a portfolio total)
+    // and a *price* are different kinds of number and should not be formatted
+    // the same way. "NT$3,807,168.00" spends four characters saying nothing —
+    // TWD has no practical subunit, and cents on a seven-figure P&L are noise.
+    // A price, on the other hand, is quoted with real precision (NT$1,150.50)
+    // and must keep it. Use `amount`/`signedAmount` for the former, `price` for
+    // the latter, and neither defaults to the old blanket 2 digits.
+
+    /// Digits an *amount* should carry in this currency.
+    private static func amountDigits(_ value: Double, currency: String) -> Int {
+        if currency == "TWD" { return 0 }
+        // USD keeps cents only while they're still legible; past a thousand
+        // they're noise on a P&L line.
+        return Swift.abs(value) >= 1000 ? 0 : 2
+    }
+
+    /// A money amount — totals, P&L, dividends, cost basis.
+    static func amount(_ value: Double?, currency: String) -> String {
+        guard let v = value, !v.isNaN else { return "—" }
+        return money(v, currency: currency, digits: amountDigits(v, currency: currency))
+    }
+
+    /// A money amount with an explicit `+` when positive.
+    static func signedAmount(_ value: Double?, currency: String) -> String {
+        guard let v = value, !v.isNaN else { return "—" }
+        return signedMoney(v, currency: currency, digits: amountDigits(v, currency: currency))
+    }
+
+    /// A quoted price — keeps the precision the market trades it at.
+    static func price(_ value: Double?, currency: String) -> String {
+        money(value, currency: currency, digits: 2)
+    }
+
+    /// Compact money for a chart's value scale: NT$6.9M, $505K. An axis has to
+    /// stay narrow or it crowds the plot — full precision belongs in the scrub
+    /// tip, not on the rail.
+    static func compactMoney(_ value: Double?, currency: String) -> String {
+        guard let v = value, !v.isNaN else { return "—" }
+        let symbol = currency == "TWD" ? "NT$" : currency == "USD" ? "$" : ""
+        let sign = v < 0 ? "-" : ""
+        let a = Swift.abs(v)
+        let (div, suffix): (Double, String) =
+            a >= 1e9 ? (1e9, "B") : a >= 1e6 ? (1e6, "M") : a >= 1e3 ? (1e3, "K") : (1, "")
+        let scaled = a / div
+        let digits = suffix.isEmpty ? 0 : (scaled < 10 ? 1 : 0)
+        return "\(sign)\(symbol)\(String(format: "%.\(digits)f", scaled))\(suffix)"
+    }
+
     /// Big "net worth" style number — thousands separators, no decimals.
     static func bigMoney(_ value: Double?, currency: String) -> String {
         money(value, currency: currency, digits: 0)
@@ -92,9 +142,13 @@ enum Fmt {
     /// weeks–months, "Jun" for about a year, "2025" beyond that. A fixed
     /// month-only format repeats the same label on short ranges and drops the
     /// year on long ones.
-    static func axisFormat(from first: Date, to last: Date) -> Date.FormatStyle {
+    static func axisFormat(from first: Date, to last: Date,
+                           tickCount: Int = 4) -> Date.FormatStyle {
         let days = last.timeIntervalSince(first) / 86_400
         if days <= 120 { return .dateTime.month(.abbreviated).day() }
+        // Gap between two adjacent ticks — the resolution the labels have to
+        // distinguish. A format coarser than this repeats itself.
+        let stepDays = days / Double(Swift.max(tickCount - 1, 1))
         if days <= 550 {
             // Month-only labels turn ambiguous once the span straddles New
             // Year (e.g. the value chart's MAX from Jan 2025): "Mar" could be
@@ -104,6 +158,11 @@ enum Fmt {
             return crossesYear ? .dateTime.month(.abbreviated).year()
                                : .dateTime.month(.abbreviated)
         }
-        return .dateTime.year()
+        // Multi-year spans: year-only is right only when consecutive ticks
+        // actually land in different years. Over ~2 years with 4 ticks they
+        // don't — the axis renders "2024, 2025, 2025, 2026", the same
+        // duplicate-label problem month-only labels have on shorter ranges.
+        return stepDays >= 365 ? .dateTime.year()
+                               : .dateTime.month(.abbreviated).year()
     }
 }

@@ -315,8 +315,13 @@ _FINMIND_URL = "https://api.finmindtrade.com/api/v4/data"
 # TW company Chinese short names (FinMind TaiwanStockInfo) — a name
 # essentially never changes, so one refresh a day is plenty.
 _TW_NAMES_TTL = 24 * 3600.0
+# Backoff after a failed fetch. build_holdings calls get_tw_chinese_name once
+# per position, so without this an unreachable FinMind costs 15s (the timeout
+# below) × every TW holding, on every single request.
+_TW_NAMES_FAIL_TTL = 120.0
 _tw_names_cache: dict[str, str] = {}
 _tw_names_at = 0.0
+_tw_names_retry_after = 0.0
 
 
 def get_tw_chinese_name(ticker: str) -> str | None:
@@ -333,11 +338,16 @@ def get_tw_chinese_name(ticker: str) -> str | None:
 
 
 def _ensure_tw_names_loaded() -> None:
-    global _tw_names_at
+    global _tw_names_at, _tw_names_retry_after
     now = time.time()
     with _lock:
         if _tw_names_cache and now - _tw_names_at < _TW_NAMES_TTL:
             return
+        if now < _tw_names_retry_after:
+            return  # a recent attempt failed (or one is in flight) — don't queue up behind it
+        # Claim the attempt under the lock so N holdings in a row produce ONE
+        # fetch, not N sequential 15-second timeouts.
+        _tw_names_retry_after = now + _TW_NAMES_FAIL_TTL
     url = f"{_FINMIND_URL}?" + urllib.parse.urlencode({"dataset": "TaiwanStockInfo"})
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -357,6 +367,7 @@ def _ensure_tw_names_loaded() -> None:
             _tw_names_cache.clear()
             _tw_names_cache.update(fresh)
             _tw_names_at = now
+            _tw_names_retry_after = 0.0
 
 
 def get_monthly_revenue(ticker: str, months: int = 24) -> list[dict]:

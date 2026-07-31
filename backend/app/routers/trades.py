@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import Trade, get_db
 from ..schemas import TradeCreate, TradeOut
-from ..services import idempotency, quotes
+from ..services import idempotency, portfolio, quotes
 
 router = APIRouter(prefix="/api/trades", tags=["trades"])
 
@@ -115,6 +115,9 @@ def create_trade(
     )
     db.add(trade)
     db.commit()
+    # The trade log changed — drop cached net-worth/performance series so
+    # the charts reflect this edit right away rather than after the TTL.
+    portfolio.invalidate_user(user)
     db.refresh(trade)
     out = _to_out(trade, _status_of(db, trade))
     idempotency.remember(user, idempotency_key, out)
@@ -144,6 +147,9 @@ def update_trade(
     trade.notes = payload.notes
     trade.market = payload.market or quotes.market_of(trade.ticker)
     db.commit()
+    # The trade log changed — drop cached net-worth/performance series so
+    # the charts reflect this edit right away rather than after the TTL.
+    portfolio.invalidate_user(user)
     db.refresh(trade)
     return _to_out(trade, _status_of(db, trade))
 
@@ -163,4 +169,7 @@ def delete_trade(
         raise HTTPException(status_code=404, detail="Trade not found")
     db.delete(trade)
     db.commit()
+    # The trade log changed — drop cached net-worth/performance series so
+    # the charts reflect this edit right away rather than after the TTL.
+    portfolio.invalidate_user(user)
     return None

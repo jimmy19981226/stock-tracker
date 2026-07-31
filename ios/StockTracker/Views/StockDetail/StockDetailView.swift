@@ -157,7 +157,7 @@ private enum RecordDelete: Identifiable {
         case .trade(let t):
             return "\(t.type == .buy ? "Buy" : "Sell") \(Fmt.shares(t.shares)) \(t.ticker) on \(Fmt.prettyDate(t.tradeDate))"
         case .dividend(let d):
-            return "\(d.ticker) dividend of \(Fmt.money(d.amount, currency: d.currency)) on \(Fmt.prettyDate(d.payDate))"
+            return "\(d.ticker) dividend of \(Fmt.amount(d.amount, currency: d.currency)) on \(Fmt.prettyDate(d.payDate))"
         }
     }
 }
@@ -223,7 +223,7 @@ private struct RecordsCard: View {
             recordLine(
                 tag: t.type == .buy ? "Buy" : "Sell",
                 tagColor: t.type == .buy ? Theme.positive : Theme.negative,
-                detail: "\(Fmt.shares(t.shares)) @ \(Fmt.money(t.price, currency: currency))",
+                detail: "\(Fmt.shares(t.shares)) @ \(Fmt.price(t.price, currency: currency))",
                 date: t.tradeDate,
                 value: Fmt.money(t.shares * t.price, currency: currency, digits: 0),
                 valueColor: Theme.primaryText,
@@ -236,7 +236,7 @@ private struct RecordsCard: View {
                 tagColor: Theme.accent,
                 detail: nil,
                 date: d.payDate,
-                value: "+" + Fmt.money(d.amount, currency: d.currency),
+                value: "+" + Fmt.amount(d.amount, currency: d.currency),
                 valueColor: Theme.positive,
                 onEdit: { onEditDividend(d) },
                 onDelete: { onDeleteDividend(d) }
@@ -288,7 +288,7 @@ private struct RecordsCard: View {
                 Button("Edit") { onEdit() }
                 Button("Delete", role: .destructive) { onDelete() }
             }
-            Rectangle().fill(Theme.stroke).frame(height: 1)
+            Theme.rowSeparator
         }
     }
 }
@@ -355,7 +355,7 @@ private struct PriceHeader: View {
             Text(detail.name)
                 .font(.system(.subheadline, design: .rounded).weight(.semibold))
                 .foregroundStyle(Theme.secondaryText)
-            Text(Fmt.money(detail.live.price, currency: currency))
+            Text(Fmt.price(detail.live.price, currency: currency))
                 .font(.system(size: 40, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.primaryText)
                 .minimumScaleFactor(0.6)
@@ -457,7 +457,7 @@ private struct ChartCard: View {
         let markers = makeMarkers(bars: bars, range: dateRange)
         let avgCost = avgCostLine(bars: bars)
         let up = (bars.last?.close ?? 0) >= (bars.first?.close ?? 0)
-        let color = up ? Theme.positive : Theme.negative
+        let color = up ? Theme.positiveMark : Theme.negativeMark
 
         VStack(spacing: 12) {
             UnderlineTabs(
@@ -477,7 +477,7 @@ private struct ChartCard: View {
                         AreaMark(x: .value("Date", bar.date), y: .value("Close", bar.close))
                             .interpolationMethod(.monotone)
                             .foregroundStyle(
-                                LinearGradient(colors: [color.opacity(0.18), .clear],
+                                LinearGradient(colors: [color.opacity(0.14), .clear],
                                                startPoint: .top, endPoint: .bottom)
                             )
                     }
@@ -517,7 +517,7 @@ private struct ChartCard: View {
                             .annotation(position: .top,
                                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                                 ChartScrubTip(date: sel.date,
-                                              value: Fmt.money(sel.close, currency: currency))
+                                              value: Fmt.price(sel.close, currency: currency))
                             }
                         PointMark(x: .value("Date", sel.date), y: .value("Close", sel.close))
                             .symbolSize(50)
@@ -568,22 +568,22 @@ private struct PositionCard: View {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
                     StatBlock(label: "Shares", value: Fmt.shares(position.shares))
                     StatBlock(label: "Avg cost",
-                              value: Fmt.money(position.avgCost, currency: currency),
+                              value: Fmt.price(position.avgCost, currency: currency),
                               alignment: .trailing)
                     StatBlock(label: "Market value",
                               value: Fmt.money(position.marketValue, currency: currency, digits: 0))
                     StatBlock(label: "Unrealized",
-                              value: Fmt.signedMoney(position.unrealizedPl, currency: currency),
+                              value: Fmt.signedAmount(position.unrealizedPl, currency: currency),
                               valueColor: Theme.pl(position.unrealizedPl),
                               alignment: .trailing)
                     StatBlock(label: "Realized",
-                              value: Fmt.signedMoney(position.realizedPl, currency: currency),
+                              value: Fmt.signedAmount(position.realizedPl, currency: currency),
                               valueColor: Theme.pl(position.realizedPl))
                     StatBlock(label: "Dividends",
-                              value: Fmt.money(position.dividendsReceived, currency: currency),
+                              value: Fmt.amount(position.dividendsReceived, currency: currency),
                               alignment: .trailing)
                     StatBlock(label: "Total return",
-                              value: Fmt.signedMoney(position.totalReturn, currency: currency),
+                              value: Fmt.signedAmount(position.totalReturn, currency: currency),
                               valueColor: Theme.pl(position.totalReturn))
                     StatBlock(label: "Return %",
                               value: Fmt.pct(position.totalReturnPct),

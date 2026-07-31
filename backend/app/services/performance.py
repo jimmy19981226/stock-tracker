@@ -15,6 +15,8 @@ the user's trade/dividend log as external cash flows:
 """
 from __future__ import annotations
 
+import json
+import re
 from collections import defaultdict
 from datetime import date, datetime
 from typing import Iterable
@@ -24,10 +26,93 @@ from threading import Lock
 
 from sqlalchemy.orm import Session
 
-from ..database import Dividend, Trade
+from ..database import Dividend, Metadata, Trade
 from . import portfolio, quotes, stock_info
 
-BENCHMARKS = {"TW": ("^TWII", "加權指數"), "US": ("^GSPC", "S&P 500")}
+# What each market is compared against unless the user picks something else.
+DEFAULT_BENCHMARKS = {"TW": "^TWII", "US": "^GSPC"}
+
+# Offered in the app's picker. Any Yahoo-resolvable symbol works — an index
+# (``^TWII``), a TW ETF by bare code (``0050``), or a US ticker (``QQQ``) — so
+# this list is a convenience, not a whitelist.
+BENCHMARK_PRESETS = {
+    "TW": [
+        ("^TWII", "加權指數"),
+        ("^TWOII", "櫃買指數"),
+        ("0050", "元大台灣50"),
+        ("006208", "富邦台50"),
+        ("0056", "元大高股息"),
+    ],
+    "US": [
+        ("^GSPC", "S&P 500"),
+        ("^IXIC", "NASDAQ"),
+        ("^DJI", "Dow Jones"),
+        ("^SOX", "費城半導體"),
+        ("QQQ", "Invesco QQQ"),
+        ("VOO", "Vanguard S&P 500"),
+    ],
+}
+
+_PRESET_NAMES = {sym: name for rows in BENCHMARK_PRESETS.values() for sym, name in rows}
+_BENCHMARK_META_PREFIX = "benchmark:"
+# Metadata.key is String(50): "benchmark:" + "google:<21-digit sub>" ≈ 38 chars.
+_SYMBOL_RE = re.compile(r"^[\^]?[A-Z0-9.\-=]{1,12}$")
+
+
+def _benchmark_meta_key(user_id: str) -> str:
+    return f"{_BENCHMARK_META_PREFIX}{user_id}"
+
+
+def get_benchmarks(db: Session, user_id: str) -> dict[str, str]:
+    """The user's benchmark symbol per market, with defaults filled in."""
+    out = dict(DEFAULT_BENCHMARKS)
+    row = db.get(Metadata, _benchmark_meta_key(user_id))
+    if row and row.value:
+        try:
+            saved = json.loads(row.value)
+        except ValueError:
+            saved = {}
+        if isinstance(saved, dict):
+            for market, symbol in saved.items():
+                if isinstance(symbol, str) and symbol.strip():
+                    out[str(market).upper()] = symbol.strip().upper()
+    return out
+
+
+def set_benchmark(db: Session, user_id: str, market: str, symbol: str) -> dict[str, str]:
+    """Point one market at a different benchmark. An empty symbol resets it to
+    the default. Raises ValueError on a malformed symbol."""
+    market = market.upper()
+    if market not in DEFAULT_BENCHMARKS:
+        raise ValueError(f"Unknown market '{market}'")
+    symbol = (symbol or "").strip().upper()
+    if symbol and not _SYMBOL_RE.match(symbol):
+        raise ValueError(f"Invalid benchmark symbol: {symbol}")
+
+    current = get_benchmarks(db, user_id)
+    current[market] = symbol or DEFAULT_BENCHMARKS[market]
+    # Persist only the non-default picks, so changing a default later actually
+    # takes effect for users who never chose one.
+    stored = {m: s for m, s in current.items() if s != DEFAULT_BENCHMARKS.get(m)}
+    key = _benchmark_meta_key(user_id)
+    row = db.get(Metadata, key)
+    if row is None:
+        db.add(Metadata(key=key, value=json.dumps(stored)))
+    else:
+        row.value = json.dumps(stored)
+    db.commit()
+    invalidate_user(user_id)
+    return current
+
+
+def benchmark_name(symbol: str) -> str:
+    """Display name for a benchmark symbol: the curated name where we have one,
+    otherwise the TW Chinese short name / live quote name, else the symbol."""
+    symbol = symbol.upper()
+    if symbol in _PRESET_NAMES:
+        return _PRESET_NAMES[symbol]
+    quote = quotes.get_quote(symbol)
+    return quotes.display_name(symbol, fallback=(quote.name if quote else "")) or symbol
 
 # The first build triggers the full value-history sweep (one yfinance "max"
 # fetch per ticker ever traded) — minutes on a throttled cloud IP. Cache the
@@ -88,14 +173,25 @@ def _daily_flows(
     return fin, fout
 
 
+def invalidate_user(user_id: str) -> None:
+    """Drop this user's cached reports — called when they switch benchmark, so
+    the change shows up on the next request instead of after the TTL."""
+    with _cache_lock:
+        for key in [k for k in _cache if k[0] == user_id]:
+            _cache.pop(key, None)
+
+
 def build_performance(db: Session, user_id: str, market: str, period: str) -> dict:
-    key = (user_id, market, period)
+    bench_symbol = get_benchmarks(db, user_id).get(market, DEFAULT_BENCHMARKS["US"])
+    # The benchmark is part of the cache identity: two symbols produce two
+    # different reports for the same (user, market, period).
+    key = (user_id, market, period, bench_symbol)
     now = time.time()
     with _cache_lock:
         hit = _cache.get(key)
         if hit and now - hit[0] < _CACHE_TTL:
             return hit[1]
-    result = _build(db, user_id, market, period)
+    result = _build(db, user_id, market, period, bench_symbol)
     # Never cache an empty report — that's a failed value-history build
     # (throttled Yahoo), not a fact.
     if result["portfolio_series"]:
@@ -104,8 +200,9 @@ def build_performance(db: Session, user_id: str, market: str, period: str) -> di
     return result
 
 
-def _build(db: Session, user_id: str, market: str, period: str) -> dict:
-    bench_symbol, bench_name = BENCHMARKS.get(market, BENCHMARKS["US"])
+def _build(db: Session, user_id: str, market: str, period: str,
+           bench_symbol: str) -> dict:
+    bench_name = benchmark_name(bench_symbol)
     empty = {
         "market": market,
         "currency": quotes.currency_of(market),
@@ -192,25 +289,40 @@ def _build(db: Session, user_id: str, market: str, period: str) -> dict:
         bench_return = bench_series[-1]["pct"]
 
     # --- Monthly P/L (期間績效), newest last, capped at 24 months ----------
+    # Each month's P&L is measured over the interval actually charted for it:
+    # (previous charted day, this month's last charted day]. Two things depend
+    # on that bound:
+    #   * The FIRST month is usually partial (a 3mo window starts mid-month), so
+    #     summing the whole calendar month's flows would subtract buys made
+    #     before the window even opened — a phantom loss the size of those buys.
+    #   * The 24-month cap must not reset the baseline: prev_end/prev_date chain
+    #     through EVERY month and only the last 24 are emitted, so the oldest
+    #     surviving bar is still measured against the month before it.
     monthly: list[dict] = []
     month_points: dict[str, list[dict]] = defaultdict(list)
     for p in days_in_window:
         month_points[p["date"][:7]].append(p)
+    all_months = sorted(month_points)
+    emit_from = len(all_months) - 24
     prev_end = base["total"]
-    for month in sorted(month_points)[-24:]:
+    prev_date = base["date"]
+    for i, month in enumerate(all_months):
         pts = month_points[month]
-        m_fin = sum(v for d, v in fin.items() if d[:7] == month)
-        m_fout = sum(v for d, v in fout.items() if d[:7] == month)
+        end_date = pts[-1]["date"]
+        m_fin = sum(v for d, v in fin.items() if prev_date < d <= end_date)
+        m_fout = sum(v for d, v in fout.items() if prev_date < d <= end_date)
         pl = pts[-1]["total"] - prev_end - m_fin + m_fout
         invested = prev_end + m_fin
-        monthly.append(
-            {
-                "month": month,
-                "pl": round(pl, 2),
-                "return_pct": round(pl / invested * 100, 2) if invested > 1e-9 else None,
-            }
-        )
+        if i >= emit_from:
+            monthly.append(
+                {
+                    "month": month,
+                    "pl": round(pl, 2),
+                    "return_pct": round(pl / invested * 100, 2) if invested > 1e-9 else None,
+                }
+            )
         prev_end = pts[-1]["total"]
+        prev_date = end_date
 
     return {
         "market": market,

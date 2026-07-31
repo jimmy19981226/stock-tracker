@@ -30,7 +30,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..database import Dividend, Trade, get_db
-from ..services import portfolio
+from ..services import fx, portfolio
 
 router = APIRouter(prefix="/api/web", tags=["web-dashboard"])
 
@@ -152,6 +152,19 @@ def web_value_history(
     if period not in _VALUE_PERIODS:
         period = "1y"
     return portfolio.build_value_history(db, user, market=market, period=period)
+
+
+@router.get("/fx-history")
+def web_fx_history(
+    period: str = Query("1y"),
+    _user: str = Depends(require_web_auth),
+):
+    """Daily USD/TWD rates over the same window as ``/value-history``, so the
+    dashboard can convert each historical US point at the rate that actually
+    applied that day instead of at today's rate."""
+    if period not in _VALUE_PERIODS:
+        period = "1y"
+    return fx.get_usd_twd_history(period)
 
 
 @router.get("/trades")

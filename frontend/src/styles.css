@@ -1,15 +1,41 @@
+/* AI Stock Studio — web dashboard.
+   Visual language deliberately mirrors the iOS app: midnight-blue surfaces,
+   18px continuous corners, a gradient rim light and soft shadow instead of
+   hairline boxes, depth carrying the hierarchy. */
+
 :root {
+  /* Surfaces, darkest → lightest. Depth comes from these plus the rim light,
+     not from drawing more borders. */
   --bg: #05070c;
   --bg-elev: #0d1119;
-  --card: #11161f;
-  --stroke: #1f2733;
+  --card: #10151e;
+  --card-hi: #161c27;   /* hover / nested surface */
+  --stroke: #1e2633;
+  --stroke-soft: #171e29;
+
   --text: #e8ecf2;
-  --muted: #8a93a6;
   --secondary: #aab2c2;
+  --muted: #7d8698;
+  --faint: #545d6e;
+
   --accent: #4ade80;
   --up: #34d399;
   --down: #f87171;
-  --radius: 16px;
+  --tr-accent: #a78bfa;
+
+  --radius: 18px;
+  --radius-sm: 12px;
+  --radius-xs: 9px;
+
+  /* Two-layer shadow: a tight contact shadow plus a soft ambient one. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -14px rgba(0, 0, 0, 0.85);
+  --shadow-lg: 0 1px 2px rgba(0, 0, 0, 0.5), 0 24px 60px -24px rgba(0, 0, 0, 0.9);
+
+  /* The rim light: a hairline of brightness along the top edge that fades out,
+     so a card reads as lit from above rather than outlined. */
+  --rim: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 44%);
+
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 * { box-sizing: border-box; }
@@ -18,10 +44,16 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    /* Two very soft pools of light so the page isn't a flat black field. */
+    radial-gradient(1100px 620px at 12% -12%, rgba(74, 222, 128, 0.055), transparent 60%),
+    radial-gradient(900px 520px at 92% 4%, rgba(167, 139, 250, 0.045), transparent 62%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 code {
@@ -37,25 +69,42 @@ code {
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 20;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  background: rgba(5, 7, 12, 0.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--stroke);
+  gap: 14px;
+  padding: 12px 22px;
+  background: rgba(5, 7, 12, 0.72);
+  backdrop-filter: saturate(160%) blur(16px);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  /* A fading rule, not a hard border — the bar dissolves into the page. */
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, transparent, var(--stroke) 18%, var(--stroke) 82%, transparent) 1;
 }
 
-.brand { font-weight: 700; letter-spacing: 0.2px; color: var(--accent); }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  font-size: 15px;
+}
+.brand-mark {
+  color: var(--accent);
+  font-size: 17px;
+  line-height: 1;
+  filter: drop-shadow(0 0 10px rgba(74, 222, 128, 0.45));
+}
+.topbar-spacer { flex: 1; }
 
 .container {
-  max-width: 880px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 20px 16px 64px;
+  padding: 22px 18px 72px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .centered {
@@ -69,25 +118,118 @@ code {
   text-align: center;
 }
 
-/* ---- Hero --------------------------------------------------------------- */
-.hero { padding: 12px 4px 4px; }
-.hero-label { color: var(--secondary); font-size: 15px; font-weight: 600; }
-.hero-value {
-  font-size: clamp(34px, 9vw, 52px);
-  font-weight: 800;
-  letter-spacing: -1px;
-  line-height: 1.1;
-  margin-top: 4px;
+/* Refetches hold the previous render at reduced opacity — never a skeleton
+   flash, never a layout jump. */
+.is-refreshing { opacity: 0.62; transition: opacity 180ms var(--ease); }
+
+/* ---- Market status pills (live session state) --------------------------- */
+.session-pills { display: flex; gap: 6px; }
+.session-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--stroke-soft);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--secondary);
+  white-space: nowrap;
 }
-.hero-sub { color: var(--secondary); margin-top: 6px; font-size: 15px; }
-.hero-sub .fx { color: var(--muted); margin-left: 12px; }
+.session-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--faint);
+  flex-shrink: 0;
+}
+.session-pill.open { color: var(--text); }
+.session-pill.open .session-dot {
+  background: var(--up);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16);
+  animation: pulse 2.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.16); }
+  50%      { box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.05); }
+}
+
+/* ---- Hero --------------------------------------------------------------- */
+.hero { padding: 10px 4px 2px; }
+.hero-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+.hero-value {
+  /* Proportional figures: tabular-nums makes a display-size number look loose. */
+  font-size: clamp(38px, 8.5vw, 60px);
+  font-weight: 800;
+  letter-spacing: -1.8px;
+  line-height: 1.04;
+  margin-top: 8px;
+}
+.hero-sub {
+  color: var(--secondary);
+  margin-top: 10px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.hero-sub .fx { color: var(--muted); }
+.hero-sub .dot-sep { color: var(--faint); }
+
+/* ---- Stat strip (replaces the old wrapping "total return" pill) --------- */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 18px;
+}
+.stat {
+  background-image: var(--rim);
+  background-color: var(--card);
+  border: 1px solid var(--stroke-soft);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  min-width: 0;
+}
+.stat-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-value {
+  margin-top: 5px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat-sub { margin-top: 2px; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.stat.accent { border-color: rgba(167, 139, 250, 0.26); }
+.stat.accent .stat-label { color: var(--tr-accent); }
 
 /* ---- Cards -------------------------------------------------------------- */
 .card {
-  background: var(--card);
+  background-image: var(--rim);
+  background-color: var(--card);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
-  padding: 18px;
+  box-shadow: var(--shadow);
+  padding: 18px 20px;
   overflow: hidden; /* nothing paints past the card edge, ever */
   min-width: 0;     /* let cards shrink inside grid tracks */
 }
@@ -95,10 +237,18 @@ code {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.card-head h2 { font-size: 16px; margin: 0; }
-.notice { max-width: 440px; }
+.card-head h2 {
+  font-size: 13px;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+.notice { max-width: 460px; }
 .notice h1 { font-size: 20px; margin: 0 0 8px; }
 .notice p { color: var(--secondary); line-height: 1.6; }
 
@@ -106,198 +256,291 @@ code {
 .market-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 18px;
 }
-.market-title { color: var(--secondary); font-size: 14px; font-weight: 600; }
-.market-value { font-size: 24px; font-weight: 700; margin: 6px 0 12px; }
-.market.empty { display: flex; flex-direction: column; justify-content: center; min-height: 120px; }
-.market-rows { display: flex; flex-direction: column; gap: 8px; }
+.market-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.market-title {
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.market-share { color: var(--faint); font-size: 11.5px; font-weight: 700; }
+.market-value {
+  font-size: 27px;
+  font-weight: 750;
+  letter-spacing: -0.7px;
+  margin: 8px 0 14px;
+}
+.market.empty { display: flex; flex-direction: column; justify-content: center; min-height: 132px; }
+.market-rows { display: flex; flex-direction: column; gap: 9px; }
 
-.kv { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; }
-.kv .k { color: var(--muted); flex-shrink: 0; }
-.kv .v { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 0; text-align: right; }
-.v-extra { color: var(--muted); margin-left: 8px; font-weight: 500; font-size: 12px; }
+.kv { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+.kv .k { color: var(--muted); flex-shrink: 0; font-weight: 500; }
+.kv .v { font-variant-numeric: tabular-nums; font-weight: 650; min-width: 0; text-align: right; }
+.v-extra { color: var(--muted); margin-left: 7px; font-weight: 600; font-size: 11.5px; }
 
-/* ---- Total Return (distinct violet accent vs. the green/red rows) -------- */
-:root { --tr-accent: #a78bfa; }
-
-/* Per-market card: a highlighted band at the bottom */
+/* Total Return band, bled to the card edges. */
 .market-total-return {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin: 12px -18px -18px;          /* bleed to the card edges */
-  padding: 12px 18px;
-  border-top: 1px solid rgba(167, 139, 250, 0.28);
-  background: rgba(167, 139, 250, 0.08);
-  border-radius: 0 0 var(--radius) var(--radius);
+  gap: 8px;
+  margin: 14px -20px -18px;
+  padding: 13px 20px;
+  border-top: 1px solid rgba(167, 139, 250, 0.22);
+  background: linear-gradient(180deg, rgba(167, 139, 250, 0.11), rgba(167, 139, 250, 0.05));
 }
 .mtr-label {
   color: var(--tr-accent);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
-.mtr-unit {
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 10px;
-  margin-left: 2px;
-}
+.mtr-unit { color: var(--faint); font-weight: 700; font-size: 10px; margin-left: 3px; }
 .mtr-value { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 15px; }
-.mtr-pct { color: var(--muted); margin-left: 8px; font-weight: 600; font-size: 12px; }
-
-/* Hero: a pill under the net worth */
-.total-return-badge {
-  display: inline-flex;
-  align-items: baseline;
-  flex-wrap: wrap; /* wrap at any width — the note is long */
-  gap: 6px 10px;
-  margin-top: 12px;
-  padding: 8px 14px;
-  max-width: 100%;
-  background: rgba(167, 139, 250, 0.1);
-  border: 1px solid rgba(167, 139, 250, 0.3);
-  border-radius: 12px;
-}
-.tr-label { color: var(--tr-accent); font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; }
-.tr-value { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 18px; }
-.tr-usd { color: var(--secondary); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; }
-.tr-note { color: var(--muted); font-size: 11px; }
-@media (max-width: 560px) {
-  .tr-note { flex-basis: 100%; }
-}
+.mtr-pct { color: var(--muted); margin-left: 8px; font-weight: 650; font-size: 12px; }
 
 /* ---- Holdings ----------------------------------------------------------- */
 .holdings { display: flex; flex-direction: column; }
 .hrow {
   display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr 1.1fr;
-  gap: 8px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--stroke);
+  grid-template-columns: 1.5fr 1fr 1fr 1.15fr;
+  gap: 10px;
+  padding: 11px 10px;
+  margin: 0 -10px;
+  border-radius: var(--radius-xs);
   align-items: center;
   font-variant-numeric: tabular-nums;
-  font-size: 15px;
+  font-size: 14.5px;
+  transition: background 140ms var(--ease);
 }
-.hrow > span { min-width: 0; } /* grid cells may shrink below content width */
-.hrow:last-child { border-bottom: none; }
-.hrow.head { color: var(--muted); font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--stroke); }
-.hrow.group {
-  grid-template-columns: 1fr auto;
-  padding: 14px 0 6px;
-  border-bottom: none;
-  align-items: baseline;
+.hrow > span { min-width: 0; }
+/* Hover state instead of a hairline under every row — separation by light,
+   not by lines (the iOS card language). */
+.hrow:not(.head):hover { background: var(--card-hi); }
+.hrow.head {
+  color: var(--faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 4px 10px 8px;
+  border-bottom: 1px solid var(--stroke-soft);
+  margin-bottom: 4px;
 }
-.group-label { font-weight: 700; font-size: 13px; letter-spacing: 0.4px; text-transform: uppercase; color: var(--secondary); }
-.group-count { color: var(--muted); font-weight: 600; margin-left: 4px; }
-.group-total { color: var(--secondary); font-weight: 600; font-size: 13px; }
 .hrow .num { text-align: right; }
-.tk { display: flex; flex-direction: column; }
-.tk-sym { font-weight: 700; }
-.tk-name { color: var(--secondary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tk-sh { color: var(--muted); font-size: 11px; }
-.mini { display: block; font-size: 11px; font-weight: 500; opacity: 0.85; }
+.tk { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tk-sym { font-weight: 700; letter-spacing: -0.1px; }
+.tk-name {
+  color: var(--secondary);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tk-sh { color: var(--faint); font-size: 10.5px; font-weight: 600; }
+.mini { display: block; font-size: 11px; font-weight: 600; opacity: 0.9; }
 
-/* ---- Period tabs (net-worth chart) --------------------------------------- */
+/* Position weight: how much of the market this holding is. A quiet bar under
+   the ticker turns "which positions dominate?" into a glance. */
+.weight {
+  /* Short and chunky on purpose: a full-width 2px rule read as an underline
+     rather than a bar, which is exactly the hairline look this design avoids. */
+  display: block;
+  width: 100%;
+  max-width: 76px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--stroke);
+  margin-top: 6px;
+  overflow: hidden;
+}
+.weight-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(74, 222, 128, 0.55), rgba(74, 222, 128, 0.85));
+  transition: width 420ms var(--ease);
+}
+
+/* Direction arrow — a second, non-color channel for gain/loss, so the value
+   doesn't depend on red-vs-green alone. */
+.arrow { font-size: 9px; margin-right: 3px; opacity: 0.9; }
+
+/* ---- Segmented period control ------------------------------------------- */
 .period-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-elev);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 11px;
+  margin-bottom: 16px;
 }
 .period-tab {
-  flex: 1;
-  padding: 6px 0;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 5px 13px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
   color: var(--muted);
   background: transparent;
   border: none;
   border-radius: 8px;
-  transition: background 120ms, color 120ms;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
 }
-.period-tab:hover { color: var(--secondary); }
+.period-tab:hover { color: var(--secondary); background: rgba(255, 255, 255, 0.03); }
 .period-tab.active {
   color: var(--text);
-  background: var(--bg-elev);
-  border: 1px solid var(--stroke);
-  padding: 5px 0; /* compensate the 1px border so tabs stay the same height */
+  background: var(--card-hi);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
+.period-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* ---- Color states ------------------------------------------------------- */
 .up { color: var(--up); }
 .down { color: var(--down); }
 .muted { color: var(--muted); }
-.pl { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pl { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 14px; }
 
 /* ---- Sparkline ---------------------------------------------------------- */
 .spark { position: relative; }
-.spark-svg { width: 100%; display: block; touch-action: none; }
-.spark-tip {
-  position: absolute;
-  top: -6px;
-  right: 0;
+.spark-svg { width: 100%; display: block; touch-action: none; cursor: crosshair; }
+
+/* The value scale sits in a gutter beside the plot, so min/max are readable
+   WITHOUT hovering and can never collide with the line. A tooltip must
+   enhance, never gate. */
+.spark-plot { display: flex; align-items: stretch; gap: 10px; }
+.spark-plot .spark-svg { flex: 1; min-width: 0; }
+.spark-scale {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  background: var(--bg-elev);
+  justify-content: space-between;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  padding: 1px 0;
+}
+.spark-dates {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tooltip tracks the cursor rather than parking in a corner. */
+.spark-tip {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  background: rgba(16, 21, 30, 0.96);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--stroke);
-  border-radius: 8px;
-  padding: 4px 8px;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 6px 10px;
   pointer-events: none;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  transition: opacity 120ms var(--ease);
+  z-index: 2;
 }
 .spark-tip-val { font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
-.spark-tip-date { color: var(--muted); font-size: 11px; }
+.spark-tip-date { color: var(--muted); font-size: 10.5px; font-weight: 600; }
 
 /* ---- Login -------------------------------------------------------------- */
-.login { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
-.login h1 { font-size: 20px; margin: 8px 0 0; }
-.login .sub { color: var(--secondary); font-size: 14px; margin: 0 0 6px; }
+.login {
+  width: 100%;
+  max-width: 372px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  text-align: left;
+  background-image: var(--rim);
+  background-color: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 26px;
+}
+.login .brand { justify-content: flex-start; margin-bottom: 2px; }
+.login h1 { font-size: 21px; margin: 6px 0 0; letter-spacing: -0.4px; }
+.login .sub { color: var(--secondary); font-size: 13.5px; margin: 0 0 8px; line-height: 1.5; }
 .login input {
   background: var(--bg-elev);
   border: 1px solid var(--stroke);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 13px 14px;
   color: var(--text);
   font-size: 16px;
   width: 100%;
+  transition: border-color 140ms var(--ease), box-shadow 140ms var(--ease);
 }
-.login input:focus { outline: none; border-color: var(--accent); }
-.footnote { color: var(--muted); font-size: 12px; text-align: center; margin-top: 2px; }
+.login input:focus {
+  outline: none;
+  border-color: rgba(74, 222, 128, 0.65);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.13);
+}
+.footnote { color: var(--faint); font-size: 11.5px; text-align: center; margin-top: 4px; }
 
 /* ---- Buttons ------------------------------------------------------------ */
 button {
   font: inherit;
   cursor: pointer;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 13px 16px;
   font-weight: 700;
   color: #04140b;
-  background: var(--accent);
-  transition: opacity 120ms;
+  background: linear-gradient(180deg, #56e58c, #3fce74);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: filter 140ms var(--ease), opacity 140ms var(--ease);
 }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:hover:not(:disabled) { filter: brightness(1.07); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
 button.ghost {
-  background: transparent;
+  background: var(--card);
   color: var(--secondary);
   border: 1px solid var(--stroke);
-  padding: 8px 14px;
-  font-weight: 600;
+  padding: 7px 13px;
+  font-weight: 650;
+  font-size: 12.5px;
+  box-shadow: none;
 }
+button.ghost:hover:not(:disabled) { background: var(--card-hi); color: var(--text); filter: none; }
 
 /* ---- Misc --------------------------------------------------------------- */
 .error { color: var(--down); font-size: 13px; }
 .error.banner {
   background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  border-radius: 10px;
-  padding: 10px 14px;
+  border: 1px solid rgba(248, 113, 113, 0.32);
+  border-radius: var(--radius-sm);
+  padding: 11px 15px;
 }
-.empty-row { padding: 8px 0; }
-.updated { color: var(--muted); font-size: 12px; text-align: center; margin-top: 4px; }
-.loading-note { color: var(--muted); font-size: 14px; max-width: 320px; }
+.empty-row { padding: 10px 0; }
+.updated {
+  color: var(--faint);
+  font-size: 11.5px;
+  text-align: center;
+  margin-top: 6px;
+  font-weight: 500;
+}
+.loading-note { color: var(--muted); font-size: 14px; max-width: 330px; line-height: 1.5; }
 
 .spinner {
   width: 28px;
@@ -309,15 +552,44 @@ button.ghost {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---- Mobile ------------------------------------------------------------- */
-@media (max-width: 560px) {
+/* Cards ease in on first paint; refetches never re-trigger it. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.container > * { animation: rise 380ms var(--ease) backwards; }
+.container > *:nth-child(2) { animation-delay: 40ms; }
+.container > *:nth-child(3) { animation-delay: 80ms; }
+.container > *:nth-child(4) { animation-delay: 120ms; }
+.container > *:nth-child(n + 5) { animation-delay: 160ms; }
+
+/* ---- Responsive --------------------------------------------------------- */
+@media (max-width: 900px) {
+  .stat-strip { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 620px) {
+  .topbar { padding: 10px 14px; gap: 10px; }
+  .container { padding: 16px 13px 56px; gap: 14px; }
+  .card { padding: 16px; border-radius: var(--radius-sm); }
   .market-cards { grid-template-columns: 1fr; }
-  /* 3 columns (Price hidden): keep the row's font small enough that an
-     8-digit signed NT$ amount fits its track instead of spilling out of
-     the card. */
-  .hrow { grid-template-columns: 1.1fr 1fr 1.2fr; font-size: 12.5px; gap: 6px; }
+  .market-total-return { margin: 14px -16px -16px; padding: 12px 16px; }
+  /* 3 columns (Price hidden): keep the row's type small enough that an
+     8-digit signed NT$ amount fits its track instead of spilling out. */
+  .hrow { grid-template-columns: 1.25fr 1fr 1.15fr; font-size: 12.5px; gap: 7px; padding: 10px 8px; margin: 0 -8px; }
   .hrow .col-price { display: none; }
-  .hrow > span:nth-child(2) { display: none; } /* hide Price column on small screens */
   .mini { font-size: 10px; }
-  .tk-name { font-size: 11px; }
+  .tk-name { font-size: 10.5px; }
+  .period-tabs { display: flex; width: 100%; }
+  .period-tab { flex: 1; padding: 6px 0; }
+  .hero-sub { font-size: 13px; }
+}
+
+/* Respect the OS "reduce motion" setting — no entrances, no pulse, no easing. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

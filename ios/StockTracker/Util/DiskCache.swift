@@ -25,6 +25,12 @@ enum DiskCache {
         return try? JSONDecoder().decode(T.self, from: data)
     }
 
+    /// Drop one entry, for when a setting change makes it wrong rather than
+    /// merely stale (e.g. switching the performance benchmark).
+    static func remove(name: String) {
+        try? FileManager.default.removeItem(at: fileURL(name))
+    }
+
     /// Wipe everything (on sign-out, so the next account never sees this one's data).
     static func clear() {
         try? FileManager.default.removeItem(at: dir)

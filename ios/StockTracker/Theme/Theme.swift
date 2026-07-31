@@ -1,3 +1,4 @@
+import Charts
 import SwiftUI
 
 /// Premium dark design language: midnight-blue gradient background, signature
@@ -24,6 +25,55 @@ enum Theme {
 
     static let cornerRadius: CGFloat = 18
 
+    // MARK: - Colour discipline
+    //
+    // Three jobs, three sources of colour — and nothing else gets a hue:
+    //   * `accent`   — interactive/brand. Controls, links, selection.
+    //   * `positive` / `negative` — semantic, and ONLY ever on a P&L *value*.
+    //   * text tokens — every label, caption, unit and heading.
+    // A label tinted blue here, violet there and orange somewhere else is what
+    // makes a screen read as assembled rather than designed, so labels never
+    // carry a hue: the coloured number beside them already says what they mean.
+
+    /// A faint wash of a colour for a chip/badge background. Saturated blocks
+    /// shout; a 14% wash with the colour kept on the text reads as considered
+    /// and stays legible on the dark surface.
+    static func wash(_ color: Color) -> Color { color.opacity(0.14) }
+
+    // Chart-stroke variants of the P&L colours. The brand green (#00C805) is a
+    // fully saturated hue: as a 2px stroke on a near-black plot it glows rather
+    // than reads, and a glowing curve pulls rank over the figures it's meant to
+    // support. These are the same hues stepped slightly deeper so the line sits
+    // *in* the image instead of floating above it.
+    //
+    // Deliberately separate from `positive`/`negative`: every value, badge and
+    // label keeps the brand colours exactly as they were. This applies to marks
+    // only, and reverting it is a two-line change.
+    static let positiveMark = Color(red: 0.13, green: 0.72, blue: 0.31)
+    static let negativeMark = Color(red: 0.91, green: 0.34, blue: 0.14)
+
+    /// `pl(_:)` for chart marks.
+    static func plMark(_ value: Double?) -> Color {
+        guard let v = value, !v.isNaN else { return mutedText }
+        if v > 0 { return positiveMark }
+        if v < 0 { return negativeMark }
+        return secondaryText
+    }
+
+    /// Separator between rows of a long, scrollable list.
+    ///
+    /// A summary card's four stat rows need no rules at all — spacing groups
+    /// them. A fifty-row trade log is different: the eye does want a guide. The
+    /// fix isn't removing the rule, it's making it recede — half the strength
+    /// and inset to the text column, so it leads the eye down the list instead
+    /// of drawing a grid around every row.
+    static var rowSeparator: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.055))
+            .frame(height: 1)
+            .padding(.leading, 14)
+    }
+
     /// Green when up, red when down, muted when flat/unknown.
     static func pl(_ value: Double?) -> Color {
         guard let v = value, !v.isNaN else { return mutedText }
@@ -32,39 +82,85 @@ enum Theme {
         return secondaryText
     }
 
+    // MARK: - Type scale
+    //
+    // A fixed ladder, so sizes are chosen from a system rather than invented
+    // per view (the surest way to look generated). Rounded design throughout —
+    // it's the app's voice and matches the numeric-heavy content.
+
+    enum Typo {
+        /// The one number a screen leads with.
+        static let hero = Font.system(size: 40, weight: .bold, design: .rounded)
+        static let title = Font.system(size: 26, weight: .bold, design: .rounded)
+        static let section = Font.system(size: 17, weight: .bold, design: .rounded)
+        static let value = Font.system(size: 16, weight: .semibold, design: .rounded)
+        static let body = Font.system(size: 15, weight: .regular, design: .rounded)
+        static let caption = Font.system(size: 13, weight: .medium, design: .rounded)
+        /// Uppercase eyebrow labels. Pair with `.tracking(0.5)`.
+        static let label = Font.system(size: 11, weight: .semibold, design: .rounded)
+        static let micro = Font.system(size: 10, weight: .semibold, design: .rounded)
+    }
+
+    // MARK: - Spacing
+    //
+    // A 4pt ladder. Gaps come from here so rhythm is consistent across screens.
+    enum Space {
+        static let xs: CGFloat = 4
+        static let s: CGFloat = 8
+        static let m: CGFloat = 12
+        static let l: CGFloat = 16
+        static let xl: CGFloat = 20
+        static let xxl: CGFloat = 28
+    }
+
     /// The base gradient used by screenBackground() — exposed so overlays
     /// (e.g. sheet presentations) can match the app background.
+    ///
+    /// Built like a lit set rather than a flat wash: a deep base, one key light
+    /// high on the right, a cooler fill low on the left, and a vignette that
+    /// darkens the outer edges. The vignette is what makes the content feel
+    /// *lit* instead of merely placed on a colour, and it gives the floating
+    /// glass chrome something with tonal range to refract.
     static var backgroundGradient: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.05, green: 0.06, blue: 0.16),
-                    Color(red: 0.02, green: 0.02, blue: 0.09),
-                    Color(red: 0.01, green: 0.00, blue: 0.05),
+                    Color(red: 0.045, green: 0.055, blue: 0.155),
+                    Color(red: 0.015, green: 0.018, blue: 0.075),
+                    Color(red: 0.006, green: 0.004, blue: 0.032),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            // Bright ocean-blue bloom at the top-right corner.
+            // Key light: ocean-blue, high right.
             RadialGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.40, blue: 0.90).opacity(0.22),
+                    Color(red: 0.06, green: 0.42, blue: 0.95).opacity(0.26),
                     .clear,
                 ],
-                center: UnitPoint(x: 0.88, y: 0.04),
+                center: UnitPoint(x: 0.92, y: -0.02),
                 startRadius: 0,
-                endRadius: 380
+                endRadius: 460
             )
-            // Softer cyan counter-glow at the bottom-left for depth.
+            // Fill light: cooler cyan, low left.
             RadialGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.55, blue: 0.75).opacity(0.12),
+                    Color(red: 0.05, green: 0.58, blue: 0.80).opacity(0.13),
                     .clear,
                 ],
-                center: UnitPoint(x: 0.08, y: 0.90),
+                center: UnitPoint(x: 0.02, y: 0.88),
                 startRadius: 0,
-                endRadius: 300
+                endRadius: 340
             )
+            // Vignette: pulls the eye to the middle and stops the corners
+            // glowing as brightly as the content.
+            RadialGradient(
+                colors: [.clear, .black.opacity(0.45)],
+                center: .center,
+                startRadius: 260,
+                endRadius: 760
+            )
+            .blendMode(.multiply)
         }
     }
 }
@@ -105,5 +201,69 @@ extension View {
                     lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.35), radius: 14, x: 0, y: 6)
+    }
+
+    /// Chrome for a floating **navigation-layer** element — a pinned bar, a
+    /// toolbar affordance, a floating control.
+    ///
+    /// On iOS 26 this is real Liquid Glass; below it, the material + rim-light
+    /// approximation. Deliberately NOT applied to cards, rows or backgrounds:
+    /// Apple's guidance is that glass belongs to the navigation layer floating
+    /// above the content, and glass-on-content (or glass stacked on glass) is
+    /// what turns the effect from depth into noise.
+    @ViewBuilder
+    func navGlass(in shape: some Shape = Capsule()) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: shape)
+        } else {
+            self.background(shape.fill(.ultraThinMaterial))
+                .overlay(
+                    shape.stroke(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.22), Color.white.opacity(0.05)],
+                            startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1)
+                )
+                .clipShape(shape)
+        }
+    }
+
+    /// A soft tinted chip — the quiet alternative to a saturated block. The
+    /// colour lives in the text and a 14% wash, so a small stat can't shout
+    /// louder than the number it annotates.
+    func chip(_ color: Color, radius: CGFloat = 8) -> some View {
+        self.padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Theme.wash(color))
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+
+    /// A value scale for a money chart: three hairline gridlines with compact
+    /// labels on the trailing edge.
+    ///
+    /// These charts previously hid the y-axis entirely, which made the curve
+    /// decorative — the only way to read any value was to scrub it. A tooltip
+    /// should enhance, never gate, so the rail carries the magnitudes and the
+    /// scrub tip carries the precision.
+    func moneyValueScale(currency: String) -> some View {
+        self.chartYAxis {
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { mark in
+                AxisGridLine().foregroundStyle(Theme.stroke.opacity(0.55))
+                AxisValueLabel {
+                    if let v = mark.as(Double.self) {
+                        Text(Fmt.compactMoney(v, currency: currency))
+                            .font(Theme.Typo.micro)
+                            .foregroundStyle(Theme.mutedText)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Groups rows inside a card by *spacing and weight* rather than by drawing
+    /// a hairline under each one. Rules between every row read as a dated table;
+    /// the eye separates rows perfectly well on rhythm alone.
+    func statRow() -> some View {
+        self.padding(.vertical, Theme.Space.s)
     }
 }

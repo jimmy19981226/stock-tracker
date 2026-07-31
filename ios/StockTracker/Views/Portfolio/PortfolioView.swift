@@ -47,10 +47,13 @@ struct PortfolioView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Text(market.flag)
-                    Text(market.rawValue).font(.headline)
-                }
+                // The market's full name, set as a title — the flag emoji that
+                // used to sit here rendered as clip-art beside typography that
+                // is otherwise entirely drawn, and it read as decoration rather
+                // than as the screen's subject.
+                Text(market.displayName)
+                    .font(.system(.headline, design: .rounded).weight(.bold))
+                    .foregroundStyle(Theme.primaryText)
             }
         }
         .onAppear { store.startPolling(market: market) }

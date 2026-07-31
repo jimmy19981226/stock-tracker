@@ -1,15 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api.js";
-import { money, signedMoney, pct, shares, plClass, prettyDate } from "../format.js";
+import { money, signedMoney, compactMoney, pct, shares, plClass } from "../format.js";
+import { anyMarketOpen, isMarketOpen } from "../marketHours.js";
 import Sparkline from "./Sparkline.jsx";
+
+// Poll cadence, matching PortfolioStore.startPolling on iOS: fast while a
+// market is trading, slow when both are shut.
+const TICK_MS = 5000;
+const CLOSED_TICKS = 12; // → one refresh per 60s outside market hours
 
 export default function Dashboard({ onSignOut }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [marketsOpen, setMarketsOpen] = useState(true);
+  const [sessions, setSessions] = useState([]); // [{code, label, open}]
 
   const inFlight = useRef(false);
+  const markets = useRef([]);
+  const tick = useRef(0);
 
   // Price-driven numbers (quotes, values, P/L). Polled every 5s — the backend
   // quote cache has a matching 5s TTL, so each poll sees fresh prices.
@@ -44,11 +54,43 @@ export default function Dashboard({ onSignOut }) {
   useEffect(() => {
     loadQuotes();
     loadEarnings();
-    // Fast poll for live prices; pause while the tab is hidden so a
-    // backgrounded dashboard doesn't hammer the backend.
+    // Session hours drive the cadence below. Public endpoint, and holidays
+    // change rarely, so one fetch per mount is enough.
+    api
+      .markets()
+      .then((m) => {
+        markets.current = m || [];
+        setMarketsOpen(anyMarketOpen(markets.current));
+        setSessions(readSessions(markets.current));
+      })
+      .catch(() => {
+        /* unknown hours — the fallback below keeps the fast cadence */
+      });
+
+    // Daily USD/TWD rates, fetched once for the whole session. Every chart that
+    // converts a historical US figure uses these; "max" covers every period tab
+    // and forward-fills, so no tab needs its own request. An older backend
+    // without the endpoint just falls back to today's rate.
+    api
+      .fxHistory("max")
+      .then((rows) => setData((prev) => ({ ...prev, fxHistory: rows })))
+      .catch(() => {});
+
+    // Poll for live prices; pause while the tab is hidden so a backgrounded
+    // dashboard doesn't hammer the backend. Prices only move while a market is
+    // in session, so once both close we drop to one refresh a minute — an idle
+    // dashboard left open overnight was previously enough on its own to keep
+    // the free-tier backend awake and burning quote fetches.
     const quotesId = setInterval(() => {
-      if (document.visibilityState === "visible") loadQuotes();
-    }, 5000);
+      if (document.visibilityState !== "visible") return;
+      tick.current += 1;
+      // No markets loaded → assume open, so a failed /api/markets can never
+      // silently stall the dashboard at a 60s refresh.
+      const open = markets.current.length === 0 || anyMarketOpen(markets.current);
+      setMarketsOpen(open);
+      setSessions(readSessions(markets.current));
+      if (open || tick.current % CLOSED_TICKS === 0) loadQuotes();
+    }, TICK_MS);
     const earningsId = setInterval(() => {
       if (document.visibilityState === "visible") loadEarnings();
     }, 60000);
@@ -73,13 +115,29 @@ export default function Dashboard({ onSignOut }) {
       ? null
       : (twTR ?? 0) + (fx != null ? (usTR ?? 0) * fx : 0);
   const combinedTRUsd = combinedTR != null && fx ? combinedTR / fx : null;
+
+  // Sum one field across both markets in TWD (US leg at the live rate). Null
+  // when neither market reports it, so a stat shows "—" rather than a fake 0.
+  const combine = (field) => {
+    const t = overview?.tw?.[field];
+    const u = overview?.us?.[field];
+    if (t == null && u == null) return null;
+    return (t ?? 0) + (fx != null ? (u ?? 0) * fx : 0);
+  };
+  const combinedToday = combine("today_pl");
+  const combinedUnrealized = combine("total_pl");
+  const combinedEarned = combine("total_earned");
   const fxAsof = overview?.fx?.asof
     ? new Date(overview.fx.asof).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
     : null;
 
   // Build the combined "total earned" series across both markets in TWD.
   // (Hook must run unconditionally — keep it above any early return.)
-  const earnedSeries = useMemo(() => buildEarnedSeries(data?.earnings, fx), [data?.earnings, fx]);
+  const fxHistory = data?.fxHistory;
+  const earnedSeries = useMemo(
+    () => buildEarnedSeries(data?.earnings, fx, fxHistory),
+    [data?.earnings, fx, fxHistory]
+  );
 
   if (loading && !data) {
     return (
@@ -93,7 +151,20 @@ export default function Dashboard({ onSignOut }) {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">✦ AI Stock Studio</div>
+        <div className="brand">
+          <span className="brand-mark">✦</span> AI Stock Studio
+        </div>
+        <div className="topbar-spacer" />
+        {/* Live session state — the same market hours that drive the poll
+            cadence, so "why isn't this moving?" answers itself. */}
+        <div className="session-pills">
+          {sessions.map((s) => (
+            <span key={s.code} className={`session-pill${s.open ? " open" : ""}`}>
+              <span className="session-dot" />
+              {s.label}
+            </span>
+          ))}
+        </div>
         <button className="ghost" onClick={onSignOut}>
           Sign out
         </button>
@@ -106,24 +177,39 @@ export default function Dashboard({ onSignOut }) {
           <div className="hero-label">Investing net worth</div>
           <div className="hero-value">{money(combinedTwd, "TWD")}</div>
           <div className="hero-sub">
-            ≈ {money(combinedUsd, "USD")}
-            {fx != null && <span className="fx">USD/TWD {fx.toFixed(2)}</span>}
+            <span>≈ {money(combinedUsd, "USD")}</span>
+            {fx != null && (
+              <>
+                <span className="dot-sep">·</span>
+                <span className="fx">USD/TWD {fx.toFixed(2)}</span>
+              </>
+            )}
+            {fxAsof && (
+              <>
+                <span className="dot-sep">·</span>
+                <span className="fx">FX {fxAsof}</span>
+              </>
+            )}
           </div>
-          {combinedTR != null && (
-            <div className="total-return-badge">
-              <span className="tr-label">Total return</span>
-              <span className={`tr-value ${plClass(combinedTR)}`}>{signedMoney(combinedTR, "TWD")}</span>
-              {combinedTRUsd != null && (
-                <span className="tr-usd">≈ {signedMoney(combinedTRUsd, "USD")}</span>
-              )}
-              <span className="tr-note">
-                unrealized + realized + dividends{fxAsof ? ` · FX rate ${fxAsof}` : ""}
-              </span>
-            </div>
-          )}
+
+          {/* The four numbers that used to be crammed into a wrapping pill and
+              repeated per market card, promoted to their own row. */}
+          <div className="stat-strip">
+            <Stat label="Today" value={combinedToday} currency="TWD" signed />
+            <Stat label="Unrealized" value={combinedUnrealized} currency="TWD" signed />
+            <Stat label="Realized + div" value={combinedEarned} currency="TWD" signed />
+            <Stat
+              label="Total return"
+              value={combinedTR}
+              currency="TWD"
+              signed
+              accent
+              sub={combinedTRUsd != null ? `≈ ${signedMoney(combinedTRUsd, "USD")}` : null}
+            />
+          </div>
         </section>
 
-        <NetWorthChart fx={fx} liveTotal={combinedTwd} />
+        <NetWorthChart fx={fx} fxHistory={fxHistory} liveTotal={combinedTwd} />
 
         {earnedSeries.length >= 2 && (
           <section className="card">
@@ -135,7 +221,9 @@ export default function Dashboard({ onSignOut }) {
             </div>
             <Sparkline
               data={earnedSeries}
+              height={120}
               formatValue={(v) => signedMoney(v, "TWD")}
+              formatScale={(v) => compactMoney(v, "TWD")}
               formatDate={(d) =>
                 d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
               }
@@ -144,21 +232,61 @@ export default function Dashboard({ onSignOut }) {
         )}
 
         <section className="market-cards">
-          <MarketCard title="Taiwan" currency="TWD" summary={overview?.tw} />
-          <MarketCard title="US" currency="USD" summary={overview?.us} />
+          <MarketCard title="Taiwan" currency="TWD" summary={overview?.tw}
+                      share={marketShare(overview?.tw?.total_value, combinedTwd)} />
+          <MarketCard title="US" currency="USD" summary={overview?.us}
+                      share={marketShare(usValueInTwd(overview?.us, fx), combinedTwd)} />
         </section>
 
         <Holdings holdings={data?.holdings || []} />
 
         <footer className="updated">
-          {updatedAt && `Updated ${updatedAt.toLocaleTimeString()}`} · auto-refreshes every 5s · read-only
+          {updatedAt && `Updated ${updatedAt.toLocaleTimeString()}`} ·{" "}
+          {marketsOpen ? "auto-refreshes every 5s" : "markets closed · refreshing every 60s"} · read-only
         </footer>
       </main>
     </div>
   );
 }
 
-function MarketCard({ title, currency, summary }) {
+// One figure in the hero's stat strip. Values are proportional (not tabular) —
+// tabular digits make a standalone number look loose at this size.
+function Stat({ label, value, currency, signed, accent, sub }) {
+  const text = value == null ? "—" : signed ? signedMoney(value, currency) : money(value, currency);
+  return (
+    <div className={`stat${accent ? " accent" : ""}`}>
+      <div className="stat-label">{label}</div>
+      <div className={`stat-value ${accent ? "" : plClass(value)}`} title={text}>
+        {value != null && signed && <Arrow value={value} />}
+        {text}
+      </div>
+      {sub && <div className="stat-sub">{sub}</div>}
+    </div>
+  );
+}
+
+// Direction as a shape, not only as a hue — red/green alone fails for the ~8%
+// of men with a colour-vision deficiency.
+function Arrow({ value }) {
+  if (value == null || value === 0) return null;
+  return (
+    <span className="arrow" aria-hidden="true">
+      {value > 0 ? "▲" : "▼"}
+    </span>
+  );
+}
+
+// Per-market open/closed, derived from the same /api/markets rows that set the
+// poll cadence.
+function readSessions(markets) {
+  return (markets || []).map((m) => ({
+    code: m.code,
+    label: m.code,
+    open: isMarketOpen(m),
+  }));
+}
+
+function MarketCard({ title, currency, summary, share }) {
   if (!summary) {
     return (
       <div className="card market empty">
@@ -172,7 +300,12 @@ function MarketCard({ title, currency, summary }) {
     tr != null && summary.total_cost > 0 ? (tr / summary.total_cost) * 100 : null;
   return (
     <div className="card market">
-      <div className="market-title">{title}</div>
+      <div className="market-head">
+        <span className="market-title">{title}</span>
+        {/* This market's share of total net worth — the allocation split, for
+            free, from numbers already on screen. */}
+        {share != null && <span className="market-share">{share.toFixed(0)}% of total</span>}
+      </div>
       <div className="market-value">{money(summary.total_value, currency)}</div>
       <div className="market-rows">
         <Row label="Today" value={signedMoney(summary.today_pl, currency)} cls={plClass(summary.today_pl)} extra={summary.today_pl_pct != null ? pct(summary.today_pl_pct) : null} />
@@ -198,6 +331,16 @@ function MarketCard({ title, currency, summary }) {
 function marketTotalReturn(summary) {
   if (!summary) return null;
   return (summary.total_pl ?? 0) + (summary.total_earned ?? 0);
+}
+
+function usValueInTwd(summary, fx) {
+  if (!summary || summary.total_value == null || fx == null) return null;
+  return summary.total_value * fx;
+}
+
+function marketShare(valueTwd, combinedTwd) {
+  if (valueTwd == null || !combinedTwd) return null;
+  return (valueTwd / combinedTwd) * 100;
 }
 
 function Row({ label, value, cls, extra }) {
@@ -257,12 +400,12 @@ function Holdings({ holdings }) {
             <div className="holdings">
               <div className="hrow head">
                 <span>Ticker</span>
-                <span className="num">Price</span>
+                <span className="num col-price">Price</span>
                 <span className="num">Value</span>
                 <span className="num">Unrealized</span>
               </div>
               {g.rows.map((h) => (
-                <HoldingRow key={`${h.market}-${h.ticker}`} h={h} />
+                <HoldingRow key={`${h.market}-${h.ticker}`} h={h} groupValue={groupValue} />
               ))}
             </div>
           </section>
@@ -272,22 +415,36 @@ function Holdings({ holdings }) {
   );
 }
 
-function HoldingRow({ h }) {
+function HoldingRow({ h, groupValue }) {
+  // Share of this market's value. The bar turns "which positions dominate?"
+  // into a glance without adding a column.
+  const weight = groupValue > 0 && h.market_value != null ? (h.market_value / groupValue) * 100 : null;
   return (
     <div className="hrow">
       <span className="tk">
         <span className="tk-sym">{h.ticker}</span>
         {h.name && <span className="tk-name">{h.name}</span>}
-        <span className="tk-sh">{shares(h.shares)} sh</span>
+        <span className="tk-sh">
+          {shares(h.shares)} sh{weight != null && ` · ${weight.toFixed(1)}%`}
+        </span>
+        {weight != null && (
+          <span className="weight" role="presentation">
+            <span className="weight-fill" style={{ width: `${Math.min(100, weight)}%` }} />
+          </span>
+        )}
       </span>
-      <span className="num">
+      <span className="num col-price">
         {money(h.current_price, h.currency, 2)}
         {h.today_change_pct != null && (
-          <span className={`mini ${plClass(h.today_change_pct)}`}>{pct(h.today_change_pct)}</span>
+          <span className={`mini ${plClass(h.today_change_pct)}`}>
+            <Arrow value={h.today_change_pct} />
+            {pct(h.today_change_pct)}
+          </span>
         )}
       </span>
       <span className="num">{money(h.market_value, h.currency)}</span>
       <span className={`num ${plClass(h.unrealized_pl)}`}>
+        <Arrow value={h.unrealized_pl} />
         {signedMoney(h.unrealized_pl, h.currency)}
         {h.unrealized_pl_pct != null && <span className="mini">{pct(h.unrealized_pl_pct)}</span>}
       </span>
@@ -309,7 +466,7 @@ const VALUE_PERIODS = [
 // the same net-worth curve the iOS app charts. Series are fetched once per
 // period and cached; the last point is stitched to the live combined total
 // so the curve always ends at the number in the hero.
-function NetWorthChart({ fx, liveTotal }) {
+function NetWorthChart({ fx, fxHistory, liveTotal }) {
   const [period, setPeriod] = useState("1y");
   const [seriesByPeriod, setSeriesByPeriod] = useState({}); // period -> [{date,total}] per market
   const [loading, setLoading] = useState(false);
@@ -336,11 +493,11 @@ function NetWorthChart({ fx, liveTotal }) {
   const series = useMemo(() => {
     const raw = seriesByPeriod[period];
     if (!raw) return [];
-    const pts = combineValueSeries(raw.tw, raw.us, fx);
+    const pts = combineValueSeries(raw.tw, raw.us, fx, fxHistory);
     // End the curve at the live combined total so chart and hero agree.
     if (pts.length && liveTotal != null) pts[pts.length - 1] = { ...pts[pts.length - 1], value: liveTotal };
     return pts;
-  }, [seriesByPeriod, period, fx, liveTotal]);
+  }, [seriesByPeriod, period, fx, fxHistory, liveTotal]);
 
   const change = series.length >= 2 ? series[series.length - 1].value - series[0].value : null;
   const changePct =
@@ -371,13 +528,18 @@ function NetWorthChart({ fx, liveTotal }) {
         ))}
       </div>
       {series.length >= 2 ? (
-        <Sparkline
-          data={series}
-          formatValue={(v) => money(v, "TWD")}
-          formatDate={(d) =>
-            d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
-          }
-        />
+        // While a new period loads, hold the current chart at reduced opacity
+        // rather than swapping in a placeholder — no skeleton flash, no jump.
+        <div className={loading ? "is-refreshing" : undefined}>
+          <Sparkline
+            data={series}
+            formatValue={(v) => money(v, "TWD")}
+            formatScale={(v) => compactMoney(v, "TWD")}
+            formatDate={(d) =>
+              d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })
+            }
+          />
+        </div>
       ) : (
         <div className="muted empty-row">
           {loading ? "Loading value history…" : "Not enough history for this period yet."}
@@ -388,27 +550,57 @@ function NetWorthChart({ fx, liveTotal }) {
 }
 
 // Merge per-market daily value series into one TWD total across the union of
-// dates, carrying each market's last value forward over gaps (different
-// trading calendars), converting the US leg at the current FX rate.
-function combineValueSeries(tw, us, fx) {
+// dates, carrying each market's last value forward over gaps (different trading
+// calendars). The US leg is converted at the rate that applied ON THAT DAY —
+// using today's rate for the whole series restates years of history by whatever
+// the currency has done since (a 5% FX move shifts every past point 5%).
+// `fx` (today's live rate) is the fallback when no history is available.
+function combineValueSeries(tw, us, fx, fxHistory) {
   const twByDate = new Map();
   const usByDate = new Map();
   for (const p of tw || []) twByDate.set(p.date.slice(0, 10), p.total);
   for (const p of us || []) usByDate.set(p.date.slice(0, 10), p.total);
+  const rateAt = makeRateLookup(fxHistory, fx);
   const allDates = [...new Set([...twByDate.keys(), ...usByDate.keys()])].sort();
   let lastTw = 0;
   let lastUs = 0;
   return allDates.map((d) => {
     if (twByDate.has(d)) lastTw = twByDate.get(d);
     if (usByDate.has(d)) lastUs = usByDate.get(d);
-    return { date: new Date(d + "T00:00:00Z"), value: lastTw + (fx != null ? lastUs * fx : 0) };
+    const rate = rateAt(d);
+    return { date: new Date(d + "T00:00:00Z"), value: lastTw + (rate != null ? lastUs * rate : 0) };
   });
+}
+
+// Date → USD/TWD rate, forward-filled. FX has its own calendar (and its series
+// can start a few days after the value series), so a date resolves to the most
+// recent rate at or before it, then to the earliest known rate, then to today's.
+function makeRateLookup(fxHistory, liveRate) {
+  const rows = (fxHistory || [])
+    .filter((r) => r && r.date && r.rate)
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (!rows.length) return () => liveRate ?? null;
+  let i = 0;
+  let last = rows[0].rate;
+  let prevDate = "";
+  return (d) => {
+    // Callers walk dates in ascending order, so the cursor only moves forward.
+    // Rewind fully (cursor AND carried rate) if that assumption is ever broken.
+    if (d < prevDate) {
+      i = 0;
+      last = rows[0].rate;
+    }
+    prevDate = d;
+    while (i < rows.length && rows[i].date <= d) last = rows[i++].rate;
+    return last;
+  };
 }
 
 // Merge the per-currency earnings series into one TWD-denominated total series,
 // carrying each currency's last value forward across the union of dates (mirrors
-// the iOS TotalEarnedCard logic).
-function buildEarnedSeries(earnings, fx) {
+// the iOS TotalEarnedCard logic). Like the net-worth curve, each day's USD leg
+// is converted at that day's rate rather than at today's.
+function buildEarnedSeries(earnings, fx, fxHistory) {
   if (!earnings) return [];
   const tw = earnings.TWD || [];
   const us = earnings.USD || [];
@@ -416,13 +608,15 @@ function buildEarnedSeries(earnings, fx) {
   const usByDate = new Map();
   for (const p of tw) twByDate.set(p.date.slice(0, 10), p.total);
   for (const p of us) usByDate.set(p.date.slice(0, 10), p.total);
+  const rateAt = makeRateLookup(fxHistory, fx);
   const allDates = [...new Set([...twByDate.keys(), ...usByDate.keys()])].sort();
   let lastTw = 0;
   let lastUs = 0;
   return allDates.map((d) => {
     if (twByDate.has(d)) lastTw = twByDate.get(d);
     if (usByDate.has(d)) lastUs = usByDate.get(d);
-    const total = lastTw + (fx != null ? lastUs * fx : 0);
+    const rate = rateAt(d);
+    const total = lastTw + (rate != null ? lastUs * rate : 0);
     return { date: new Date(d + "T00:00:00Z"), value: total };
   });
 }

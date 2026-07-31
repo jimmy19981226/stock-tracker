@@ -238,6 +238,26 @@ struct PerformanceReport: Codable {
     }
 }
 
+/// What each market's performance is compared against, plus the picker's
+/// presets. Any Yahoo-resolvable symbol works — an index (`^TWII`), a TW ETF by
+/// bare code (`0050`), or a US ticker (`QQQ`) — so `presets` is a convenience
+/// list, not a whitelist. See /api/portfolio/benchmark.
+struct BenchmarkSettings: Codable {
+    let benchmarks: [String: String]        // market code -> symbol
+    let names: [String: String]             // market code -> display name
+    let presets: [String: [Preset]]?
+    let defaults: [String: String]?
+
+    struct Preset: Codable, Hashable, Identifiable {
+        var id: String { symbol }
+        let symbol: String
+        let name: String
+    }
+
+    func symbol(for market: MarketCode) -> String? { benchmarks[market.rawValue] }
+    func presets(for market: MarketCode) -> [Preset] { presets?[market.rawValue] ?? [] }
+}
+
 // MARK: - AI image import (parse a brokerage screenshot into records)
 
 struct ParsedTradeRow: Codable, Hashable {

@@ -60,6 +60,7 @@ export const api = {
   earnings: (days = 365) => req(`/api/web/earnings-history?days=${days}`),
   valueHistory: (market, period) =>
     req(`/api/web/value-history?market=${market}&period=${encodeURIComponent(period)}`),
+  fxHistory: (period) => req(`/api/web/fx-history?period=${encodeURIComponent(period)}`),
   // /api/markets is public (no auth) — used for the market-open indicator.
   markets: () => req("/api/markets", { auth: false }),
 };
