@@ -43,9 +43,17 @@ struct OverviewView: View {
                 }
             }
             .padding(16)
+            // The tab bar floats over the content on iOS 26, so the last card
+            // needs room to come to rest clear of it. Scrolling *under* glass
+            // is the effect; being permanently hidden by it is a bug.
+            .padding(.bottom, 72)
         }
         .screenBackground()
-        .navigationTitle("Portfolios")
+        // No large title: the hero figure IS the title of this screen, and a
+        // "Portfolios" headline stacked above it just competed with the number
+        // for the same job. The bar keeps only the settings control.
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: MarketCode.self) { market in
             PortfolioView(market: market)
         }
@@ -54,8 +62,16 @@ struct OverviewView: View {
                 Button {
                     showSettings = true
                 } label: {
-                    Image(systemName: "gearshape")
+                    // A glass disc floating over the content, not a tinted ring
+                    // stuck to the corner. On iOS 26 it refracts what scrolls
+                    // beneath it; older systems get the material fallback.
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.primaryText)
+                        .frame(width: 36, height: 36)
+                        .navGlass(in: Circle())
                 }
+                .buttonStyle(.plain)
             }
         }
         .sheet(isPresented: $showSettings) {
@@ -109,10 +125,24 @@ struct OverviewView: View {
 private struct NetWorthCard: View {
     let overview: PortfolioOverview?
 
-    private let trAccent = Color(red: 0.655, green: 0.545, blue: 0.98)
-    // Cyan accent so Unrealized P&L reads as its own category, matching the
-    // "Unrealized" breakdown stat color on each MarketCard below.
-    private let unrealizedAccent = Color(red: 0.30, green: 0.78, blue: 0.92)
+    /// Today's combined move across both markets, in TWD. The hero showed
+    /// lifetime figures but never "what happened today" — the one number a
+    /// portfolio screen is opened for most often.
+    private var combinedTodayPl: Double? {
+        guard let o = overview else { return nil }
+        let tw = o.tw?.todayPl
+        let us = o.us?.todayPl
+        if tw == nil && us == nil { return nil }
+        let fx = o.fx.usdTwd ?? 0
+        return (tw ?? 0) + (us ?? 0) * fx
+    }
+    /// Today's move as a percentage of the prior day's combined value.
+    private var combinedTodayPct: Double? {
+        guard let today = combinedTodayPl, let total = overview?.combined.twd else { return nil }
+        let prior = total - today
+        guard prior > 0 else { return nil }
+        return today / prior * 100
+    }
 
     /// Combined Total Return (unrealized + realized + dividends) across both
     /// markets, in TWD (US leg converted at the current FX rate).
@@ -157,16 +187,42 @@ private struct NetWorthCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Investing")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.secondaryText)
+            // Eyebrow → hero figure → today's move. The figure carries the
+            // screen, so it gets the size and the tight tracking a display
+            // numeral needs, and it sits directly on the lit background rather
+            // than inside a card — a box around the headline number is what
+            // made it read as one panel among several.
+            Text("TOTAL NET WORTH")
+                .font(Theme.Typo.label)
+                .tracking(1.2)
+                .foregroundStyle(Theme.mutedText)
 
             Text(Fmt.bigMoney(overview?.combined.twd, currency: "TWD"))
-                .font(.system(size: 42, weight: .bold, design: .rounded))
+                .font(.system(size: 52, weight: .bold, design: .rounded))
+                .tracking(-1.2)
                 .foregroundStyle(Theme.primaryText)
-                .minimumScaleFactor(0.6)
+                .minimumScaleFactor(0.5)
                 .lineLimit(1)
                 .rollingNumber(overview?.combined.twd)
+                .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
+
+            if let today = combinedTodayPl {
+                HStack(spacing: 6) {
+                    Image(systemName: today >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                        .font(.system(size: 9, weight: .black))
+                    Text(Fmt.signedAmount(today, currency: "TWD"))
+                        .rollingNumber(today)
+                    if let p = combinedTodayPct {
+                        Text(Fmt.pct(p)).rollingNumber(p)
+                    }
+                    Text("today").foregroundStyle(Theme.mutedText)
+                }
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Theme.pl(today))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .padding(.top, 2)
+            }
 
             HStack(spacing: 10) {
                 Text("≈ \(Fmt.bigMoney(overview?.combined.usd, currency: "USD"))")

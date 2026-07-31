@@ -81,37 +81,52 @@ enum Theme {
 
     /// The base gradient used by screenBackground() — exposed so overlays
     /// (e.g. sheet presentations) can match the app background.
+    ///
+    /// Built like a lit set rather than a flat wash: a deep base, one key light
+    /// high on the right, a cooler fill low on the left, and a vignette that
+    /// darkens the outer edges. The vignette is what makes the content feel
+    /// *lit* instead of merely placed on a colour, and it gives the floating
+    /// glass chrome something with tonal range to refract.
     static var backgroundGradient: some View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.05, green: 0.06, blue: 0.16),
-                    Color(red: 0.02, green: 0.02, blue: 0.09),
-                    Color(red: 0.01, green: 0.00, blue: 0.05),
+                    Color(red: 0.045, green: 0.055, blue: 0.155),
+                    Color(red: 0.015, green: 0.018, blue: 0.075),
+                    Color(red: 0.006, green: 0.004, blue: 0.032),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            // Bright ocean-blue bloom at the top-right corner.
+            // Key light: ocean-blue, high right.
             RadialGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.40, blue: 0.90).opacity(0.22),
+                    Color(red: 0.06, green: 0.42, blue: 0.95).opacity(0.26),
                     .clear,
                 ],
-                center: UnitPoint(x: 0.88, y: 0.04),
+                center: UnitPoint(x: 0.92, y: -0.02),
                 startRadius: 0,
-                endRadius: 380
+                endRadius: 460
             )
-            // Softer cyan counter-glow at the bottom-left for depth.
+            // Fill light: cooler cyan, low left.
             RadialGradient(
                 colors: [
-                    Color(red: 0.04, green: 0.55, blue: 0.75).opacity(0.12),
+                    Color(red: 0.05, green: 0.58, blue: 0.80).opacity(0.13),
                     .clear,
                 ],
-                center: UnitPoint(x: 0.08, y: 0.90),
+                center: UnitPoint(x: 0.02, y: 0.88),
                 startRadius: 0,
-                endRadius: 300
+                endRadius: 340
             )
+            // Vignette: pulls the eye to the middle and stops the corners
+            // glowing as brightly as the content.
+            RadialGradient(
+                colors: [.clear, .black.opacity(0.45)],
+                center: .center,
+                startRadius: 260,
+                endRadius: 760
+            )
+            .blendMode(.multiply)
         }
     }
 }
