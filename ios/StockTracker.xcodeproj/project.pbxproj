@@ -38,6 +38,7 @@
 		B8E4357708B182BFC68DA0ED /* StockTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F057F8A620AE04DF20F4ADE /* StockTrackerApp.swift */; };
 		B95715AE9277F06B812098F6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 825E322AF0AEF20495E3B05D /* RootView.swift */; };
 		D2E4DBE812B160BBFF05EED6 /* ImportRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01ED1814C71609892E781704 /* ImportRecordsView.swift */; };
+		D78FEB5E77F1F4CA9A8CE0AC /* DesignTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7E7BCA5F1381655138CE5D /* DesignTour.swift */; };
 		E2D5EA21AF4D64EFD0F2C7AF /* MISQuotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9250130334BCF77C5C7FBE /* MISQuotes.swift */; };
 		E61F09BB594BB5C6C8C98675 /* AuthTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B510C92B73EC980E35D9A9E /* AuthTokenProvider.swift */; };
 		E9E5DED70BACAEC0F876505D /* DividendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665969461AD6B11CA8AF0BDD /* DividendsView.swift */; };
@@ -69,6 +70,7 @@
 		344F05D989D23B371D60747A /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
 		34F1D8BB4253643284374CA1 /* AISettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AISettings.swift; sourceTree = "<group>"; };
 		37CD67CA6884D6DB1F823643 /* MarketHours.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarketHours.swift; sourceTree = "<group>"; };
+		3A7E7BCA5F1381655138CE5D /* DesignTour.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTour.swift; sourceTree = "<group>"; };
 		3C9250130334BCF77C5C7FBE /* MISQuotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MISQuotes.swift; sourceTree = "<group>"; };
 		3E5AFAAE26E09A340630D6B4 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		4E8C77D78C60E17B135BD606 /* DividendFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividendFormView.swift; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 		B65751E96F957EFFBB7AB888 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				3A7E7BCA5F1381655138CE5D /* DesignTour.swift */,
 				5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */,
 			);
 			path = UITests;
@@ -467,6 +470,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D78FEB5E77F1F4CA9A8CE0AC /* DesignTour.swift in Sources */,
 				EFD5B333FA05AF8B1D3169D1 /* SortSwitchDriver.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

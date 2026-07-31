@@ -76,7 +76,12 @@ struct IndexBarView: View {
                 }
                 .padding(.vertical, 7)
             }
-            .background(.ultraThinMaterial)  // frosted glass over the gradient
+            // A pinned bar floating over the scrolling content is exactly the
+            // navigation layer Apple reserves Liquid Glass for, so on iOS 26
+            // this is the real thing and older systems keep the material
+            // approximation. Squared off, because it spans the full width and
+            // meets the tab bar — a capsule here would read as a stray pill.
+            .navGlass(in: Rectangle())
             .sheet(isPresented: $showEditor) {
                 IndexEditorView()
                     .environmentObject(store)

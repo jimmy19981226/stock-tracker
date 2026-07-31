@@ -97,7 +97,7 @@ struct TradeFormView: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(Theme.primaryText)
                             Spacer()
-                            Text(Fmt.money(est, currency: market.currencyCode))
+                            Text(Fmt.amount(est, currency: market.currencyCode))
                                 .font(.system(.title3, design: .rounded).weight(.bold))
                                 .foregroundStyle(type == .buy ? Theme.negative : Theme.positive)
                         }

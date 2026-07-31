@@ -181,25 +181,32 @@ private struct NetWorthCard: View {
                 }
             }
 
+            // Two headline figures, side by side. Previously these were stacked
+            // capsules whose labels wore a cyan and a violet — two more accents
+            // on a screen that already had blue chrome, green/red values and an
+            // orange stat label. Labels are text tokens now; the coloured number
+            // under each one is what carries the meaning.
             if combinedUnrealizedPl != nil || combinedTotalReturn != nil {
-                VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: Theme.Space.s) {
                     if let up = combinedUnrealizedPl {
-                        returnBadge(label: "UNREALIZED P&L", value: up,
-                                    usdValue: combinedUnrealizedPlUsd, accent: unrealizedAccent)
+                        returnStat(label: "Unrealized", value: up,
+                                   usdValue: combinedUnrealizedPlUsd)
                     }
                     if let tr = combinedTotalReturn {
-                        returnBadge(label: "TOTAL RETURN", value: tr,
-                                    usdValue: combinedTotalReturnUsd, accent: trAccent)
-
-                        // Definition + the FX rate's as-of date.
-                        Text("Unrealized + realized + dividends"
-                             + (fxDateText.map { " · FX rate as of \($0)" } ?? ""))
-                            .font(.caption2)
-                            .foregroundStyle(Theme.mutedText)
-                            .fixedSize(horizontal: false, vertical: true)
+                        returnStat(label: "Total return", value: tr,
+                                   usdValue: combinedTotalReturnUsd)
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, Theme.Space.m)
+
+                if combinedTotalReturn != nil {
+                    Text("Total return = unrealized + realized + dividends"
+                         + (fxDateText.map { " · FX \($0)" } ?? ""))
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(Theme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, Theme.Space.xs)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -212,34 +219,36 @@ private struct NetWorthCard: View {
         )
     }
 
-    /// A capsule stat: label, TWD amount, and its USD equivalent — used for
-    /// both the unrealized-only and total-return combined figures.
-    private func returnBadge(label: String, value: Double, usdValue: Double?,
-                             accent: Color) -> some View {
-        HStack(spacing: 8) {
-            Text(label)
-                .font(.caption2.weight(.bold))
-                .tracking(0.5)
-                .foregroundStyle(accent)
-            Text(Fmt.signedMoney(value, currency: "TWD", digits: 0))
-                .font(.system(.subheadline, design: .rounded).weight(.bold))
+    /// One headline figure: a quiet label over the TWD amount, with its USD
+    /// equivalent beneath. Sits on the elevated surface so the pair reads as
+    /// two tiles without either one needing its own accent colour.
+    private func returnStat(label: String, value: Double, usdValue: Double?) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(Theme.Typo.label)
+                .tracking(0.6)
+                .foregroundStyle(Theme.mutedText)
+                .lineLimit(1)
+            Text(Fmt.signedAmount(value, currency: "TWD"))
+                .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundStyle(Theme.pl(value))
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.6)
                 .lineLimit(1)
                 .rollingNumber(value)
             if let usd = usdValue {
-                Text("≈ \(Fmt.signedMoney(usd, currency: "USD"))")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.secondaryText)
+                Text("≈ \(Fmt.signedAmount(usd, currency: "USD"))")
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.mutedText)
+                    .minimumScaleFactor(0.7)
                     .lineLimit(1)
                     .rollingNumber(usd)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(accent.opacity(0.12))
-        .overlay(Capsule().stroke(accent.opacity(0.30), lineWidth: 1))
-        .clipShape(Capsule())
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Theme.Space.m)
+        .padding(.vertical, Theme.Space.s + 2)
+        .background(Theme.cardElevated)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
@@ -303,7 +312,7 @@ private struct TotalEarnedCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader("Total earned") {
                     if let last = rows.last {
-                        Text(Fmt.signedMoney(last.total, currency: "TWD"))
+                        Text(Fmt.signedAmount(last.total, currency: "TWD"))
                             .font(.system(.subheadline, design: .rounded).weight(.bold))
                             .foregroundStyle(Theme.pl(last.total))
                     }
@@ -332,7 +341,7 @@ private struct TotalEarnedCard: View {
                             .annotation(position: .top,
                                         overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                                 ChartScrubTip(date: sel.date,
-                                              value: Fmt.signedMoney(sel.total, currency: "TWD"))
+                                              value: Fmt.signedAmount(sel.total, currency: "TWD"))
                             }
                         PointMark(x: .value("Date", sel.date), y: .value("Total", sel.total))
                             .symbolSize(50)
@@ -342,7 +351,7 @@ private struct TotalEarnedCard: View {
                 .chartXSelection(value: $scrubDate)
                 // Tick as the scrub dot snaps from point to point.
                 .sensoryFeedback(.selection, trigger: nearestRow(to: scrubDate, in: rows)?.date)
-                .chartYAxis(.hidden)
+                .moneyValueScale(currency: "TWD")
                 .chartXAxis {
                     AxisMarks(values: Fmt.axisDates(from: dateRange.lowerBound,
                                                     to: dateRange.upperBound)) { value in
@@ -355,7 +364,7 @@ private struct TotalEarnedCard: View {
                 .frame(height: 150)
                 .accessibilityLabel("Total earned over time")
                 .accessibilityValue(
-                    "Currently \(Fmt.signedMoney(rows.last?.total ?? 0, currency: "TWD")), "
+                    "Currently \(Fmt.signedAmount(rows.last?.total ?? 0, currency: "TWD")), "
                     + ((rows.last?.total ?? 0) >= (rows.first?.total ?? 0) ? "trending up" : "trending down")
                 )
             }
@@ -385,23 +394,35 @@ private struct MarketCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text(market.flag).font(.system(size: 26))
+            HStack(spacing: Theme.Space.m) {
+                // A drawn monogram rather than the flag emoji: emoji render at
+                // the system's whim, sit oddly on the baseline, and read as
+                // clip-art dropped into an otherwise designed surface.
+                Text(market.rawValue)
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(Theme.secondaryText)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.cardElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(market.displayName)
                         .font(.system(.body, design: .rounded).weight(.bold))
                         .foregroundStyle(Theme.primaryText)
+                        .lineLimit(1)
+                    // One line, never wrapped: this used to break as
+                    // "Market / closed  · 5 / positions" once the value on the
+                    // right grew wide enough to squeeze it.
                     HStack(spacing: 5) {
                         Circle()
                             .fill(dotColor)
                             .frame(width: 6, height: 6)
-                        Text(session.label)
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryText)
-                        Text("· \(summary?.holdingsCount ?? 0) positions")
-                            .font(.caption)
+                        Text("\(session.label) · \(summary?.holdingsCount ?? 0) positions")
+                            .font(Theme.Typo.caption)
                             .foregroundStyle(Theme.mutedText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
@@ -417,19 +438,22 @@ private struct MarketCard: View {
             }
             .padding(.vertical, 14)
 
-            // Return breakdown, so each component is visible at a glance.
-            // Each category gets its own hue (distinct from the green/red
-            // P&L colors): cyan, violet, gold.
+            // Return breakdown. These three used to be cyan, violet and gold —
+            // three hues assigned to categories that have no colour meaning,
+            // which is the single loudest "assembled, not designed" signal on
+            // the screen. Labels are muted text; the P&L values keep their
+            // green/red because there the colour genuinely means something,
+            // and Dividends (never negative) stays plain.
             if let s = summary {
-                HStack(spacing: 0) {
+                HStack(alignment: .top, spacing: Theme.Space.s) {
                     breakdownStat("Unrealized", s.totalPl, signed: true,
-                                  color: Color(red: 0.30, green: 0.78, blue: 0.92))
+                                  color: Theme.pl(s.totalPl))
                     breakdownStat("Realized", s.realizedPl, signed: true,
-                                  color: Color(red: 0.655, green: 0.545, blue: 0.98))
+                                  color: Theme.pl(s.realizedPl))
                     breakdownStat("Dividends", s.dividends, signed: false,
-                                  color: Color(red: 1.0, green: 0.72, blue: 0.25))
+                                  color: Theme.primaryText)
                 }
-                .padding(.bottom, 2)
+                .padding(.bottom, Theme.Space.xs)
             }
         }
         .contentShape(Rectangle())
@@ -437,16 +461,18 @@ private struct MarketCard: View {
 
     private func breakdownStat(_ label: String, _ value: Double?, signed: Bool,
                                color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(color.opacity(0.8))
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(Theme.Typo.micro)
+                .tracking(0.5)
+                .foregroundStyle(Theme.mutedText)
+                .lineLimit(1)
             Text(signed
-                 ? Fmt.signedMoney(value, currency: market.currencyCode, digits: 0)
-                 : Fmt.money(value, currency: market.currencyCode, digits: 0))
-                .font(.system(.caption, design: .rounded).weight(.semibold))
+                 ? Fmt.signedAmount(value, currency: market.currencyCode)
+                 : Fmt.amount(value, currency: market.currencyCode))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundStyle(color)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.65)
                 .lineLimit(1)
                 .rollingNumber(value)
         }

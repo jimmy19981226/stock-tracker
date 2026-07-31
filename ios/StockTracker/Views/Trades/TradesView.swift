@@ -241,7 +241,7 @@ private struct TradeRow: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text("\(Fmt.shares(trade.shares)) @ \(Fmt.money(trade.price, currency: trade.market.currencyCode))")
+                    Text("\(Fmt.shares(trade.shares)) @ \(Fmt.price(trade.price, currency: trade.market.currencyCode))")
                         .font(.system(.subheadline, design: .rounded).weight(.semibold))
                         .foregroundStyle(Theme.primaryText)
                     Text(Fmt.money(trade.shares * trade.price, currency: trade.market.currencyCode, digits: 0))
