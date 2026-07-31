@@ -532,20 +532,42 @@ struct AssistantView: View {
         }
     }
 
+    /// Setup prompt above the composer. It was a full-bleed 18%-accent bar that
+    /// read as an alert; it's an invitation, so it now sits as an inset card
+    /// with the accent carried by the icon rather than a wash across the width.
     private var noKeyBanner: some View {
         Button { showSettings = true } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Space.m) {
                 Image(systemName: "key.fill")
-                Text("Add your \(AISettings.activeProvider.displayName) API key to chat")
-                Spacer()
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 28, height: 28)
+                    .background(Theme.wash(Theme.accent))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Add your \(AISettings.activeProvider.displayName) key")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Theme.primaryText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text("Needed before the assistant can reply")
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.mutedText)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: Theme.Space.s)
                 Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.mutedText)
             }
-            .font(.caption.weight(.medium))
-            .foregroundStyle(Theme.primaryText)
-            .padding(12)
-            .frame(maxWidth: .infinity)
-            .background(Theme.accent.opacity(0.18))
+            .padding(.horizontal, Theme.Space.m)
+            .padding(.vertical, 10)
+            .background(Theme.cardElevated)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
         }
+        .buttonStyle(.plain)
     }
 
     private var transcript: some View {
@@ -684,13 +706,12 @@ struct AssistantView: View {
                                 .foregroundStyle(Theme.mutedText)
                         }
                         .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(Theme.card.opacity(0.85))
+                        .padding(.vertical, 13)
+                        // Depth instead of a hairline outline: five stacked
+                        // 7%-white boxes read as a wireframe, not as buttons.
+                        .background(Theme.cardElevated)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
-                        )
+                        .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
                     }
                     .buttonStyle(.plain)
                     .disabled(!providerHasKey)

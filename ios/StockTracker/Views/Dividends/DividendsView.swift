@@ -149,7 +149,7 @@ private struct DividendRow: View {
                     .foregroundStyle(Theme.positive)
             }
             .padding(.vertical, 12)
-            Rectangle().fill(Theme.stroke).frame(height: 1)
+            Theme.rowSeparator
         }
         .contentShape(Rectangle())
     }

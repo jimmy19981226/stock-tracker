@@ -24,6 +24,10 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                // The market's total leads the screen on the lit background,
+                // not inside a card — same move as the Overview hero. A box
+                // around the headline figure demoted it to one panel among six.
+                DashboardHero(summary: store.summary(for: market), currency: currency)
                 SummaryCard(summary: store.summary(for: market), currency: currency)
                     .cardStyle()
                 PortfolioValueCard(market: market,
@@ -46,6 +50,36 @@ struct DashboardView: View {
     }
 }
 
+// MARK: - Hero
+
+/// This market's total value, sitting directly on the background with today's
+/// and all-time moves under it. Split out of SummaryCard so the figure can lead
+/// the screen instead of being boxed with the supporting stats.
+private struct DashboardHero: View {
+    let summary: CurrencySummary?
+    let currency: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
+                .font(.system(size: 46, weight: .bold, design: .rounded))
+                .tracking(-1.0)
+                .foregroundStyle(Theme.primaryText)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .rollingNumber(summary?.totalValue)
+                .shadow(color: .black.opacity(0.45), radius: 16, y: 5)
+            ChangeLine(value: summary?.todayPl, pct: summary?.todayPlPct,
+                       currency: currency)
+            ChangeLine(value: summary?.totalPl, pct: summary?.totalPlPct,
+                       currency: currency, suffix: "All time")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+    }
+}
+
 // MARK: - Summary
 
 private struct SummaryCard: View {
@@ -65,20 +99,7 @@ private struct SummaryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Big bold value with a colored change line under it.
-            VStack(alignment: .leading, spacing: 5) {
-                Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.primaryText)
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
-                    .rollingNumber(summary?.totalValue)
-                ChangeLine(value: summary?.todayPl, pct: summary?.todayPlPct,
-                           currency: currency)
-                ChangeLine(value: summary?.totalPl, pct: summary?.totalPlPct,
-                           currency: currency, suffix: "All time")
-            }
-
+            // The headline figure now lives in DashboardHero above this card.
             // Stat rows. Separated by rhythm, not by a rule under each one — a
             // hairline between every row reads as a dated table, and the eye
             // groups them perfectly well on spacing alone.
@@ -745,7 +766,7 @@ private struct HoldingRow: View {
             }
             .padding(.vertical, 12)
             if showsSeparator {
-                Rectangle().fill(Theme.stroke).frame(height: 1)
+                Theme.rowSeparator
             }
         }
         .contentShape(Rectangle())

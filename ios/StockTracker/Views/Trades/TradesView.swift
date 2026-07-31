@@ -250,7 +250,7 @@ private struct TradeRow: View {
                 }
             }
             .padding(.vertical, 12)
-            Rectangle().fill(Theme.stroke).frame(height: 1)
+            Theme.rowSeparator
         }
         .contentShape(Rectangle())
     }

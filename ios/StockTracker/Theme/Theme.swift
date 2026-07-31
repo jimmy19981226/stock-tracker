@@ -60,6 +60,20 @@ enum Theme {
         return secondaryText
     }
 
+    /// Separator between rows of a long, scrollable list.
+    ///
+    /// A summary card's four stat rows need no rules at all — spacing groups
+    /// them. A fifty-row trade log is different: the eye does want a guide. The
+    /// fix isn't removing the rule, it's making it recede — half the strength
+    /// and inset to the text column, so it leads the eye down the list instead
+    /// of drawing a grid around every row.
+    static var rowSeparator: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.055))
+            .frame(height: 1)
+            .padding(.leading, 14)
+    }
+
     /// Green when up, red when down, muted when flat/unknown.
     static func pl(_ value: Double?) -> Color {
         guard let v = value, !v.isNaN else { return mutedText }

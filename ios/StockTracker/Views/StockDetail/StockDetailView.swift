@@ -288,7 +288,7 @@ private struct RecordsCard: View {
                 Button("Edit") { onEdit() }
                 Button("Delete", role: .destructive) { onDelete() }
             }
-            Rectangle().fill(Theme.stroke).frame(height: 1)
+            Theme.rowSeparator
         }
     }
 }

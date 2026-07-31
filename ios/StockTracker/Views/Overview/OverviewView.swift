@@ -480,17 +480,23 @@ private struct MarketCard: View {
                     }
                     .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 5) {
+                Spacer(minLength: Theme.Space.s)
+                VStack(alignment: .trailing, spacing: 4) {
+                    // Bigger, and with a chevron: this card is a door into the
+                    // market, and it never signalled that it was tappable.
                     Text(Fmt.money(summary?.totalValue, currency: market.currencyCode, digits: 0))
-                        .font(.system(.body, design: .rounded).weight(.bold))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .tracking(-0.4)
                         .foregroundStyle(Theme.primaryText)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.6)
                         .lineLimit(1)
                         .rollingNumber(summary?.totalValue)
                     PLBadge(value: summary?.todayPl, pct: summary?.todayPlPct,
                             currency: market.currencyCode, compact: true)
                 }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.mutedText)
             }
             .padding(.vertical, 14)
 

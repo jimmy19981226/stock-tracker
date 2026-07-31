@@ -36,8 +36,19 @@ anywhere, even for the same marketing version.
   account.
 - **Liquid Glass** on the navigation layer only (pinned index bar, settings
   control), with the previous material as the iOS 17 fallback.
+- **Market dashboard leads with its total** on the lit background rather than
+  boxed in a card with the supporting stats.
+- **Market cards** on the Overview grew their value and gained a chevron — they
+  navigate, and never signalled it.
+- **Assistant**: the API-key prompt was a full-bleed accent bar that read as an
+  alert; it's an inset card now, with the accent on the icon. Suggestion chips
+  use depth instead of hairline outlines.
+- **List separators** (trades, dividends, holdings) softened to half strength
+  and inset to the text column — a guide down a long list rather than a grid
+  drawn around every row.
 - Flag emoji replaced by a drawn market monogram and real titles.
-- App version now shown on the splash screen.
+- App version now shown on the splash screen and in Settings.
+- Cold start no longer flashes white before the dark splash.
 
 ### Fixed
 - **Monthly P&L was wrong on every period whose window opened mid-month.** It
