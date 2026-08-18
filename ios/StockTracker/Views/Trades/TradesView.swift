@@ -13,6 +13,7 @@ struct TradesView: View {
     /// The record page's subject, held by id so it follows an edit rather than
     /// showing the snapshot that was tapped.
     @State private var viewingID: Int?
+    @State private var page = 0
     @State private var showAdd = false
     @State private var showImport = false
     @State private var actionError: String?
@@ -54,6 +55,8 @@ struct TradesView: View {
 
     private var realized: [Int: Double] { FIFO.realized(store.trades) }
 
+    private var pager: Paginator<Trade> { Paginator(items: shown, page: page) }
+
     private var viewing: Trade? {
         viewingID.flatMap { id in store.trades.first { $0.id == id } }
     }
@@ -73,6 +76,10 @@ struct TradesView: View {
             list
         }
     }
+
+    /// Every trade row is this tall, so a page of eight looks like a page of
+    /// twelve minus four blanks — and the pager under it doesn't move.
+    private static let rowHeight: CGFloat = 74
 
     private var list: some View {
         ScrollView {
@@ -118,6 +125,8 @@ struct TradesView: View {
                     ErrorBanner(message: actionError) { self.actionError = nil }
                 }
 
+                let rows = pager.slice
+
                 if shown.isEmpty {
                     EmptyState(icon: "arrow.left.arrow.right",
                                title: allTrades.isEmpty ? "No trades yet" : "No trades match",
@@ -126,27 +135,35 @@ struct TradesView: View {
                                    : "Try a different market or status filter.")
                         .appCard()
                 } else {
+                    Color.clear.frame(height: pager.filler(rowHeight: Self.rowHeight))
+
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(shown.enumerated()), id: \.element.id) { index, trade in
-                            SwipeToDelete(onDelete: { delete(trade) }) {
-                                TradeRow(trade: trade,
-                                         name: store.name(for: trade.ticker),
-                                         realized: realized[trade.id])
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        withAnimation(.easeOut(duration: 0.22)) {
-                                            viewingID = trade.id
-                                        }
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, trade in
+                            TradeRow(trade: trade,
+                                     name: store.name(for: trade.ticker),
+                                     realized: realized[trade.id])
+                                .frame(height: Self.rowHeight)
+                                .background(Theme.card)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    withAnimation(.easeOut(duration: 0.22)) {
+                                        viewingID = trade.id
                                     }
-                                    .contextMenu {
-                                        Button("Edit") { editing = trade }
-                                        Button("Delete", role: .destructive) { delete(trade) }
+                                }
+                                .contextMenu {
+                                    Button("Open record") {
+                                        viewingID = trade.id
                                     }
-                            }
-                            if index < shown.count - 1 { RowDivider() }
+                                    Button("Edit") { editing = trade }
+                                    Button("Delete", role: .destructive) { delete(trade) }
+                                }
+                            if index < rows.count - 1 { RowDivider() }
                         }
                     }
                     .appListCard()
+
+                    PageBar(page: $page, pageCount: pager.pageCount,
+                            rangeLabel: pager.rangeLabel)
                 }
 
                 Text("FIFO cost basis — a sell consumes the oldest lots first; any buy lot with shares left is Open. Realized P/L matches broker reporting.")
@@ -159,6 +176,9 @@ struct TradesView: View {
         }
         .screenBackground()
         .refreshable { await store.loadAll() }
+        .onChange(of: marketFilter) { _, _ in page = 0 }
+        .onChange(of: statusFilter) { _, _ in page = 0 }
+        .onChange(of: shown.count) { _, _ in page = min(page, pager.pageCount - 1) }
         .sheet(isPresented: $showImport) { ImportRecordsView() }
         .sheet(isPresented: $showAdd) {
             TradeFormView(market: marketFilter.market ?? .TW, existing: nil)

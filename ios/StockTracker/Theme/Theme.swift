@@ -206,9 +206,13 @@ enum Theme {
         static let detailMed = Font.custom("Barlow-Medium", size: 12.5)
         static let caption = Font.custom("Barlow-Regular", size: 11.5)
         static let captionMed = Font.custom("Barlow-Medium", size: 11.5)
-        /// Row secondary line — the smallest prose size in the app.
-        static let micro = Font.custom("Barlow-Regular", size: 10.5)
-        static let microMed = Font.custom("Barlow-Medium", size: 10.5)
+        /// Row secondary line — the smallest prose size in the app. Medium at
+        /// 11 rather than Regular at 10.5 (both are inside the design's
+        /// 10.5–11 band): a holdings row's "300 sh · avg 985.00 · 50.4%" is
+        /// read, not skimmed, and Regular in `textSecondary` sat right on the
+        /// edge of legible on a card.
+        static let micro = Font.custom("Barlow-Medium", size: 11)
+        static let microMed = Font.custom("Barlow-Medium", size: 11)
         /// Tab-bar labels.
         static let tab = Font.custom("Barlow-Medium", size: 10)
         static let tabOn = Font.custom("Barlow-SemiBold", size: 10)

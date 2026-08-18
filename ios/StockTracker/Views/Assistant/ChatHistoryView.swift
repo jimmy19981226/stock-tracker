@@ -24,13 +24,16 @@ struct ChatHistoryView: View {
                 } else {
                     VStack(spacing: 0) {
                         ForEach(Array(vm.chats.enumerated()), id: \.element.id) { index, chat in
-                            SwipeToDelete(onDelete: { Task { await vm.deleteChat(chat.id) } }) {
-                                Button {
-                                    Task { await vm.openChat(chat.id); dismiss() }
-                                } label: {
-                                    row(chat)
+                            Button {
+                                Task { await vm.openChat(chat.id); dismiss() }
+                            } label: {
+                                row(chat)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    Task { await vm.deleteChat(chat.id) }
                                 }
-                                .buttonStyle(.plain)
                             }
                             if index < vm.chats.count - 1 { RowDivider() }
                         }

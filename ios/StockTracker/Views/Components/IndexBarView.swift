@@ -145,24 +145,27 @@ private struct IndexDetailCard: View {
             }
             Spacer(minLength: Theme.Space.s)
 
-            if closes.count >= 2 {
-                Chart(closes, id: \.0) { point in
-                    LineMark(x: .value("i", point.0), y: .value("close", point.1))
-                        .lineStyle(StrokeStyle(lineWidth: 1.8, lineCap: .round))
-                        .foregroundStyle(Theme.pl(quote.change))
-                        .interpolationMethod(.monotone)
+            // The span label sits *above* the sparkline, not over it. As an
+            // overlay it collided with the curve whenever the last month
+            // trended up — which, on an index, is most months.
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("1M")
+                    .font(Theme.Typo.axisSm)
+                    .foregroundStyle(Theme.textTertiary)
+                if closes.count >= 2 {
+                    Chart(closes, id: \.0) { point in
+                        LineMark(x: .value("i", point.0), y: .value("close", point.1))
+                            .lineStyle(StrokeStyle(lineWidth: 1.8, lineCap: .round))
+                            .foregroundStyle(Theme.pl(quote.change))
+                            .interpolationMethod(.monotone)
+                    }
+                    .chartXAxis(.hidden)
+                    .chartYAxis(.hidden)
+                    .chartYScale(domain: .automatic(includesZero: false))
+                    .frame(width: 104, height: 38)
+                } else {
+                    ProgressView().controlSize(.small).frame(width: 104, height: 38)
                 }
-                .chartXAxis(.hidden)
-                .chartYAxis(.hidden)
-                .chartYScale(domain: .automatic(includesZero: false))
-                .frame(width: 104, height: 42)
-                .overlay(alignment: .topTrailing) {
-                    Text("1M")
-                        .font(Theme.Typo.axisSm)
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            } else {
-                ProgressView().controlSize(.small).frame(width: 104, height: 42)
             }
         }
         .padding(.horizontal, Theme.Space.m + 2)

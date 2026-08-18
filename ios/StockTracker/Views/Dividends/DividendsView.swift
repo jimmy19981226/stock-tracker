@@ -9,6 +9,9 @@ struct DividendsView: View {
     @EnvironmentObject private var toasts: ToastCenter
 
     @State private var editing: Dividend?
+    /// The record page's subject, held by id so it follows an edit.
+    @State private var viewingID: Int?
+    @State private var page = 0
     @State private var showAdd = false
     @State private var calendar: DividendCalendar?
     @State private var calendarFailed = false
@@ -19,7 +22,32 @@ struct DividendsView: View {
         store.dividends.sorted { ($0.payDate, $0.id) > ($1.payDate, $1.id) }
     }
 
+    private var pager: Paginator<Dividend> { Paginator(items: dividends, page: page) }
+
+    private var viewing: Dividend? {
+        viewingID.flatMap { id in store.dividends.first { $0.id == id } }
+    }
+
     var body: some View {
+        if let dividend = viewing {
+            DividendRecordView(dividend: dividend,
+                               name: store.name(for: dividend.ticker),
+                               shares: store.holdings.first { $0.ticker == dividend.ticker }?.shares,
+                               onBack: { viewingID = nil },
+                               onDelete: {
+                                   viewingID = nil
+                                   delete(dividend)
+                               })
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+        } else {
+            list
+        }
+    }
+
+    /// A dividend row is two lines; fixed so short pages keep their height.
+    private static let rowHeight: CGFloat = 58
+
+    private var list: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 BrandLine()
@@ -55,27 +83,37 @@ struct DividendsView: View {
                                message: "Record a payment, or import a statement.")
                         .appCard()
                 } else {
+                    let rows = pager.slice
+                    Color.clear.frame(height: pager.filler(rowHeight: Self.rowHeight))
+
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(dividends.enumerated()), id: \.element.id) { index, div in
-                            SwipeToDelete(onDelete: { delete(div) }) {
-                                DividendRow(dividend: div, name: store.name(for: div.ticker))
-                                    .contentShape(Rectangle())
-                                    .onTapGesture { editing = div }
-                                    .contextMenu {
-                                        Button("Edit") { editing = div }
-                                        Button("Delete", role: .destructive) { delete(div) }
-                                    }
-                            }
-                            if index < dividends.count - 1 { RowDivider() }
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, div in
+                            DividendRow(dividend: div, name: store.name(for: div.ticker))
+                                .frame(height: Self.rowHeight)
+                                .background(Theme.card)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    withAnimation(.easeOut(duration: 0.22)) { viewingID = div.id }
+                                }
+                                .contextMenu {
+                                    Button("Open record") { viewingID = div.id }
+                                    Button("Edit") { editing = div }
+                                    Button("Delete", role: .destructive) { delete(div) }
+                                }
+                            if index < rows.count - 1 { RowDivider() }
                         }
                     }
                     .appListCard()
+
+                    PageBar(page: $page, pageCount: pager.pageCount,
+                            rangeLabel: pager.rangeLabel)
                 }
             }
             .screenPadding()
         }
         .screenBackground()
         .refreshable { await store.loadAll() }
+        .onChange(of: dividends.count) { _, _ in page = min(page, pager.pageCount - 1) }
         .task { await loadCalendar() }
         .sheet(isPresented: $showAdd) { DividendFormView(market: .TW, existing: nil) }
         .sheet(item: $editing) { DividendFormView(market: $0.market, existing: $0) }

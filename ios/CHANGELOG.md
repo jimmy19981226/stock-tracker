@@ -36,18 +36,24 @@ Rebuilt the whole iOS UI to the `design_handoff_ios_ui/` spec.
   Dividends, Settings. Trades and Dividends are now whole-portfolio screens
   with market/status filters instead of sub-tabs of one market.
 - **Overview** leads with the combined net worth in NT$, a four-column stat
-  strip quoted in US$ (today / unrealized / realized + dividends / total
-  return), the net-worth curve (1M–MAX) and a tappable card per market.
+  strip quoted in US$ at 17pt (today / unrealized / realized + dividends /
+  total return), the net-worth curve (1M–MAX) and a tappable card per market.
 - **Market dashboard** leads with total earned (realized + dividends), a 2×3
   stat grid, the total-earned curve, Performance (TWR / annualized / vs a
   tappable benchmark, plus 12 months of P&L), and a holdings list with weight
   bars and a Value/Today/Gain sort.
 - **Stock detail** gains trade markers on the price line with a legend, a
   52-week range bar, a nine-cell stats grid, 月營收 and quarterly financials.
-- **Every trade has its own page.** Tapping a row opens the record — market,
-  date, shares, price, fee, gross, total cost or net proceeds, the realized
-  P/L a sell booked, notes, and why the lot reads Open or Closed — with Edit
-  and Delete there. A tap used to drop straight into an edit form.
+- **Every trade and dividend has its own page.** Tapping a row opens the
+  record — market, date, shares, price, fee, gross, total cost or net
+  proceeds, the realized P/L a sell booked, notes, and why the lot reads Open
+  or Closed — with Edit and Delete there. A tap used to drop straight into an
+  edit form nobody asked for.
+- **Paged logs.** Trades and dividends page a dozen rows at a time. The pager
+  holds the same position on every page — a short last page reserves its
+  missing height above the list rather than pulling the control up — and
+  paging does not scroll the view, because the reader is aiming at that
+  control repeatedly.
 - **The record sheet is one sheet** for trades and dividends, with an explicit
   Taiwan/US control that auto-selects from the ticker, drives the currency and
   the automatic fee, and rejects a symbol that doesn't match its market.
@@ -62,10 +68,23 @@ Rebuilt the whole iOS UI to the `design_handoff_ios_ui/` spec.
   zero, which dragged the stock price chart down to 0 and ran the performance
   axis to ±500% while the curves collapsed into the bottom fifth.
 - Screens no longer add the design's 60pt top inset *on top of* the safe area.
-- **Lists scroll again from anywhere on a row.** The swipe-to-delete gesture was
-  exclusive, so it won the drag from the enclosing scroll view the moment a
-  finger moved on a row — which is most of a list screen. It now runs
-  simultaneously and only claims a drag that is clearly horizontal.
+- **Lists scroll again from anywhere on a row.** The hand-rolled swipe-to-delete
+  joined the gesture arena and won drags meant for the enclosing scroll view —
+  and a list page is mostly rows, so the screen stopped scrolling under a
+  finger. Making it simultaneous and horizontal-only narrowed the problem
+  without ending it; the gesture is gone, and deleting lives on the record page
+  and in a long-press menu where it can't fight the scroll view.
+- **The tab bar no longer rides the keyboard.** As a bottom safe-area inset it
+  was lifted into the gap between the compose field and the keys; it now stands
+  down while a keyboard is up. (Telling it to ignore the keyboard safe area
+  didn't help — and the flag it reads has to be read in the view body, or
+  SwiftUI never re-evaluates the inset.)
+- **The index strip's "1M" no longer sits on its own sparkline** — it moved
+  above the chart instead of over it.
+- **The holdings weight bar is visible in the dark theme.** It was filled with
+  the soft accent, three steps from the track it sits in.
+- Row secondary lines are Barlow Medium 11 rather than Regular 10.5 — same
+  band the design specifies, but actually readable on a card.
 - Quarterly financials show "2026 Q1", not "2026-03-31", and drop rows that
   carry no revenue and no EPS.
 

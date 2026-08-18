@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The five destinations of the app.
 enum AppTab: String, CaseIterable, Identifiable {
@@ -47,6 +48,8 @@ struct RootView: View {
     @State private var tab: AppTab = .overview
     @State private var overviewMarket: MarketCode?
     @State private var overviewTicker: String?
+    /// Whether a keyboard is on screen. See the bottom inset below.
+    @State private var typing = false
     // App-scoped so an in-flight AI reply keeps streaming while the user
     // browses other tabs, and the transcript is there on return.
     @StateObject private var assistantVM = AssistantViewModel()
@@ -66,24 +69,45 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        // Reads `typing` in the body proper, which is what makes the inset
+        // below actually re-evaluate. A value only ever read inside a
+        // `safeAreaInset` closure is not registered as a dependency of this
+        // view, so the bar kept rendering after the flag flipped — the state
+        // was right and the screen was wrong.
+        .animation(.easeOut(duration: 0.2), value: typing)
+        // The tab bar steps aside while a keyboard is up.
+        //
+        // As a bottom safe-area inset it rides the keyboard, so typing parked
+        // the whole bar — index strip and all — in the gap between the compose
+        // field and the keys. Telling it to ignore the keyboard safe area
+        // doesn't help: the inset container is resized either way, and the
+        // Assistant's composer genuinely does need to rise. Standing the bar
+        // down is what iOS chat UIs do, and it gives the composer the room.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 0) {
-                if tab == .overview && overviewTicker == nil {
-                    IndexBarView(market: overviewMarket)
+            if !typing {
+                VStack(spacing: 0) {
+                    if tab == .overview && overviewTicker == nil {
+                        IndexBarView(market: overviewMarket)
+                    }
+                    AppTabBar(selection: $tab)
                 }
-                AppTabBar(selection: $tab)
-            }
-            .background {
-                ZStack {
-                    Rectangle().fill(.ultraThinMaterial)
-                    Theme.chrome
+                .background {
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Theme.chrome
+                    }
+                    .ignoresSafeArea(edges: .bottom)
                 }
-                .ignoresSafeArea(edges: .bottom)
-            }
-            .overlay(alignment: .top) {
-                Rectangle().fill(Theme.line).frame(height: 1)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Theme.line).frame(height: 1)
+                }
+                .transition(.move(edge: .bottom))
             }
         }
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIResponder.keyboardWillShowNotification)) { _ in typing = true }
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIResponder.keyboardWillHideNotification)) { _ in typing = false }
         .overlay(alignment: .bottom) {
             if let message = toasts.message {
                 ToastView(text: message).padding(.bottom, 8)

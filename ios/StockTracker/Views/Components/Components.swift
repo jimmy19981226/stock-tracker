@@ -500,6 +500,10 @@ struct LabeledField<Content: View>: View {
 
 /// The 3pt weight bar under a holdings row — how much of the market this
 /// position is, without spending a column on the number.
+///
+/// Filled with `accent`, not `accentSoft`: in the dark palette the soft accent
+/// (#2F4F6A) and the track (#2C4863) are three steps apart, so the bar and its
+/// rail were the same colour and the bar might as well not have been drawn.
 struct WeightBar: View {
     let fraction: Double
 
@@ -507,7 +511,7 @@ struct WeightBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.track)
-                Capsule().fill(Theme.accentSoft)
+                Capsule().fill(Theme.accent)
                     .frame(width: max(2, geo.size.width * min(1, max(0, fraction))))
             }
         }
@@ -993,72 +997,116 @@ struct ChartScrubTip: View {
     }
 }
 
-/// Swipe left on a row to reveal Delete — the iOS-native gesture, kept working
-/// inside the card lists this design uses (a `List` would impose its own row
-/// chrome and can't nest in a scrolling stack of cards).
+/// Deleting a row is an explicit action, not a gesture.
 ///
-/// The gesture is **simultaneous**, not exclusive. Attached the usual way it
-/// won the drag from the enclosing `ScrollView` the moment a finger moved on a
-/// row — which is most of the screen on a list page — so vertical drags that
-/// started on a row simply didn't scroll. Running alongside the scroll view
-/// costs nothing, because the list scrolls vertically and this only ever reacts
-/// to a drag that is clearly horizontal.
-struct SwipeToDelete<Content: View>: View {
-    let onDelete: () -> Void
-    @ViewBuilder var content: Content
+/// A hand-rolled swipe-to-delete used to live here. Attached to rows inside a
+/// `ScrollView` it joined the gesture arena and won drags that were meant to
+/// scroll — and a list page is mostly rows, so the screen stopped scrolling
+/// under a finger. Making it simultaneous and horizontal-only narrowed the
+/// problem without ending it. Deleting now lives where it cannot fight the
+/// scroll view: a long-press menu on the row, and a Delete button on the
+/// record's own page. `List`'s native `.swipeActions` is the only swipe worth
+/// having, and it would impose its own row chrome on these card lists.
 
-    private static var actionWidth: CGFloat { 72 }
-    /// How far a drag must lean horizontal before it counts as a swipe rather
-    /// than a scroll that happens to wobble.
-    private static var horizontalBias: CGFloat { 1.6 }
+// MARK: - Pagination
 
-    @State private var offset: CGFloat = 0
-    @State private var committed = false
-    /// Locked in on the first meaningful movement of each drag, so a swipe
-    /// that curves — or a scroll that starts with a sideways nudge — can't
-    /// flip between the two mid-gesture.
-    @State private var claimed: Bool?
+/// Slices a long record list into pages, and keeps the current page honest
+/// when the list underneath it changes.
+///
+/// A trade log is append-only and grows forever; a single scroll of two hundred
+/// rows is a wall, and it makes "how far back does this go" unanswerable
+/// without a thumb marathon. Pages give the list a size the reader can hold.
+struct Paginator<Element> {
+    /// A dozen rows is about a screen and a bit: long enough that paging isn't
+    /// constant, short enough that a page is still a place you can hold, and
+    /// short enough that a modest log actually pages instead of quietly
+    /// staying one endless scroll.
+    static var pageSize: Int { 12 }
+
+    let items: [Element]
+    /// Clamped, so deleting the last row of the last page can't strand the
+    /// reader on a page that no longer exists.
+    let page: Int
+
+    var pageCount: Int { max(1, Int(ceil(Double(items.count) / Double(Self.pageSize)))) }
+    var clampedPage: Int { min(max(page, 0), pageCount - 1) }
+
+    var slice: [Element] {
+        let start = clampedPage * Self.pageSize
+        guard start < items.count else { return [] }
+        return Array(items[start..<min(start + Self.pageSize, items.count)])
+    }
+
+    /// Blank height a short page reserves so the pager lands at the same y on
+    /// every page — the whole point of paging is tapping the same spot twice.
+    ///
+    /// The space goes on the ground *above* the list card, not inside it and
+    /// not below it. Inside, the last page rendered as a mostly-empty white
+    /// panel; below, its rows were pushed off the top of the screen and the
+    /// page looked empty. Above, the short page's rows sit right where the
+    /// full page's last rows were: directly over the pager.
+    func filler(rowHeight: CGFloat) -> CGFloat {
+        guard pageCount > 1 else { return 0 }
+        return CGFloat(Self.pageSize - slice.count) * rowHeight
+    }
+
+    /// "21–40 of 147" — the range this page covers, not just its number.
+    var rangeLabel: String {
+        guard !items.isEmpty else { return "0 of 0" }
+        let start = clampedPage * Self.pageSize
+        let end = min(start + Self.pageSize, items.count)
+        return "\(start + 1)–\(end) of \(items.count)"
+    }
+}
+
+/// The pager under a paged list: back, where you are, forward.
+///
+/// It sits at the end of the list rather than pinned over it — and paging does
+/// not scroll the view. Both matter: the reader taps this control repeatedly,
+/// so it has to stay exactly where their thumb left it. The list above keeps
+/// every page the same height (see `pageFiller`) so a short last page can't
+/// pull the pager up either.
+struct PageBar: View {
+    @Binding var page: Int
+    let pageCount: Int
+    let rangeLabel: String
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            Button {
-                withAnimation(.easeOut(duration: 0.18)) { offset = 0; committed = false }
-                onDelete()
-            } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: Self.actionWidth)
-                    .frame(maxHeight: .infinity)
-                    .background(Theme.loss)
+        if pageCount > 1 {
+            HStack(spacing: Theme.Space.m) {
+                step(symbol: "chevron.left", enabled: page > 0) { page -= 1 }
+                VStack(spacing: 0) {
+                    Text("Page \(page + 1) of \(pageCount)")
+                        .font(Theme.Typo.detailMed)
+                        .foregroundStyle(Theme.text)
+                    Text(rangeLabel)
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                step(symbol: "chevron.right", enabled: page < pageCount - 1) { page += 1 }
             }
-            .buttonStyle(.plain)
-            .opacity(offset < -4 ? 1 : 0)
-
-            content
-                .background(Theme.card)
-                .offset(x: offset)
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 14)
-                        .onChanged { value in
-                            let dx = value.translation.width, dy = value.translation.height
-                            if claimed == nil, abs(dx) + abs(dy) > 6 {
-                                claimed = abs(dx) > abs(dy) * Self.horizontalBias
-                            }
-                            guard claimed == true else { return }
-                            let base = committed ? -Self.actionWidth : 0
-                            offset = min(0, max(-Self.actionWidth - 20, base + dx))
-                        }
-                        .onEnded { _ in
-                            defer { claimed = nil }
-                            guard claimed == true else { return }
-                            withAnimation(.easeOut(duration: 0.18)) {
-                                committed = offset < -Self.actionWidth / 2
-                                offset = committed ? -Self.actionWidth : 0
-                            }
-                        }
-                )
+            .padding(.horizontal, Theme.Space.l)
+            .padding(.vertical, Theme.Space.m)
+            .appCard(padding: 0)
+            .sensoryFeedback(.selection, trigger: page)
         }
-        .clipped()
+    }
+
+    private func step(symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            // No animation on the page change itself: the rows swap in place,
+            // and animating them would read as the list moving.
+            action()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary)
+                .frame(width: 36, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel(symbol == "chevron.left" ? "Previous page" : "Next page")
     }
 }

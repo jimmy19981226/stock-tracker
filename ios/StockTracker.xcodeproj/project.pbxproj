@@ -10,6 +10,7 @@
 		000659CBFC245C9063C71573 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E16AA928C10C0CABDA3B1BC7 /* SettingsView.swift */; };
 		0329C9D0EB26C8A21DBD611B /* MarketHours.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37CD67CA6884D6DB1F823643 /* MarketHours.swift */; };
 		0780612FCDA147CB8A1A34EB /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 344F05D989D23B371D60747A /* OverviewView.swift */; };
+		0CF6694CE17E116AD44A7583 /* DividendRecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD642552CB8E85CD24E0DD1F /* DividendRecordView.swift */; };
 		100BF6A8AA691C54C1C4E2A5 /* ChatHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 830C445F99CFD5088BAA4CB9 /* ChatHistoryView.swift */; };
 		1105489786D50ACC55DECA03 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178C89BFB1C25D1662FE56DB /* AppConfig.swift */; };
 		12AACF6F5A3FDD457E11BB09 /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2409FACE0EF56EC856982C87 /* MarkdownText.swift */; };
@@ -113,6 +114,7 @@
 		E738D8F756898FA40BA0E1FB /* TradeFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeFormView.swift; sourceTree = "<group>"; };
 		EA606A5EA8338A48F297E7F0 /* PortfolioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioStore.swift; sourceTree = "<group>"; };
 		ED40DAE056BD179C1E82922F /* TradeRecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeRecordView.swift; sourceTree = "<group>"; };
+		FD642552CB8E85CD24E0DD1F /* DividendRecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividendRecordView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -365,6 +367,7 @@
 			isa = PBXGroup;
 			children = (
 				4E8C77D78C60E17B135BD606 /* DividendFormView.swift */,
+				FD642552CB8E85CD24E0DD1F /* DividendRecordView.swift */,
 				665969461AD6B11CA8AF0BDD /* DividendsView.swift */,
 			);
 			path = Dividends;
@@ -483,6 +486,7 @@
 				AC6B952D225DE81C829DDD67 /* DashboardView.swift in Sources */,
 				51C3E405AA6A679B1DC4B41D /* DiskCache.swift in Sources */,
 				96AD6EA5442C19FE594498E8 /* DividendFormView.swift in Sources */,
+				0CF6694CE17E116AD44A7583 /* DividendRecordView.swift in Sources */,
 				E9E5DED70BACAEC0F876505D /* DividendsView.swift in Sources */,
 				955216014975F6F7268860C4 /* FIFO.swift in Sources */,
 				FB6FDA20BC5B416BD3153FED /* Format.swift in Sources */,

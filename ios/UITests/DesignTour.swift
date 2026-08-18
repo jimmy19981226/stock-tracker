@@ -90,10 +90,67 @@ final class DesignTour: XCTestCase {
         app.swipeUp(); sleep(2); snap(app, "dash-scroll2")
     }
 
+    /// A single dark-theme shot for the README.
+    func testOverviewDark() throws {
+        appearance = "dark"
+        let app = makeApp()
+        app.launch()
+        _ = app.staticTexts["Taiwan"].firstMatch.waitForExistence(timeout: 120)
+        sleep(8)
+        snap(app, "05-overview-dark")
+        let taiwan = app.staticTexts["Taiwan"].firstMatch
+        if taiwan.isHittable {
+            taiwan.tap(); sleep(10); snap(app, "15-dashboard-dark")
+        }
+    }
+
     /// The same walk in the dark theme.
     func testTourDark() throws {
         appearance = "dark"
         try testTour()
+    }
+
+    /// The market-index strip, expanded — the one panel whose sparkline shares
+    /// its box with a label.
+    func testIndexBar() throws {
+        let app = makeApp()
+        app.launch()
+        _ = app.staticTexts["Taiwan"].firstMatch.waitForExistence(timeout: 120)
+        let expand = app.buttons["Show index details"].firstMatch
+        XCTAssertTrue(expand.waitForExistence(timeout: 20), "No index strip")
+        expand.tap()
+        sleep(6)  // the 1-month history has to land before the sparkline draws
+        snap(app, "70-index-bar-expanded")
+    }
+
+    /// Focused check: with a keyboard up, is the tab bar still on screen?
+    func testKeyboardChrome() throws {
+        let app = makeApp()
+        app.launch()
+        _ = app.staticTexts["Taiwan"].firstMatch.waitForExistence(timeout: 120)
+        tab(app, "Assistant")
+        sleep(3)
+        let composer = app.textViews.firstMatch.exists
+            ? app.textViews.firstMatch : app.textFields.firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 10), "no composer")
+        composer.tap()
+        sleep(3)
+        let overviewTab = app.buttons["Overview"].firstMatch
+        XCTAssertFalse(overviewTab.exists,
+                       "The tab bar is still on screen with the keyboard up")
+        snap(app, "kbd-check")
+    }
+
+    /// README shots: the assistant with a real answer in it, seeded by the
+    /// app's own demo hook rather than by hitting a provider.
+    func testAssistantDemo() throws {
+        let app = makeApp()
+        app.launchEnvironment["UITEST_ASSISTANT_DEMO"] = "1"
+        app.launchEnvironment["UITEST_TAB"] = "assistant"
+        app.launch()
+        sleep(8)
+        snap(app, "55-assistant-demo")
+        app.swipeUp(); sleep(1); snap(app, "56-assistant-demo-scrolled")
     }
 
     func testTour() throws {
@@ -143,6 +200,13 @@ final class DesignTour: XCTestCase {
         tab(app, "Trades"); sleep(4)
         snap(app, "30-trades")
         app.swipeUp(); sleep(1); snap(app, "31-trades-scrolled")
+        // Page two, to check the pager holds its position.
+        let next = app.buttons.matching(identifier: "chevron.right").firstMatch
+        if next.exists, next.isHittable {
+            next.tap(); sleep(2); snap(app, "34-trades-page2")
+            let prev = app.buttons.matching(identifier: "chevron.left").firstMatch
+            if prev.exists, prev.isHittable { prev.tap(); sleep(2) }
+        }
         app.swipeDown(); sleep(1)
 
         // ---- One trade's record page --------------------------------------
@@ -161,10 +225,26 @@ final class DesignTour: XCTestCase {
         tab(app, "Dividends"); sleep(5)
         snap(app, "40-dividends")
         app.swipeUp(); sleep(1); snap(app, "41-dividends-scrolled")
+        let firstDividend = app.staticTexts.matching(
+            NSPredicate(format: "label BEGINSWITH '2026-'")).firstMatch
+        if firstDividend.waitForExistence(timeout: 8), firstDividend.isHittable {
+            firstDividend.tap()
+            sleep(3)
+            snap(app, "42-dividend-record")
+            tapAny(app, ["Dividends"], timeout: 8)
+            sleep(2)
+        }
 
         // ---- Assistant ----------------------------------------------------
         tab(app, "Assistant"); sleep(4)
         snap(app, "50-assistant")
+        // Typing must not lift the tab bar onto the keyboard.
+        let composer = app.textViews.firstMatch.exists
+            ? app.textViews.firstMatch : app.textFields.firstMatch
+        if composer.waitForExistence(timeout: 5), composer.isHittable {
+            composer.tap(); sleep(2)
+            snap(app, "51-assistant-keyboard")
+        }
 
         // ---- Settings -----------------------------------------------------
         tab(app, "Settings"); sleep(4)
