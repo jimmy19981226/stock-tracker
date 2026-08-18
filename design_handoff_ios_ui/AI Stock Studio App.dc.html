@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-ac4d45cd-5494-43bf-9e26-7ed5382ad588/styles.css">
+<script src="_ds/industry-ac4d45cd-5494-43bf-9e26-7ed5382ad588/_ds_bundle.js"></script>
+<style>
+:root{--app-bg:#f4f4f6;--app-card:#fff;--app-chrome:rgba(255,255,255,.94);--app-inset:var(--color-neutral-100);--app-track:var(--color-neutral-200);--app-line:var(--color-neutral-200);--app-shadow:rgba(29,31,32,.08);--app-shadow-lg:rgba(29,31,32,.18);--app-scrim:rgba(29,31,32,.45);--app-chip-fg:var(--color-accent-800)}
+html[data-appearance="dark"]{--app-bg:#16273a;--app-card:#1f3349;--app-chrome:rgba(31,51,73,.94);--app-inset:#26405a;--app-track:#2c4863;--app-line:#35526f;--app-shadow:rgba(2,8,18,.55);--app-shadow-lg:rgba(2,8,18,.7);--app-scrim:rgba(4,12,22,.62);--app-chip-fg:#a8c6e2;
+ --color-text:#eaf1f8;--color-bg:#16273a;--color-surface:#1f3349;--color-divider:#35526f;
+ --color-neutral-100:#26405a;--color-neutral-200:#2c4863;--color-neutral-300:#3d5d7d;--color-neutral-400:#587a9d;--color-neutral-500:#6d89a8;--color-neutral-600:#95aec9;--color-neutral-700:#b5c9de;--color-neutral-800:#d3e0ed;--color-neutral-900:#edf3f9;
+ --color-accent:#6f9bc8;--color-accent-100:#264057;--color-accent-200:#2f4f6a;--color-accent-300:#9dbcd9;--color-accent-400:#6f9bc8;--color-accent-500:#5980a6;--color-accent-600:#7ba5cd;--color-accent-700:#a6c4de;--color-accent-800:#16283c;--color-accent-900:#0f1e2e}
+html[data-appearance="dark"] body{background:#0f1c2b}
+html[data-appearance="dark"] .input{background:#26405a;color:#eaf1f8;border-color:#3a5975}
+html[data-appearance="dark"] .btn-secondary{background:#26405a;color:#eaf1f8;border-color:#3a5975}
+html[data-appearance="dark"] .btn-primary{background:#5b87b5;border-color:#5b87b5;color:#f2f7fc}
+html[data-appearance="dark"] .table th{color:#95aec9}
+body{margin:0;background:#e9e9ea;font-family:"Barlow",system-ui,sans-serif}
+a{color:#5980a6}a:hover{color:#416180}
+@keyframes st-pulse{0%,100%{opacity:.35}50%{opacity:1}}
+.btn{border-radius:11px}.btn-icon{border-radius:50%}.input{border-radius:11px;background:var(--app-card)}.btn-secondary{background:var(--app-card)}
+.tag{border-radius:8px}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:40px 28px">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+<div style="position:relative;height:100%;display:flex;flex-direction:column;background:var(--app-bg)">
+
+<sc-if value="{{signedOut}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:60;background:linear-gradient(165deg,var(--color-accent-800),var(--color-accent-900));color:#fff;display:flex;flex-direction:column;justify-content:flex-end;padding:0 26px 46px">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+    <div style="font-size:46px;line-height:1">✦</div>
+    <h1 style="font-size:40px;margin:10px 0 6px;color:#fff">AI Stock Studio</h1>
+    <p style="font-size:14px;color:var(--color-accent-300);max-width:280px;margin:0">Taiwan and US portfolios in one net worth. Live prices, dividends, FIFO P/L, and an assistant that reads your holdings.</p>
+  </div>
+  <button class="btn" style="background:var(--app-card);color:var(--color-accent-900);border-color:#fff;width:100%;height:46px;font-size:15px" onClick="{{signIn}}">Continue with Google</button>
+  <button class="btn" style="background:transparent;color:#fff;border-color:rgba(255,255,255,.4);width:100%;height:46px;margin-top:10px;font-size:15px" onClick="{{signIn}}">Continue as guest</button>
+  <div style="font-size:10.5px;color:var(--color-accent-300);margin-top:14px;text-align:center">Your trades stay on your own backend. No broker login, no analytics.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isOvRoot}}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;overflow:auto;padding:60px 18px 12px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+    <div style="font-family:var(--font-heading);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700);flex:1">✦ AI Stock Studio</div>
+    <sc-for list="{{sessions}}" as="s" hint-placeholder-count="2">
+      <span style="display:inline-flex;align-items:center;gap:5px;background:{{s.bg}};color:{{s.c}};border-radius:8px;padding:2px 8px;font-family:var(--font-heading);font-weight:600;font-size:11px;letter-spacing:.06em"><span style="width:6px;height:6px;border-radius:50%;background:{{s.dot}}"></span>{{s.label}}</span>
+    </sc-for>
+  </div>
+  <div style="padding:20px 18px;border-radius:18px;background:linear-gradient(160deg,var(--color-accent-800),var(--color-accent-900));color:#fff;box-shadow:0 6px 18px rgba(29,45,61,.28);margin-bottom:16px">
+    <div style="font-family:var(--font-heading);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent-300);margin-bottom:4px">Investing net worth</div>
+    <div style="font-family:var(--font-heading);font-weight:600;font-size:42px;line-height:1;letter-spacing:-.01em">{{nwTW}}</div>
+    <div style="display:flex;align-items:center;gap:7px;margin-top:8px;font-size:12px;color:var(--color-accent-300);flex-wrap:wrap">
+      <span>≈ {{nwUS}}</span><span>·</span><span>USD/TWD {{fxF}}</span><span>·</span><span>{{clock}}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.16)">
+      <sc-for list="{{heroStats}}" as="s" hint-placeholder-count="4">
+        <div>
+          <div style="font-size:9px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--color-accent-300);white-space:nowrap">{{s.k}}</div>
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:13.5px;color:{{s.c}};white-space:nowrap">{{s.v}}</div>
+          <div style="font-size:9px;color:var(--color-accent-300);white-space:nowrap">{{s.sub}}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:16px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+      <h5 style="margin:0">Net worth</h5>
+      <span style="font-family:var(--font-heading);font-weight:600;font-size:14px;color:{{nwChgC}}">{{nwChgF}} <span style="font-size:12px">{{nwChgPctF}}</span></span>
+    </div>
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-bottom:10px">
+      <sc-for list="{{nwPeriods}}" as="p" hint-placeholder-count="6">
+        <button onClick="{{p.set}}" style="flex:1;border:none;border-radius:8px;padding:4px 0;font-family:var(--font-body);font-size:10.5px;font-weight:500;cursor:pointer;background:{{p.bg}};color:{{p.c}}">{{p.l}}</button>
+      </sc-for>
+    </div>
+    <svg width="100%" viewBox="0 0 330 120" style="display:block">
+      <line x1="34" y1="16" x2="330" y2="16" stroke="var(--app-line)"></line>
+      <line x1="34" y1="56" x2="330" y2="56" stroke="var(--app-line)"></line>
+      <line x1="34" y1="96" x2="330" y2="96" stroke="var(--app-line)"></line>
+      <text x="0" y="19" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{nwAxHi}}</text>
+      <text x="0" y="59" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{nwAxMid}}</text>
+      <text x="0" y="99" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{nwAxLo}}</text>
+      <path d="{{nwArea}}" fill="var(--color-accent-200)" opacity="0.5"></path>
+      <path d="{{nwLine}}" fill="none" stroke="var(--color-accent-600)" stroke-width="1.8"></path>
+      <circle cx="{{nwEndX}}" cy="{{nwEndY}}" r="3" fill="var(--color-accent-700)"></circle>
+      <text x="34" y="117" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{nwFrom}}</text>
+      <text x="298" y="117" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">Today</text>
+    </svg>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-for list="{{marketCards}}" as="m" hint-placeholder-count="2">
+      <div style="padding:16px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);cursor:pointer" onClick="{{m.open}}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="background:var(--color-accent-100);border-radius:7px;color:var(--app-chip-fg);font-family:var(--font-heading);font-weight:600;font-size:12px;padding:2px 8px">{{m.code}}</span>
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:16px;flex:1">{{m.title}}</div>
+          <span style="font-size:11px;color:var(--color-neutral-600)">{{m.shareF}} of total</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-neutral-400)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:8px;margin-bottom:10px">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:30px;line-height:1">{{m.mvF}}</div>
+          <span style="font-size:11px;color:var(--color-neutral-600);padding-bottom:3px">{{m.session}}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:12.5px">
+          <sc-for list="{{m.rows}}" as="r" hint-placeholder-count="4">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="color:var(--color-neutral-600)">{{r.k}}</span>
+              <span style="font-family:var(--font-heading);font-weight:600;font-size:13.5px;color:{{r.c}}">{{r.v}} <span style="font-size:11.5px;font-weight:400;color:var(--color-neutral-600)">{{r.extra}}</span></span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:10px;padding-top:9px;border-top:1px solid var(--app-line)">
+          <span style="font-family:var(--font-heading);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600)">Total return · {{m.cur}}</span>
+          <span style="font-family:var(--font-heading);font-weight:600;font-size:15px;color:{{m.trC}}">{{m.trF}} <span style="font-size:12px">{{m.trPctF}}</span></span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="margin-top:14px;font-size:11px;text-align:center" class="text-muted">Updated {{clock}} · {{cadence}}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isMarket}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding:60px 18px 12px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+    <div style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--color-accent-700)" onClick="{{backRoot}}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+      <span style="font-family:var(--font-heading);font-size:12px;letter-spacing:.12em;text-transform:uppercase">Overview</span>
+    </div>
+    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;background:{{mkSessBg}};color:{{mkSessC}};border-radius:8px;padding:2px 8px;font-family:var(--font-heading);font-weight:600;font-size:11px"><span style="width:6px;height:6px;border-radius:50%;background:{{mkSessDot}}"></span>{{mkStatus}}</span>
+  </div>
+  <div style="display:flex;align-items:baseline;gap:8px;margin:0 0 14px">
+    <h2 style="font-size:32px;margin:0">{{mkTitle}}</h2>
+    <span style="font-size:12px" class="text-muted">{{mkHours}}</span>
+  </div>
+  <div style="padding:18px;border-radius:18px;background:linear-gradient(160deg,var(--color-accent-800),var(--color-accent-900));color:#fff;box-shadow:0 6px 18px rgba(29,45,61,.28);margin-bottom:16px">
+    <div style="font-family:var(--font-heading);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent-300)">Total earned — realized + dividends</div>
+    <div style="font-family:var(--font-heading);font-weight:600;font-size:38px;line-height:1.1">{{mkEarnedF}}</div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.16);font-size:13px">
+      <span style="color:var(--color-accent-300)">Total return incl. unrealized</span>
+      <span style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{mkReturnF}}</span>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+    <sc-for list="{{mkStats}}" as="s" hint-placeholder-count="6">
+      <div style="background:var(--app-card);border-radius:14px;padding:11px 13px;box-shadow:0 1px 3px var(--app-shadow)">
+        <div style="font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600)">{{s.k}}</div>
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:19px;color:{{s.c}}">{{s.v}}</div>
+        <div style="font-size:10.5px" class="text-muted">{{s.sub}}</div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:16px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+      <h5 style="margin:0">Total earned</h5>
+      <span style="font-family:var(--font-heading);font-weight:600;font-size:14px;color:{{mkEarnC}}">{{mkEarnedSigned}}</span>
+    </div>
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-bottom:10px">
+      <sc-for list="{{dashPeriods}}" as="p" hint-placeholder-count="4">
+        <button onClick="{{p.set}}" style="flex:1;border:none;border-radius:8px;padding:4px 0;font-family:var(--font-body);font-size:10.5px;font-weight:500;cursor:pointer;background:{{p.bg}};color:{{p.c}}">{{p.l}}</button>
+      </sc-for>
+    </div>
+    <svg width="100%" viewBox="0 0 330 110" style="display:block">
+      <line x1="34" y1="14" x2="330" y2="14" stroke="var(--app-line)"></line>
+      <line x1="34" y1="52" x2="330" y2="52" stroke="var(--app-line)"></line>
+      <line x1="34" y1="90" x2="330" y2="90" stroke="var(--app-line)"></line>
+      <text x="0" y="17" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{dashAxHi}}</text>
+      <text x="0" y="93" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">0</text>
+      <path d="{{dashArea}}" fill="var(--color-accent-200)" opacity="0.5"></path>
+      <path d="{{dashLine}}" fill="none" stroke="var(--color-accent-600)" stroke-width="1.8"></path>
+      <text x="34" y="107" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{dashFrom}}</text>
+      <text x="298" y="107" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">Today</text>
+    </svg>
+  </div>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:16px">
+    <h5 style="margin:0 0 8px">Performance</h5>
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-bottom:12px">
+      <sc-for list="{{perfPeriods}}" as="p" hint-placeholder-count="5">
+        <button onClick="{{p.set}}" style="flex:1;border:none;border-radius:8px;padding:4px 0;font-family:var(--font-body);font-size:10.5px;font-weight:500;cursor:pointer;background:{{p.bg}};color:{{p.c}}">{{p.l}}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <sc-for list="{{perfStats}}" as="s" hint-placeholder-count="3">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--color-neutral-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{s.k}}</div>
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:17px;color:{{s.c}}">{{s.v}}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:14px;font-size:10px;margin-bottom:4px">
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:var(--color-accent-600)"></span>Portfolio</span>
+      <span style="display:flex;align-items:center;gap:5px;cursor:pointer" onClick="{{cycleBenchmark}}"><span style="width:7px;height:7px;border-radius:50%;background:var(--color-neutral-400)"></span>{{benchName}} ▾</span>
+    </div>
+    <svg width="100%" viewBox="0 0 330 120" style="display:block">
+      <line x1="0" y1="18" x2="304" y2="18" stroke="var(--app-line)"></line>
+      <line x1="0" y1="58" x2="304" y2="58" stroke="var(--app-line)"></line>
+      <line x1="0" y1="98" x2="304" y2="98" stroke="var(--app-line)"></line>
+      <text x="308" y="21" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{perfAxHi}}</text>
+      <text x="308" y="61" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{perfAxMid}}</text>
+      <text x="308" y="101" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{perfAxLo}}</text>
+      <path d="{{benchPath}}" fill="none" stroke="var(--color-neutral-400)" stroke-width="1.4"></path>
+      <path d="{{perfPath}}" fill="none" stroke="var(--color-accent-600)" stroke-width="2.2"></path>
+    </svg>
+    <div style="font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--color-neutral-600);margin:10px 0 4px">Monthly P&amp;L</div>
+    <div style="display:flex;align-items:flex-end;gap:3px;height:74px;border-bottom:1px solid var(--app-line)">
+      <sc-for list="{{monthlyBars}}" as="b" hint-placeholder-count="12">
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+          <div style="height:{{b.up}};display:flex;align-items:flex-end"><div style="width:100%;height:{{b.h}};border-radius:3px 3px 0 0;background:{{b.c}}"></div></div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;gap:3px;margin-top:3px">
+      <sc-for list="{{monthlyBars}}" as="b" hint-placeholder-count="12">
+        <div style="flex:1;text-align:center;font-size:8.5px;color:var(--color-neutral-600)">{{b.m}}</div>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <h6 style="margin:0;color:var(--color-neutral-700)">Holdings · {{mkCount}} · {{mkMVF}}</h6>
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px">
+      <sc-for list="{{sortOpts}}" as="s" hint-placeholder-count="3">
+        <button onClick="{{s.set}}" style="border:none;border-radius:8px;padding:3px 8px;font-family:var(--font-body);font-size:10px;cursor:pointer;background:{{s.bg}};color:{{s.c}}">{{s.l}}</button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="background:var(--app-card);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--app-shadow)">
+    <div style="display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--app-line);font-size:9.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600)">
+      <span style="flex:1">Ticker</span><span style="width:74px;text-align:right">Price</span><span style="width:82px;text-align:right">Unrealized</span>
+    </div>
+    <sc-for list="{{mkRows}}" as="r" hint-placeholder-count="4">
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--app-line);cursor:pointer" onClick="{{r.open}}">
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{r.t}} <span style="font-weight:400;font-size:13px;color:var(--color-neutral-700)">{{r.name}}</span></div>
+          <div style="font-size:10.5px;color:var(--color-neutral-600)">{{r.sub}}</div>
+          <div style="height:3px;border-radius:2px;background:var(--app-track);margin-top:4px;overflow:hidden"><div style="height:3px;width:{{r.weight}};background:var(--color-accent-400)"></div></div>
+        </div>
+        <div style="width:74px;text-align:right">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:14px">{{r.pxF}}</div>
+          <div style="font-size:10.5px;color:{{r.todC}}">{{r.todF}}</div>
+          <div style="font-size:10.5px;color:var(--color-neutral-600)">{{r.mvF}}</div>
+        </div>
+        <div style="width:82px;text-align:right">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:14px;color:{{r.gainC}}">{{r.unF}}</div>
+          <div style="font-size:10.5px;color:{{r.gainC}}">{{r.gainF}}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="margin-top:10px;font-size:10.5px" class="text-muted">Unrealized is net of estimated exit costs (0.1425% commission + transaction tax) — matches 損益試算. Updated {{clock}}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isStock}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding:60px 18px 24px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+    <div style="display:flex;align-items:center;gap:4px;cursor:pointer;color:var(--color-accent-700)" onClick="{{backMarket}}">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+      <span style="font-family:var(--font-heading);font-size:12px;letter-spacing:.12em;text-transform:uppercase">{{mkTitle}}</span>
+    </div>
+    <span class="tag tag-accent" style="margin-left:auto">{{stSource}}</span>
+  </div>
+  <div style="display:flex;align-items:baseline;gap:8px;margin:6px 0 2px">
+    <h2 style="font-size:30px;margin:0">{{stName}}</h2>
+    <span style="font-family:var(--font-heading);font-size:15px;color:var(--color-neutral-600)">{{stCode}}</span>
+  </div>
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+    <div style="font-family:var(--font-heading);font-weight:600;font-size:38px;line-height:1">{{stPxF}}</div>
+    <div style="font-family:var(--font-heading);font-weight:600;font-size:15px;color:{{stChgC}}">{{stChgF}}</div>
+  </div>
+  <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-bottom:10px">
+    <sc-for list="{{stockPeriods}}" as="p" hint-placeholder-count="7">
+      <button onClick="{{p.set}}" style="flex:1;border:none;border-radius:8px;padding:4px 0;font-family:var(--font-body);font-size:10.5px;font-weight:500;cursor:pointer;background:{{p.bg}};color:{{p.c}}">{{p.l}}</button>
+    </sc-for>
+  </div>
+  <div style="padding:12px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:8px">
+    <svg width="100%" viewBox="0 0 330 132" style="display:block">
+      <line x1="0" y1="20" x2="300" y2="20" stroke="var(--app-line)"></line>
+      <line x1="0" y1="66" x2="300" y2="66" stroke="var(--app-line)"></line>
+      <line x1="0" y1="112" x2="300" y2="112" stroke="var(--app-line)"></line>
+      <text x="304" y="23" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{stAxHi}}</text>
+      <text x="304" y="115" font-family="Barlow" font-size="9" fill="var(--color-neutral-600)">{{stAxLo}}</text>
+      <path d="{{stArea}}" fill="var(--color-accent-200)" opacity="0.45"></path>
+      <path d="{{stPath}}" fill="none" stroke="var(--color-accent-600)" stroke-width="1.8"></path>
+      <sc-for list="{{stTris}}" as="m" hint-placeholder-count="2"><path d="{{m.d}}" fill="{{m.fill}}"></path></sc-for>
+      <sc-for list="{{stDivMarks}}" as="m" hint-placeholder-count="1"><circle cx="{{m.cx}}" cy="{{m.cy}}" r="4" fill="#fff" stroke="var(--color-accent-700)" stroke-width="1.5"></circle></sc-for>
+    </svg>
+  </div>
+  <div style="display:flex;gap:14px;font-size:10px;margin-bottom:16px" class="text-muted">
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:7px solid var(--pl-gain,#3d7a62)"></span>Buy</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:7px solid var(--pl-loss,#a3564e)"></span>Sell</span>
+    <span style="display:flex;align-items:center;gap:4px"><span style="width:7px;height:7px;border:1.5px solid var(--color-accent-700);border-radius:50%"></span>Dividend</span>
+  </div>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:14px">
+    <div style="font-family:var(--font-heading);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent-700);margin-bottom:10px">Your position</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;row-gap:12px;column-gap:14px">
+      <sc-for list="{{stPos}}" as="s" hint-placeholder-count="6">
+        <div><div style="font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600)">{{s.k}}</div><div style="font-family:var(--font-heading);font-weight:600;font-size:17px;color:{{s.c}}">{{s.v}}</div></div>
+      </sc-for>
+    </div>
+  </div>
+  <h6 style="margin:0 0 6px;color:var(--color-neutral-700)">52-week range</h6>
+  <div style="margin-bottom:4px;position:relative;height:6px;border-radius:3px;background:var(--app-track)">
+    <div style="position:absolute;left:0;top:0;bottom:0;border-radius:3px;width:{{stRangeW}};background:var(--color-accent-400)"></div>
+    <div style="position:absolute;left:{{stRangeW}};top:-4px;width:2px;height:14px;background:var(--color-text)"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:14px" class="text-muted"><span>Low {{stLoF}}</span><span style="color:var(--color-text);font-weight:500">{{stPxF}}</span><span>High {{stHiF}}</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+    <sc-for list="{{stStats}}" as="s" hint-placeholder-count="9">
+      <div style="background:var(--app-card);border-radius:14px;padding:9px 11px;box-shadow:0 1px 3px var(--app-shadow)">
+        <div style="font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{s.k}}</div>
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{s.v}}</div>
+      </div>
+    </sc-for>
+  </div>
+  <sc-if value="{{stHasRevenue}}">
+    <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:14px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px">
+        <h5 style="margin:0">Monthly revenue 月營收</h5>
+        <span style="font-size:11px" class="text-muted">FinMind · 12 m</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:80px">
+        <sc-for list="{{revBars}}" as="b" hint-placeholder-count="12">
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%"><div style="width:100%;height:{{b.h}};border-radius:3px 3px 0 0;background:{{b.c}}"></div></div>
+        </sc-for>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px">
+        <sc-for list="{{revBars}}" as="b" hint-placeholder-count="12">
+          <div style="flex:1;text-align:center;font-size:8.5px;color:var(--color-neutral-600)">{{b.m}}</div>
+        </sc-for>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:9px;border-top:1px solid var(--app-line);font-size:12px">
+        <span class="text-muted">Latest {{revLatestM}}</span>
+        <span style="font-family:var(--font-heading);font-weight:600">{{revLatestV}} <span style="color:{{revYoYC}}">YoY {{revYoY}}</span></span>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{stHasFin}}">
+    <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:14px">
+      <h5 style="margin:0 0 8px">Quarterly financials</h5>
+      <table class="table" style="font-size:11.5px">
+        <thead><tr><th style="padding:5px 6px">Quarter</th><th style="padding:5px 6px">Revenue</th><th style="padding:5px 6px">EPS</th><th style="padding:5px 6px">Gross</th><th style="padding:5px 6px">Op.</th></tr></thead>
+        <tbody>
+          <sc-for list="{{finRows}}" as="f" hint-placeholder-count="8">
+            <tr><td style="padding:5px 6px">{{f.q}}</td><td style="padding:5px 6px">{{f.rev}}</td><td style="padding:5px 6px">{{f.eps}}</td><td style="padding:5px 6px;color:{{f.gmC}}">{{f.gm}}</td><td style="padding:5px 6px">{{f.om}}</td></tr>
+          </sc-for>
+        </tbody>
+      </table>
+    </div>
+  </sc-if>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow)">
+    <h5 style="margin:0 0 8px">Your records</h5>
+    <sc-for list="{{stRecords}}" as="r" hint-placeholder-count="3">
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--app-line)">
+        <span class="tag {{r.tagCls}}" style="width:46px;justify-content:center">{{r.tag}}</span>
+        <div style="flex:1;font-size:12.5px">{{r.detail}}</div>
+        <span style="font-size:11.5px" class="text-muted">{{r.d}}</span>
+      </div>
+    </sc-for>
+    <sc-if value="{{stNoRecords}}"><div style="font-size:12px;padding:6px 0" class="text-muted">No trades or dividends recorded for this ticker.</div></sc-if>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isTrades}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding:60px 18px 12px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+    <div style="font-family:var(--font-heading);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">✦ AI Stock Studio</div>
+    <button class="btn btn-ghost" style="font-size:12px;padding:2px 6px" onClick="{{openImport}}">⌗ AI import</button>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px">
+    <h2 style="font-size:32px;margin:0">Trades</h2>
+    <button class="btn btn-primary" onClick="{{openAddTrade}}">+ Add trade</button>
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px">
+      <sc-for list="{{tradeFilters}}" as="f" hint-placeholder-count="3">
+        <button onClick="{{f.set}}" style="border:none;border-radius:8px;padding:5px 13px;font-family:var(--font-body);font-size:12px;cursor:pointer;background:{{f.bg}};color:{{f.c}}">{{f.l}}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-left:auto">
+      <sc-for list="{{statusFilters}}" as="f" hint-placeholder-count="3">
+        <button onClick="{{f.set}}" style="border:none;border-radius:8px;padding:5px 9px;font-family:var(--font-body);font-size:12px;cursor:pointer;background:{{f.bg}};color:{{f.c}}">{{f.l}}</button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:8px" class="text-muted"><span>{{tradeCount}} records</span><span>{{volNote}}</span></div>
+  <div style="background:var(--app-card);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--app-shadow)">
+    <sc-for list="{{tradeRows}}" as="r" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--app-line)">
+        <span class="tag {{r.tagCls}}" style="width:44px;justify-content:center">{{r.tag}}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{r.t}} <span style="font-weight:400;font-size:12.5px;color:var(--color-neutral-700)">{{r.name}}</span></div>
+          <div style="font-size:10.5px" class="text-muted">{{r.detail}}</div>
+          <div style="font-size:10.5px;color:{{r.plC}}">{{r.plF}}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11.5px" class="text-muted">{{r.d}}</div>
+          <div style="font-size:10.5px;font-weight:500;color:{{r.stC}}">{{r.st}}</div>
+        </div>
+        <button class="btn btn-icon btn-secondary" style="width:26px;height:26px;font-size:11px" onClick="{{r.del}}">✕</button>
+      </div>
+    </sc-for>
+  </div>
+  <div style="margin-top:10px;font-size:10.5px" class="text-muted">FIFO cost basis — a sell consumes the oldest lots first; any buy lot with shares left is Open. Realized P/L matches 1099 reporting.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isDividends}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding:60px 18px 12px">
+  <div style="font-family:var(--font-heading);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700);margin-bottom:2px">✦ AI Stock Studio</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 12px">
+    <h2 style="font-size:32px;margin:0">Dividends</h2>
+    <button class="btn btn-primary" onClick="{{openAddDiv}}">+ Add</button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+    <sc-for list="{{divStats}}" as="s" hint-placeholder-count="3">
+      <div style="background:var(--app-card);border-radius:14px;padding:10px 12px;box-shadow:0 1px 3px var(--app-shadow)">
+        <div style="font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-600)">{{s.k}}</div>
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:17px">{{s.v}}</div>
+      </div>
+    </sc-for>
+  </div>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">Dividend calendar — upcoming</h6>
+  <div style="background:var(--app-card);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--app-shadow);margin-bottom:18px">
+    <sc-for list="{{calRows}}" as="r" hint-placeholder-count="4">
+      <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--app-line)">
+        <div style="width:42px;text-align:center;border-radius:10px;background:var(--color-accent-100);padding:4px 0">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:15px;line-height:1;color:var(--app-chip-fg)">{{r.day}}</div>
+          <div style="font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--app-chip-fg)">{{r.mon}}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:14.5px">{{r.t}} <span style="font-weight:400;font-size:12.5px;color:var(--color-neutral-700)">{{r.name}}</span></div>
+          <div style="font-size:10.5px" class="text-muted">{{r.detail}}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{r.estF}}</div>
+          <div style="font-size:10px" class="text-muted">est.</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">Received · {{divCount}}</h6>
+  <div style="background:var(--app-card);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px var(--app-shadow)">
+    <sc-for list="{{divRows}}" as="r" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--app-line)">
+        <span style="width:8px;height:8px;border:1.5px solid var(--color-accent-700);border-radius:50%;flex:none"></span>
+        <div style="flex:1;min-width:0">
+          <div style="font-family:var(--font-heading);font-weight:600;font-size:14.5px">{{r.t}} <span style="font-weight:400;font-size:12.5px;color:var(--color-neutral-700)">{{r.name}}</span></div>
+          <div style="font-size:10.5px" class="text-muted">{{r.sub}}</div>
+        </div>
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{r.amtF}}</div>
+        <button class="btn btn-icon btn-secondary" style="width:26px;height:26px;font-size:11px" onClick="{{r.del}}">✕</button>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{isAssistant}}" hint-placeholder-val="{{ false }}">
+<div style="padding:60px 18px 10px;border-bottom:1px solid var(--app-line);background:var(--app-chrome)">
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="btn btn-icon btn-secondary" style="width:30px;height:30px" onClick="{{toggleHist}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></button>
+    <h2 style="font-size:24px;margin:0;flex:1">✦ Assistant</h2>
+    <span class="tag tag-accent">{{provider}}</span>
+    <button class="btn btn-icon btn-secondary" style="width:30px;height:30px" onClick="{{newChat}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></button>
+  </div>
+</div>
+<div style="flex:1;overflow:auto;padding:14px 18px;display:flex;flex-direction:column;gap:12px">
+  <sc-if value="{{chatEmpty}}" hint-placeholder-val="{{ true }}">
+    <div style="margin-top:12px">
+      <div style="font-family:var(--font-heading);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px">Try asking</div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start">
+        <sc-for list="{{chips}}" as="c" hint-placeholder-count="4">
+          <button class="btn btn-secondary" style="font-family:var(--font-body);font-weight:400;font-size:13px;text-align:left" onClick="{{c.use}}">{{c.t}}</button>
+        </sc-for>
+      </div>
+      <div style="margin-top:16px;font-size:11px;max-width:300px" class="text-muted">14 typed tools — portfolio summary, holdings, trades, dividends, live quotes for any ticker, price history, TWR/XIRR/benchmark, dividend calendar, net-worth history, FX, market hours, web search. Write tools only ever draft a record for your confirmation.</div>
+    </div>
+  </sc-if>
+  <sc-for list="{{msgs}}" as="m" hint-placeholder-count="0">
+    <sc-if value="{{m.isU}}"><div style="align-self:flex-end;max-width:80%;border-radius:18px 18px 5px 18px;background:var(--color-accent);color:#fff;padding:10px 14px;font-size:14px">{{m.text}}</div></sc-if>
+    <sc-if value="{{m.isS}}"><div style="display:flex;align-items:center;gap:6px;font-size:11.5px" class="text-muted"><span style="width:5px;height:5px;border-radius:50%;background:var(--color-accent-500)"></span>{{m.text}}</div></sc-if>
+    <sc-if value="{{m.isT}}">
+      <div style="border-radius:14px;background:var(--app-track)">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;font-family:var(--font-heading);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-700);cursor:pointer" onClick="{{m.toggle}}">
+          <span style="display:inline-block;transform:{{m.chev}};transition:transform .15s">›</span>Reasoning {{m.dur}}
+        </div>
+        <sc-if value="{{m.open}}"><div style="padding:0 12px 10px;font-size:12px;line-height:1.5" class="text-muted">{{m.text}}</div></sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{m.isA}}">
+      <div style="max-width:96%;font-size:14px;line-height:1.55">
+        <div style="white-space:pre-wrap;font-family:Georgia,'Times New Roman',serif">{{m.text}}</div>
+        <sc-if value="{{m.showTable}}">
+          <table class="table" style="font-size:12px;margin:10px 0">
+            <thead><tr><th style="padding:5px 8px">{{m.th1}}</th><th style="padding:5px 8px">{{m.th2}}</th><th style="padding:5px 8px">{{m.th3}}</th></tr></thead>
+            <tbody><sc-for list="{{m.table}}" as="tr" hint-placeholder-count="4"><tr><td style="padding:5px 8px">{{tr.a}}</td><td style="padding:5px 8px">{{tr.b}}</td><td style="padding:5px 8px;color:{{tr.c2}}">{{tr.c}}</td></tr></sc-for></tbody>
+          </table>
+        </sc-if>
+        <sc-if value="{{m.hasSources}}">
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+            <sc-for list="{{m.sources}}" as="s" hint-placeholder-count="2">
+              <span style="display:inline-flex;align-items:center;gap:5px;border-radius:8px;background:var(--color-accent-100);color:var(--app-chip-fg);padding:3px 9px;font-size:11px">{{s.n}} {{s.t}}</span>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{m.note}}"><div style="font-size:11.5px;margin-top:8px" class="text-muted">Observation from your data — not investment advice.</div></sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{m.isCard}}">
+      <div style="padding:14px;max-width:96%;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-family:var(--font-heading);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--color-accent-700)">Drafted trade — confirm to save</span>
+          <span class="tag tag-accent">{{m.side}}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:10px;margin-bottom:12px">
+          <div><div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600)">Ticker</div><div style="font-family:var(--font-heading);font-weight:600;font-size:16px">{{m.t}}</div></div>
+          <div><div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600)">Shares @ price</div><div style="font-family:var(--font-heading);font-weight:600;font-size:16px">{{m.shPx}}</div></div>
+          <div><div style="font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600)">Date · fee</div><div style="font-family:var(--font-heading);font-weight:600;font-size:16px">{{m.dateFee}}</div></div>
+        </div>
+        <sc-if value="{{m.pending}}"><div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onClick="{{m.add}}">Add trade</button><button class="btn btn-secondary" onClick="{{m.dismiss}}">Discard</button></div></sc-if>
+        <sc-if value="{{m.added}}"><div style="font-size:13px;font-weight:500;color:var(--pl-gain,#3d7a62)">✓ Saved to Trades</div></sc-if>
+      </div>
+    </sc-if>
+  </sc-for>
+  <sc-if value="{{generating}}">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font-size:12px;animation:st-pulse 1.2s infinite" class="text-muted">✦ generating — continues if you leave the app</div>
+      <button class="btn btn-secondary" style="font-size:11px;padding:3px 10px" onClick="{{stopGen}}">Stop</button>
+    </div>
+  </sc-if>
+</div>
+<div style="padding:10px 18px 30px;border-top:1px solid var(--app-line);display:flex;gap:8px;align-items:center;background:var(--app-chrome)">
+  <input class="input" placeholder="Ask about your portfolio…" style="flex:1" value="{{chatInput}}" onChange="{{onChatInput}}" onKeyDown="{{onChatKey}}">
+  <button class="btn btn-primary btn-icon" onClick="{{sendChat}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4z"></path></svg></button>
+</div>
+</sc-if>
+
+<sc-if value="{{isSettings}}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto;padding:60px 18px 20px">
+  <div style="font-family:var(--font-heading);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700);margin-bottom:2px">✦ AI Stock Studio</div>
+  <h2 style="font-size:32px;margin:0 0 14px">Settings</h2>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">Account</h6>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:18px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:38px;height:38px;border-radius:12px;background:var(--color-accent-100);display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-weight:600;color:var(--app-chip-fg)">J</div>
+      <div style="flex:1"><div style="font-family:var(--font-heading);font-weight:600;font-size:15px">jimmy@gmail.com</div><div style="font-size:10.5px" class="text-muted">Google sign-in · data scoped to this account</div></div>
+      <button class="btn btn-secondary" style="font-size:12px" onClick="{{signOut}}">Sign out</button>
+    </div>
+  </div>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">Appearance</h6>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:18px">
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-bottom:8px">
+      <sc-for list="{{appearanceOpts}}" as="p" hint-placeholder-count="3">
+        <button onClick="{{p.set}}" style="flex:1;border:none;border-radius:8px;padding:7px 0;font-family:var(--font-body);font-size:12px;cursor:pointer;background:{{p.bg}};color:{{p.c}}">{{p.l}}</button>
+      </sc-for>
+    </div>
+    <div style="font-size:11.5px" class="text-muted">{{appearanceNote}}</div>
+  </div>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">AI assistant</h6>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:18px">
+    <div style="font-size:11.5px;margin-bottom:8px" class="text-muted">Provider — your own key, stored in the iOS Keychain and sent per request. Never stored on the server.</div>
+    <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-bottom:12px;width:fit-content">
+      <sc-for list="{{provOpts}}" as="p" hint-placeholder-count="3">
+        <button onClick="{{p.set}}" style="border:none;border-radius:8px;padding:6px 14px;font-family:var(--font-body);font-size:12px;cursor:pointer;background:{{p.bg}};color:{{p.c}}">{{p.l}}</button>
+      </sc-for>
+    </div>
+    <div class="field" style="margin-bottom:6px"><label>API key · {{provider}}</label><input class="input" type="password" value="{{apiKey}}" onChange="{{onApiKey}}"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:9px 0;border-top:1px solid var(--app-line)">
+      <span>Show reasoning while thinking</span>
+      <button onClick="{{toggleReason}}" style="border:none;cursor:pointer;width:44px;height:26px;border-radius:13px;background:{{reasonBg}};position:relative;transition:background .18s"><span style="position:absolute;top:3px;left:{{reasonX}};width:20px;height:20px;border-radius:50%;background:var(--app-card);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .18s"></span></button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:9px 0;border-top:1px solid var(--app-line)">
+      <span>Keep generating in background</span>
+      <button onClick="{{toggleBg}}" style="border:none;cursor:pointer;width:44px;height:26px;border-radius:13px;background:{{bgGenBg}};position:relative;transition:background .18s"><span style="position:absolute;top:3px;left:{{bgGenX}};width:20px;height:20px;border-radius:50%;background:var(--app-card);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .18s"></span></button>
+    </div>
+  </div>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">Backend</h6>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:18px">
+    <div class="field" style="margin-bottom:4px"><label>Backend URL</label><input class="input" value="{{backendUrl}}" onChange="{{onBackendUrl}}"></div>
+    <sc-for list="{{backendRows}}" as="r" hint-placeholder-count="4">
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-top:1px solid var(--app-line)"><span class="text-muted">{{r.k}}</span><span style="color:{{r.c}};font-weight:500">{{r.v}}</span></div>
+    </sc-for>
+  </div>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">Markets &amp; indices</h6>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:18px">
+    <sc-for list="{{marketRows}}" as="r" hint-placeholder-count="2">
+      <div style="display:flex;justify-content:space-between;font-size:12px;padding:7px 0;border-bottom:1px solid var(--app-line)"><span class="text-muted">{{r.k}}</span><span>{{r.hours}} · <span style="color:{{r.c}};font-weight:500">{{r.state}}</span></span></div>
+    </sc-for>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding-top:10px">
+      <div style="font-size:12px" class="text-muted">Followed indices · {{indexCount}}</div>
+      <button class="btn btn-secondary" style="font-size:12px" onClick="{{openIndices}}">Edit</button>
+    </div>
+    <div style="font-size:10.5px;margin-top:6px" class="text-muted">Hours &amp; holidays are DB-driven — editable without a redeploy.</div>
+  </div>
+  <h6 style="margin:0 0 8px;color:var(--color-neutral-700)">About</h6>
+  <div style="padding:14px;border-radius:16px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0"><span class="text-muted">Version</span><span>1.4.0 (218)</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-top:1px solid var(--app-line)"><span class="text-muted">Market data</span><span>TWSE MIS · Yahoo · FinMind</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-top:1px solid var(--app-line);cursor:pointer" onClick="{{openAbout}}"><span class="text-muted">Privacy &amp; disclosures</span><span style="color:var(--color-accent-700)">View ›</span></div>
+  </div>
+  <div style="font-size:10.5px;text-align:center;line-height:1.6" class="text-muted">AI Stock Studio · self-hosted · no analytics, no telemetry<br>Not investment advice. Prices may be delayed.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{showIndexBar}}" hint-placeholder-val="{{ false }}">
+<div style="border-top:1px solid var(--app-line);background:var(--app-chrome)">
+  <sc-if value="{{indexExpanded}}">
+    <div style="display:flex;flex-direction:column;gap:8px;padding:10px 14px 2px">
+      <sc-for list="{{indexCards}}" as="q" hint-placeholder-count="2">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--app-inset)">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:6px"><span style="font-family:var(--font-heading);font-weight:600;font-size:14px">{{q.name}}</span><span style="font-size:10px" class="text-muted">{{q.sym}}</span></div>
+            <div style="font-family:var(--font-heading);font-weight:600;font-size:19px;line-height:1.1">{{q.pxF}}</div>
+            <div style="font-size:11px;font-weight:500;color:{{q.c}}">{{q.chgF}}</div>
+            <div style="display:flex;gap:10px;font-size:10px;margin-top:2px" class="text-muted"><span>O {{q.o}}</span><span>H {{q.h}}</span><span>L {{q.l}}</span></div>
+          </div>
+          <svg width="104" height="42" viewBox="0 0 104 42"><path d="{{q.spark}}" fill="none" stroke="{{q.c}}" stroke-width="1.8"></path><text x="86" y="9" font-family="Barlow" font-size="8" fill="var(--color-neutral-500)">1M</text></svg>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+  <div style="display:flex;align-items:center;padding:6px 4px 6px 14px">
+    <div style="flex:1;display:flex;gap:16px;overflow:auto">
+      <sc-for list="{{indexChips}}" as="q" hint-placeholder-count="2">
+        <div style="display:flex;align-items:baseline;gap:6px;white-space:nowrap">
+          <span style="font-size:12px;font-weight:500;color:var(--color-neutral-700)">{{q.name}}</span>
+          <span style="font-family:var(--font-heading);font-weight:600;font-size:13px">{{q.pxF}}</span>
+          <span style="font-size:11px;font-weight:500;color:{{q.c}}">{{q.chgShort}}</span>
+        </div>
+      </sc-for>
+      <span style="font-size:14px;color:var(--color-neutral-500);cursor:pointer" onClick="{{openIndices}}">＋</span>
+    </div>
+    <button onClick="{{toggleIndex}}" style="border:none;background:transparent;cursor:pointer;width:36px;height:26px;font-size:12px;color:var(--color-neutral-700)">{{indexChev}}</button>
+  </div>
+</div>
+</sc-if>
+
+<div style="display:flex;border-top:1px solid var(--app-line);padding:8px 6px 26px;gap:2px;background:var(--app-chrome)">
+  <sc-for list="{{tabs}}" as="t" hint-placeholder-count="5">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:5px 0 4px;border-radius:12px;background:{{t.bg}};color:{{t.c}}" onClick="{{t.go}}">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="{{t.fill}}" stroke="currentColor" stroke-width="{{t.sw}}" stroke-linecap="round" stroke-linejoin="round" style="display:block"><path d="{{t.d}}"></path></svg>
+      <span style="font-size:10px;font-weight:{{t.fw}};letter-spacing:.01em">{{t.l}}</span>
+    </div>
+  </sc-for>
+</div>
+
+<sc-if value="{{addOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:40;display:flex;align-items:flex-end;background:var(--app-scrim)" onClick="{{closeAdd}}">
+  <div style="width:100%;background:var(--app-bg);border-radius:22px 22px 0 0;box-shadow:0 -8px 30px var(--app-shadow-lg);padding:18px 18px 34px" onClick="{{stop}}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h4 style="margin:0">{{addTitle}}</h4>
+      <button class="btn btn-secondary btn-icon" style="width:28px;height:28px" onClick="{{closeAdd}}">✕</button>
+    </div>
+    <sc-if value="{{addIsTrade}}">
+      <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px;margin-bottom:12px;width:fit-content">
+        <sc-for list="{{typeOpts}}" as="o" hint-placeholder-count="2">
+          <button onClick="{{o.set}}" style="border:none;border-radius:8px;padding:6px 20px;font-family:var(--font-body);font-size:12px;cursor:pointer;background:{{o.bg}};color:{{o.c}}">{{o.l}}</button>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <label style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-600)">Market</label>
+        <span style="font-size:10.5px;color:var(--color-accent-700)">{{fMktHint}}</span>
+      </div>
+      <div style="display:flex;background:var(--app-track);border-radius:10px;padding:2px;gap:2px">
+        <sc-for list="{{mktOpts}}" as="o" hint-placeholder-count="2">
+          <button onClick="{{o.set}}" style="flex:1;border:none;border-radius:8px;padding:7px 0;font-family:var(--font-body);font-size:12px;cursor:pointer;background:{{o.bg}};color:{{o.c}}">{{o.l}}</button>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="field"><label>Ticker</label><input class="input" value="{{fTicker}}" onChange="{{onFTicker}}" placeholder="{{fTickerPh}}"></div>
+      <div class="field"><label>Date</label><input class="input" value="{{fDate}}" onChange="{{onFDate}}"></div>
+      <sc-if value="{{addIsTrade}}"><div class="field"><label>Shares</label><input class="input" value="{{fShares}}" onChange="{{onFShares}}" placeholder="100"></div></sc-if>
+      <div class="field"><label>{{fPriceLabel}}</label><input class="input" value="{{fPrice}}" onChange="{{onFPrice}}" placeholder="1050"></div>
+      <sc-if value="{{addIsTrade}}"><div class="field"><label>Fee · auto {{feeHint}}</label><input class="input" value="{{fFee}}" onChange="{{onFFee}}" placeholder="{{feeHint}}"></div></sc-if>
+      <div class="field"><label>Notes</label><input class="input" value="{{fNotes}}" onChange="{{onFNotes}}" placeholder="optional"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:10px" class="text-muted"><span>{{fMarket}}</span><span>{{fTotalLabel}} {{fTotal}}</span></div>
+    <sc-if value="{{addErr}}"><div style="font-size:12px;color:var(--pl-loss,#a3564e);margin-bottom:8px">{{addErrText}}</div></sc-if>
+    <button class="btn btn-primary btn-block" onClick="{{saveAdd}}">Save</button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{importOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:45;background:var(--app-bg);display:flex;flex-direction:column">
+  <div style="padding:60px 18px 10px;border-bottom:1px solid var(--app-line);display:flex;align-items:center;gap:10px;background:var(--app-card)">
+    <h3 style="margin:0;flex:1;font-size:22px">AI import</h3>
+    <button class="btn btn-secondary btn-icon" style="width:28px;height:28px" onClick="{{closeImport}}">✕</button>
+  </div>
+  <div style="flex:1;overflow:auto;padding:16px 18px 36px">
+    <sc-if value="{{imp0}}">
+      <div style="padding:26px 18px;text-align:center;border:1.5px dashed var(--color-accent-300);border-radius:16px;background:var(--app-card);margin-bottom:12px">
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:18px;margin-bottom:6px">Snap a brokerage statement</div>
+        <div style="font-size:12px;max-width:270px;margin:0 auto 14px" class="text-muted">A vision model extracts trades + dividends for review — nothing is written until you confirm. Taiwan company names resolve to stock codes.</div>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onClick="{{runImport}}">Use sample statement</button>
+          <button class="btn btn-secondary" onClick="{{runImport}}">Scan QR to phone</button>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:10px"><label>Note for the model (optional)</label><input class="input" value="{{impNote}}" onChange="{{onImpNote}}" placeholder="US trades are in USD · the 優群 row is 3217"></div>
+      <div style="font-size:11px" class="text-muted">Or upload a unified CSV — append or replace mode.</div>
+    </sc-if>
+    <sc-if value="{{imp1}}">
+      <div style="padding:36px 0;text-align:center">
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:18px;animation:st-pulse 1.2s infinite">✦ Parsing with vision model…</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:14px;font-size:12px" class="text-muted">
+          <span>✓ Reading document</span><span>✓ Resolving 長榮 → 2603</span><span>Matching columns…</span>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{imp2}}">
+      <div style="font-size:12px;margin-bottom:10px" class="text-muted">Found 2 trades and 1 dividend — review before saving.</div>
+      <sc-for list="{{impRows}}" as="r" hint-placeholder-count="3">
+        <div style="padding:12px;border-radius:14px;background:var(--app-card);box-shadow:0 1px 3px var(--app-shadow);margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="tag {{r.tagCls}}" style="width:56px;justify-content:center">{{r.tag}}</span>
+            <div style="flex:1"><div style="font-family:var(--font-heading);font-weight:600;font-size:15px">{{r.t}} <span style="font-weight:400;font-size:12.5px;color:var(--color-neutral-700)">{{r.name}}</span></div><div style="font-size:10.5px" class="text-muted">{{r.detail}}</div></div>
+          </div>
+        </div>
+      </sc-for>
+      <button class="btn btn-primary btn-block" onClick="{{confirmImport}}">Add all 3 records</button>
+    </sc-if>
+    <sc-if value="{{imp3}}">
+      <div style="padding:36px 0;text-align:center">
+        <div style="font-family:var(--font-heading);font-weight:600;font-size:20px;color:var(--pl-gain,#3d7a62)">✓ 3 records added</div>
+        <div style="font-size:12px;margin-top:6px" class="text-muted">Find them under Trades and Dividends.</div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{histOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:40;display:flex;align-items:flex-end;background:var(--app-scrim)" onClick="{{toggleHist}}">
+  <div style="width:100%;background:var(--app-bg);border-radius:22px 22px 0 0;box-shadow:0 -8px 30px var(--app-shadow-lg);padding:18px 18px 34px" onClick="{{stop}}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h4 style="margin:0">Chat history</h4>
+      <button class="btn btn-secondary" style="font-size:12px" onClick="{{newChat}}">Clear all</button>
+    </div>
+    <div style="background:var(--app-card);border-radius:14px;overflow:hidden">
+      <sc-for list="{{histRows}}" as="h" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid var(--app-line);cursor:pointer" onClick="{{h.open}}">
+          <div style="flex:1"><div style="font-size:13.5px;font-weight:500">{{h.t}}</div><div style="font-size:10.5px" class="text-muted">{{h.sub}}</div></div>
+          <svg width="8" height="14" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6" stroke="var(--color-neutral-400)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{idxEditOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:40;display:flex;align-items:flex-end;background:var(--app-scrim)" onClick="{{closeIndices}}">
+  <div style="width:100%;background:var(--app-bg);border-radius:22px 22px 0 0;box-shadow:0 -8px 30px var(--app-shadow-lg);padding:18px 18px 34px" onClick="{{stop}}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <h4 style="margin:0">Market indices</h4>
+      <button class="btn btn-secondary btn-icon" style="width:28px;height:28px" onClick="{{closeIndices}}">✕</button>
+    </div>
+    <div style="font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:6px">Your indices</div>
+    <div style="background:var(--app-card);border-radius:14px;overflow:hidden;margin-bottom:14px">
+      <sc-for list="{{idxOwned}}" as="i" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--app-line)">
+          <span style="color:var(--color-neutral-500);font-size:13px">≡</span>
+          <span style="flex:1;font-size:13.5px">{{i.name}}</span>
+          <span style="font-size:11px" class="text-muted">{{i.sym}}</span>
+          <button class="btn btn-icon btn-secondary" style="width:24px;height:24px;font-size:10px" onClick="{{i.remove}}">✕</button>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:6px">Suggestions</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      <sc-for list="{{idxSuggest}}" as="i" hint-placeholder-count="4">
+        <button class="btn btn-secondary" style="font-family:var(--font-body);font-weight:400;font-size:12px" onClick="{{i.add}}">{{i.name}} <span style="color:var(--color-neutral-500)">{{i.sym}}</span> ＋</button>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{aboutOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:45;background:var(--app-bg);display:flex;flex-direction:column">
+  <div style="padding:60px 18px 10px;border-bottom:1px solid var(--app-line);display:flex;align-items:center;gap:10px;background:var(--app-card)">
+    <h3 style="margin:0;flex:1;font-size:22px">Privacy &amp; disclosures</h3>
+    <button class="btn btn-secondary btn-icon" style="width:28px;height:28px" onClick="{{closeAbout}}">✕</button>
+  </div>
+  <div style="flex:1;overflow:auto;padding:18px;font-size:13px;line-height:1.65">
+    <p style="margin:0 0 14px">Your trades and dividends live in your own database — SQLite on disk or your Neon Postgres. Nothing is sent to us, and there is no analytics or telemetry in this app.</p>
+    <p style="margin:0 0 14px">Market data comes from public endpoints only: TWSE MIS for Taiwan quotes, Yahoo for US quotes and daily history, FinMind for Taiwan monthly revenue. No broker login is ever required.</p>
+    <p style="margin:0 0 14px">The assistant is opt-in. When you ask a question, your portfolio snapshot is sent to the provider you chose, using your own API key. The key is stored in the iOS Keychain and never on the server.</p>
+    <p style="margin:0 0 14px;font-weight:500">This app reports your own records and public data. It does not provide investment advice or recommendations, and prices may be delayed.</p>
+    <div style="font-size:11.5px" class="text-muted">Version 1.4.0 (218) · © 2026</div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{toast}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;left:18px;right:18px;bottom:100px;z-index:50;padding:11px 14px;border-radius:12px;background:rgba(29,31,32,.92);color:#fff;font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.25)">{{toastText}}</div>
+</sc-if>
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:460,&quot;height&quot;:940},&quot;appearance&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;System&quot;,&quot;options&quot;:[&quot;Light&quot;,&quot;Dark&quot;,&quot;System&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;plConvention&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;US (green = gain)&quot;,&quot;options&quot;:[&quot;US (green = gain)&quot;,&quot;TW (red = gain)&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;P&amp;L&quot;},&quot;startSignedIn&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo&quot;}}">
+class Component extends DCLogic {
+  H = [
+    {t:'2330',n:'台積電',en:'2330 · TSMC',m:'TW',sh:300,avg:985,px:1120,pc:1106,tax:.003,divs:12400,realized:8900,seed:7,lo:780,hi:1160,
+     stats:[['Prev close','1,106.00'],['Day range','1,102–1,124'],['Mkt cap','NT$29.0T'],['P/E','24.8'],['EPS ttm','45.10'],['Yield','1.6%'],['Beta','1.12'],['1-yr target','1,380'],['vs now','+23.2%']],
+     rev:[['09',269.9,39.6],['10',314.2,26.6],['11',276.1,25.6],['12',278.2,21.3],['01',293.3,35.9],['02',260.0,43.1],['03',285.9,46.9],['04',349.6,48.1],['05',320.5,39.6],['06',263.7,26.9],['07',323.2,25.8],['08',335.1,28.4]],
+     fin:[['2024 Q3','759.7','12.54','57.8%','47.5%'],['2024 Q4','868.5','14.45','59.0%','49.0%'],['2025 Q1','839.3','13.94','58.8%','48.5%'],['2025 Q2','933.8','15.36','58.6%','49.6%'],['2025 Q3','989.9','17.44','59.5%','50.6%'],['2025 Q4','1,046.0','18.11','60.1%','51.2%'],['2026 Q1','1,012.5','17.62','60.3%','51.0%'],['2026 Q2','1,089.4','19.05','61.1%','52.3%']]},
+    {t:'2454',n:'聯發科',en:'2454 · MediaTek',m:'TW',sh:100,avg:1180,px:1285,pc:1290,tax:.003,divs:6200,realized:0,seed:3,lo:930,hi:1420,
+     stats:[['Prev close','1,290.00'],['Day range','1,278–1,296'],['Mkt cap','NT$2.1T'],['P/E','19.2'],['EPS ttm','66.90'],['Yield','2.9%'],['Beta','1.24'],['1-yr target','1,520'],['vs now','+18.3%']],
+     rev:[['09',48.2,12.1],['10',52.6,9.4],['11',45.1,-3.2],['12',44.8,6.6],['01',51.2,14.8],['02',38.4,-8.1],['03',46.9,11.2],['04',49.7,16.4],['05',47.2,8.9],['06',44.1,3.4],['07',50.8,12.6],['08',52.1,14.1]],
+     fin:[['2024 Q3','131.9','16.32','48.8%','21.4%'],['2024 Q4','133.5','15.10','47.6%','20.1%'],['2025 Q1','141.2','18.05','48.1%','22.0%'],['2025 Q2','136.4','16.88','47.9%','21.2%'],['2025 Q3','146.7','19.24','48.4%','22.8%'],['2025 Q4','142.0','17.95','48.0%','21.6%'],['2026 Q1','150.3','20.11','48.9%','23.4%'],['2026 Q2','147.1','19.42','48.6%','23.0%']]},
+    {t:'3217',n:'優群',en:'3217 · Argosy',m:'TW',sh:1000,avg:98,px:103.5,pc:102.5,tax:.003,divs:3100,realized:0,seed:11,lo:64,hi:118,
+     stats:[['Prev close','102.50'],['Day range','101.5–104.0'],['Mkt cap','NT$18.9B'],['P/E','15.8'],['EPS ttm','6.55'],['Yield','3.8%'],['Beta','1.08'],['1-yr target','126.00'],['vs now','+21.7%']],
+     rev:[['09',0.62,18.2],['10',0.71,24.1],['11',0.66,15.6],['12',0.74,29.4],['01',0.69,21.8],['02',0.54,-4.2],['03',0.72,19.9],['04',0.78,26.5],['05',0.75,22.1],['06',0.70,14.8],['07',0.81,28.3],['08',0.84,31.0]],
+     fin:[['2024 Q3','1.84','1.41','29.2%','15.1%'],['2024 Q4','2.02','1.55','30.1%','16.0%'],['2025 Q1','1.91','1.48','29.8%','15.6%'],['2025 Q2','2.08','1.62','30.4%','16.4%'],['2025 Q3','2.15','1.68','30.9%','16.9%'],['2025 Q4','2.24','1.74','31.2%','17.2%'],['2026 Q1','2.11','1.66','31.0%','17.0%'],['2026 Q2','2.35','1.82','31.8%','17.9%']]},
+    {t:'00919',n:'群益台灣精選高息',en:'00919 · ETF',m:'TW',sh:4000,avg:23.4,px:24.85,pc:24.85,tax:.001,divs:11373,realized:0,seed:5,lo:21.2,hi:26.4,
+     stats:[['Prev close','24.85'],['Day range','24.80–24.92'],['AUM','NT$310B'],['Yield','9.1%'],['Beta','0.82'],['Expense','0.30%'],['Holdings','50'],['Next ex-div','Sep 17'],['Frequency','Quarterly']]},
+    {t:'NVDA',n:'NVIDIA',en:'NVDA · Nasdaq',m:'US',sh:40,avg:118.2,px:172.4,pc:173.0,divs:6,realized:412,seed:9,lo:98,hi:184,
+     stats:[['Prev close','173.00'],['Day range','171.2–174.6'],['Mkt cap','US$4.2T'],['P/E','47.5'],['EPS ttm','3.63'],['Yield','0.02%'],['Beta','1.70'],['1-yr target','205.00'],['vs now','+18.9%']],
+     fin:[['FY25 Q3','35.1','0.78','75.0%','62.3%'],['FY25 Q4','39.3','0.89','73.5%','61.1%'],['FY26 Q1','44.1','0.81','60.5%','48.6%'],['FY26 Q2','46.7','1.05','72.4%','57.9%'],['FY26 Q3','51.2','1.18','73.1%','59.4%'],['FY26 Q4','54.9','1.27','73.6%','60.1%'],['FY27 Q1','58.4','1.36','74.0%','60.8%'],['FY27 Q2','61.7','1.44','74.3%','61.2%']]},
+    {t:'VOO',n:'Vanguard S&P 500',en:'VOO · NYSE',m:'US',sh:12,avg:512,px:563.2,pc:562.5,divs:96,realized:0,seed:2,lo:471,hi:568,
+     stats:[['Prev close','562.50'],['Day range','561.1–564.0'],['AUM','US$1.5T'],['Yield','1.3%'],['Beta','1.00'],['Expense','0.03%'],['Holdings','504'],['Next ex-div','Sep 26'],['Frequency','Quarterly']]},
+    {t:'AAPL',n:'Apple',en:'AAPL · Nasdaq',m:'US',sh:25,avg:198,px:229.1,pc:229.6,divs:84,realized:0,seed:4,lo:186,hi:242,
+     stats:[['Prev close','229.60'],['Day range','227.9–230.8'],['Mkt cap','US$3.4T'],['P/E','34.1'],['EPS ttm','6.72'],['Yield','0.44%'],['Beta','1.10'],['1-yr target','248.00'],['vs now','+8.2%']],
+     fin:[['2024 Q3','94.9','1.64','46.2%','31.2%'],['2024 Q4','124.3','2.40','46.9%','34.5%'],['2025 Q1','95.4','1.65','46.6%','31.8%'],['2025 Q2','94.0','1.57','46.5%','30.9%'],['2025 Q3','102.5','1.79','47.2%','32.4%'],['2025 Q4','133.1','2.62','47.6%','35.1%'],['2026 Q1','101.8','1.82','47.4%','32.8%'],['2026 Q2','99.6','1.74','47.1%','32.1%']]}
+  ];
+  IDX=[
+    {sym:'^TWII',name:'加權指數',m:'TW',px:24186.4,chg:132.5,seed:21,o:24080,h:24240,l:24052},
+    {sym:'^TWOII',name:'櫃買指數',m:'TW',px:246.18,chg:1.84,seed:14,o:244.6,h:247.1,l:244.2},
+    {sym:'^GSPC',name:'S&P 500',m:'US',px:6428.6,chg:-9.4,seed:8,o:6440,h:6449,l:6421},
+    {sym:'^IXIC',name:'NASDAQ',m:'US',px:21344.2,chg:-42.8,seed:17,o:21390,h:21412,l:21308}
+  ];
+  SUGG=[['^DJI','Dow Jones'],['^SOX','費城半導體'],['^VIX','VIX'],['^N225','日經 225'],['^HSI','恒生指數']];
+  BENCH={TW:[['^TWII','加權指數'],['^TWOII','櫃買指數'],['0050.TW','元大台灣50']],US:[['^GSPC','S&P 500'],['^IXIC','NASDAQ'],['^DJI','Dow Jones']]};
+  state={
+    signedOut:true, tab:'overview', market:null, stock:null, sort:'mv',
+    dashPeriod:'1Y', stockPeriod:'1Y', nwPeriod:'1Y', perfPeriod:'MAX', benchIdx:0,
+    indexExpanded:false, idxSyms:['^TWII','^TWOII','^GSPC','^IXIC'], idxEditOpen:false,
+    tradesFilter:'All', statusFilter:'All', addOpen:false, addKind:'trade', fType:'buy',
+    fTicker:'', fShares:'', fPrice:'', fFee:'', fNotes:'', fDate:'2026-08-17', addErr:'', fMarket:null,
+    importOpen:false, importStep:0, impNote:'', histOpen:false, aboutOpen:false,
+    provider:'Claude', apiKey:'sk-ant-api03-x9Kd2mQ', backendUrl:'https://stock-tracker-api.onrender.com',
+    showReasoning:true, bgGen:true, toast:'', tickN:0, appearance:'System',
+    chatInput:'', chat:[], generating:false, drift:{},
+    trades:[
+      {y:'sell',t:'NVDA',n:'NVIDIA',m:'US',sh:5,px:200.6,d:'2026-05-11',fee:1,st:'Closed',pl:412},
+      {y:'buy',t:'3217',n:'優群',m:'TW',sh:1000,px:98,d:'2026-04-22',fee:140,st:'Open'},
+      {y:'buy',t:'2330',n:'台積電',m:'TW',sh:100,px:1035,d:'2026-03-06',fee:148,st:'Open'},
+      {y:'sell',t:'2317',n:'鴻海',m:'TW',sh:2000,px:128,d:'2026-02-24',fee:365,st:'Closed',pl:51344},
+      {y:'buy',t:'AAPL',n:'Apple',m:'US',sh:25,px:198,d:'2026-02-10',fee:1,st:'Open'},
+      {y:'buy',t:'2454',n:'聯發科',m:'TW',sh:100,px:1180,d:'2026-01-15',fee:168,st:'Open'},
+      {y:'buy',t:'VOO',n:'Vanguard S&P 500',m:'US',sh:12,px:512,d:'2026-01-05',fee:1,st:'Open'},
+      {y:'buy',t:'NVDA',n:'NVIDIA',m:'US',sh:45,px:118.2,d:'2025-12-18',fee:1,st:'Open'},
+      {y:'buy',t:'2330',n:'台積電',m:'TW',sh:200,px:960,d:'2025-11-12',fee:274,st:'Open'},
+      {y:'buy',t:'00919',n:'群益台灣精選高息',m:'TW',sh:4000,px:23.4,d:'2025-10-02',fee:133,st:'Open'},
+      {y:'buy',t:'2317',n:'鴻海',m:'TW',sh:2000,px:102,d:'2025-09-18',fee:291,st:'Closed'}
+    ],
+    dividends:[
+      {t:'3217',n:'優群',m:'TW',amt:3100,d:'2026-08-06',note:'現金股利 3.1/股'},
+      {t:'2454',n:'聯發科',m:'TW',amt:6200,d:'2026-07-30',note:'現金股利 62.0/股'},
+      {t:'00919',n:'群益台灣精選高息',m:'TW',amt:2160,d:'2026-07-17',note:'Q2 配息 0.54/股'},
+      {t:'VOO',n:'Vanguard S&P 500',m:'US',amt:21.4,d:'2026-06-27',note:'Q2 distribution'},
+      {t:'2330',n:'台積電',m:'TW',amt:3900,d:'2026-06-12',note:'現金股利 13.0/股'},
+      {t:'AAPL',n:'Apple',m:'US',amt:6.5,d:'2026-05-15',note:'Q2 dividend'},
+      {t:'00919',n:'群益台灣精選高息',m:'TW',amt:2133,d:'2026-04-17',note:'Q1 配息 0.53/股'},
+      {t:'2330',n:'台積電',m:'TW',amt:3600,d:'2026-03-12',note:'現金股利 12.0/股'}
+    ],
+    calendar:[
+      {t:'00919',n:'群益台灣精選高息',m:'TW',ex:'2026-09-17',pay:'Oct 15',est:2200,rate:'0.55/sh'},
+      {t:'2330',n:'台積電',m:'TW',ex:'2026-09-18',pay:'Oct 09',est:4500,rate:'15.0/sh'},
+      {t:'VOO',n:'Vanguard S&P 500',m:'US',ex:'2026-09-26',pay:'Sep 30',est:21.8,rate:'1.82/sh'},
+      {t:'AAPL',n:'Apple',m:'US',ex:'2026-11-07',pay:'Nov 13',est:6.75,rate:'0.27/sh'}
+    ]
+  };
+  GC='var(--pl-gain,#3d7a62)'; LC='var(--pl-loss,#a3564e)'; MU='var(--color-neutral-600)';
+  componentDidMount(){ this.applyTweaks(); this.timer=setInterval(()=>this.tick(),5000); }
+  componentWillUnmount(){ clearInterval(this.timer); if(this.toastT)clearTimeout(this.toastT); }
+  componentDidUpdate(){ this.applyTweaks(); }
+  applyTweaks(){
+    const tw=(this.props.plConvention ?? 'US (green = gain)').startsWith('TW');
+    const el=document.documentElement, s=el.style;
+    const dark=this.isDark();
+    s.setProperty('--pl-gain', tw?(dark?'#c2726a':'#a3564e'):(dark?'#5fa285':'#3d7a62'));
+    s.setProperty('--pl-loss', tw?(dark?'#5fa285':'#3d7a62'):(dark?'#c2726a':'#a3564e'));
+    el.setAttribute('data-appearance', dark?'dark':'light');
+  }
+  isDark(){
+    const mode=this.state.appearance ?? (this.props.appearance ?? 'System');
+    if(mode==='Dark') return true;
+    if(mode==='Light') return false;
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+  // TW is in session → live quotes jitter every 5s, like the MIS poll. US is closed, frozen.
+  tick(){
+    if(this.state.signedOut) return;
+    const d={...this.state.drift};
+    for(const h of this.H){ if(h.m!=='TW') continue;
+      const step=h.px*(Math.random()-0.48)*0.0016;
+      d[h.t]=Math.max(-h.px*0.02,Math.min(h.px*0.02,(d[h.t]||0)+step)); }
+    this.setState({drift:d,tickN:this.state.tickN+1});
+  }
+  px(h){ return h.px+(this.state.drift[h.t]||0); }
+  clock(){ const t=new Date(2026,7,17,14,32,7+this.state.tickN*5); return t.toTimeString().slice(0,8); }
+  toast(msg){ this.setState({toast:msg}); if(this.toastT)clearTimeout(this.toastT); this.toastT=setTimeout(()=>this.setState({toast:''}),2200); }
+  fN(n){ return Math.round(n).toLocaleString('en-US'); }
+  f2(n){ return n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  sgn(n,s){ return (n<0?'−':'+')+s; }
+  col(n){ return n<0?this.LC:(n>0?this.GC:this.MU); }
+  cur(m){ return m==='TW'?'NT$':'US$'; }
+  compact(v,c){ const s=c==='TW'?'NT$':'US$', n=Math.abs(v);
+    const [d,x]=n>=1e9?[1e9,'B']:n>=1e6?[1e6,'M']:n>=1e3?[1e3,'K']:[1,''];
+    return (v<0?'−':'')+s+(n/d).toFixed(x&&n/d<10?1:0)+x; }
+  pctF(v,dg){ return (v>0?'+':v<0?'−':'')+Math.abs(v).toFixed(dg==null?2:dg)+'%'; }
+  metrics(h){
+    const px=this.px(h), mv=h.sh*px, cost=h.sh*h.avg;
+    const exit=h.m==='TW'? mv*0.001425+mv*h.tax : 0;
+    const un=mv-cost-exit, gp=un/cost*100, chg=px-h.pc, tp=chg/h.pc*100, ta=chg*h.sh;
+    return {px,mv,cost,un,gp,chg,tp,ta};
+  }
+  rng(seed){ let s=(seed>>>0)||1; return ()=>{ s=(s*1664525+1013904223)>>>0; return s/4294967296; }; }
+  pts(seed,n,a,b,vol){ const r=this.rng(seed*97+13),o=[]; for(let i=0;i<n;i++){ const t=i/(n-1);
+    o.push(Math.max(.04,Math.min(.96,a+(b-a)*(t*t*.35+t*.65)+(r()-.5)*(vol==null?.16:vol)*(1-t*.2)))); } return o; }
+  path(p,x0,w,h,pad){ let d=''; const n=p.length;
+    for(let i=0;i<n;i++){ const x=x0+(i/(n-1))*(w-x0), y=h-pad-p[i]*(h-2*pad); d+=(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); }
+    return d; }
+  seg(list,cur,set){ return list.map(l=>({l,bg:l===cur?'var(--color-accent)':'transparent',c:l===cur?'#fff':'var(--color-neutral-700)',set:()=>set(l)})); }
+  parseDraft(q){
+    const m=q.match(/(?:bought|buy|sold|sell)\s+([\d,\.]+)\s*(?:shares?|sh)?\s*(?:of\s+)?([A-Za-z]{1,5}|\d{4,6}[A-Z]?)\s*(?:at|@)\s*([\d\.,]+)/i);
+    if(!m) return null;
+    const sell=/sold|sell/i.test(q.match(/bought|buy|sold|sell/i)[0]);
+    return {side:sell?'Sell':'Buy',sh:parseFloat(m[1].replace(/,/g,'')),t:m[2].toUpperCase(),px:parseFloat(m[3].replace(/,/g,''))};
+  }
+  push(msg){ this.setState(s=>({chat:[...s.chat,msg]})); return msg; }
+  stream(msg,full,done){
+    const t0=Date.now(),cps=190; msg.full=full;
+    this.iv=setInterval(()=>{ if(this.stopped){ clearInterval(this.iv); return; }
+      const i=Math.round((Date.now()-t0)/1000*cps); msg.text=full.slice(0,i); this.forceUpdate();
+      if(i>=full.length){ clearInterval(this.iv); msg.text=full; if(done)done(); this.forceUpdate(); } },90);
+  }
+  stopGen(){ this.stopped=true; clearInterval(this.iv); this.setState({generating:false}); }
+  sendChat(){
+    const q=this.state.chatInput.trim(); if(!q||this.state.generating) return;
+    this.stopped=false;
+    this.setState({chatInput:'',generating:true});
+    this.push({k:'u',text:q});
+    const draft=this.parseDraft(q);
+    if(draft){
+      setTimeout(()=>this.push({k:'s',text:'add_trade · resolving '+draft.t+(/^\d/.test(draft.t)?' → Taiwan (TWD)':' → US (USD)')}),450);
+      setTimeout(()=>{ const fee=/^\d/.test(draft.t)?Math.max(20,Math.round(draft.sh*draft.px*0.001425)):1;
+        this.push({k:'c',side:draft.side,t:draft.t,sh:draft.sh,px:draft.px,fee,added:false,dismissed:false});
+        this.setState({generating:false}); },1250);
+      return;
+    }
+    const isMargin=/margin|2330|tsmc|台積/i.test(q);
+    const isNews=/news|latest|新聞/i.test(q);
+    const isPerf=/perform|beat|twr|xirr|benchmark|加權/i.test(q);
+    setTimeout(()=>this.push({k:'s',text:'get_portfolio_summary · reading holdings…'}),380);
+    if(isMargin) setTimeout(()=>this.push({k:'s',text:'get_financials · 8 quarters for 2330…'}),950);
+    if(isNews) setTimeout(()=>this.push({k:'s',text:'web_search · "2330 latest news"…'}),950);
+    if(isPerf) setTimeout(()=>this.push({k:'s',text:'get_performance · TWR / XIRR vs 加權指數…'}),950);
+    setTimeout(()=>{
+      const think=this.push({k:'t',text:'',open:this.state.showReasoning,dur:''});
+      const ttxt=isMargin?'Pulling quarterly_income_stmt for 2330 and comparing gross margin across the last eight quarters; checking trend direction and the latest QoQ step before answering.'
+        :isNews?'Searching for recent coverage, then keeping only items from the last two weeks and attributing each claim to its source.'
+        :isPerf?'Time-weighted return removes the effect of my deposits, money-weighted (XIRR) does not. Comparing TWR against the index over the same window is the fair read.'
+        :'Summing both markets at the live USD↔TWD rate, then ranking positions by unrealized gain and today\u2019s move to surface what actually matters.';
+      this.stream(think,ttxt,()=>{
+        think.open=false; think.dur='· 3.2 s';
+        const a=this.push({k:'a',text:'',table:null,showTable:false,note:true});
+        if(isMargin){
+          a.th1='Quarter'; a.th2='Revenue'; a.th3='Gross margin';
+          this.stream(a,'Yes — gross margin has widened for four straight quarters, now 61.1% (+0.8 pts QoQ, +2.5 pts YoY). Operating margin followed it up to 52.3%.',()=>{
+            a.table=[{a:'2025 Q3',b:'NT$989.9B',c:'59.5%',c2:'inherit'},{a:'2025 Q4',b:'NT$1,046.0B',c:'60.1%',c2:'inherit'},{a:'2026 Q1',b:'NT$1,012.5B',c:'60.3%',c2:'inherit'},{a:'2026 Q2',b:'NT$1,089.4B',c:'61.1% ▲',c2:this.GC}];
+            a.showTable=true; this.setState({generating:false}); });
+        } else if(isNews){
+          this.stream(a,'Three things from the last two weeks: advanced-node capacity is reported sold out through next year, the August revenue print came in at NT$335.1B (+28.4% YoY), and analysts have nudged the 12-month target to NT$1,380.\n\nI can only relay what the sources say — no view on whether to buy or sell.',()=>{
+            a.sources=[{n:'1',t:'Monthly revenue release'},{n:'2',t:'Analyst target roundup'}]; a.hasSources=true; a.note=false;
+            this.setState({generating:false}); });
+        } else if(isPerf){
+          a.th1='Window'; a.th2='Portfolio (TWR)'; a.th3='加權指數';
+          this.stream(a,'Since inception your TWR is +24.8% against +16.1% for 加權指數 — ahead by 8.7 points. XIRR, which counts when you actually put money in, is +21.4% a year.',()=>{
+            a.table=[{a:'3M',b:'+6.2%',c:'+4.1%',c2:'inherit'},{a:'YTD',b:'+18.4%',c:'+11.9%',c2:'inherit'},{a:'1Y',b:'+22.1%',c:'+14.8%',c2:'inherit'},{a:'MAX',b:'+24.8%',c:'+16.1%',c2:this.GC}];
+            a.showTable=true; this.setState({generating:false}); });
+        } else {
+          const v=this.totals();
+          this.stream(a,'Net worth is '+v.nwTW+' (≈ '+v.nwUS+'), '+v.todayPhrase+'.\n\nTaiwan is '+v.twMVF+' across 4 positions and '+Math.round(v.twMV/v.nw*100)+'% of the total; the US sleeve is '+v.usMVF+'. Best position: NVDA at +45.9% unrealized. Biggest move today: 2330.',()=>{
+            this.setState({generating:false}); });
+        }
+      });
+    }, isMargin||isNews||isPerf?1700:1050);
+  }
+  totals(){
+    const fx=29.45; let twMV=0,twUn=0,twTa=0,usMV=0,usUn=0,usTa=0,twCost=0,usCost=0;
+    for(const h of this.H){ const x=this.metrics(h);
+      if(h.m==='TW'){twMV+=x.mv;twUn+=x.un;twTa+=x.ta;twCost+=x.cost;} else {usMV+=x.mv;usUn+=x.un;usTa+=x.ta;usCost+=x.cost;} }
+    const twRe=51344,twDv=33073,usRe=412,usDv=186;
+    const twTR=twUn+twRe+twDv, usTR=usUn+usRe+usDv;
+    const nw=twMV+usMV*fx, nwT=twTa+usTa*fx;
+    const earned=twRe+twDv+(usRe+usDv)*fx, unreal=twUn+usUn*fx, tr=twTR+usTR*fx;
+    return {fx,twMV,twUn,twTa,twRe,twDv,twTR,twCost,usMV,usUn,usTa,usRe,usDv,usTR,usCost,nw,nwT,earned,unreal,tr,
+      nwTW:'NT$'+this.fN(nw), nwUS:'US$'+this.fN(nw/fx), twMVF:'NT$'+this.fN(twMV), usMVF:'US$'+this.fN(usMV),
+      todayPhrase:(nwT<0?'down ':'up ')+'NT$'+this.fN(Math.abs(nwT))+' today ('+this.pctF(nwT/nw*100)+')'};
+  }
+  renderVals(){
+    const S=this.state, v=this.totals(), fx=v.fx, clock=this.clock();
+    const go=t=>()=>this.setState({tab:t,market:null,stock:null});
+    const isOv=S.tab==='overview', mkt=S.market, isTW=mkt==='TW';
+    // iOS tab bar: solid glyph when selected, hairline outline when not.
+    const tabDefs=[
+      ['overview','Overview',
+        'M4 13.2 12 6l8 7.2V20a1 1 0 0 1-1 1h-4.5v-5.6h-5V21H5a1 1 0 0 1-1-1z',
+        'M4 13.2 12 6l8 7.2V20a1 1 0 0 1-1 1h-4.5v-5.6h-5V21H5a1 1 0 0 1-1-1z'],
+      ['trades','Trades',
+        'M4 16.5h9.5l-2.6-2.6a1 1 0 0 1 1.4-1.4l4.3 4.3a1 1 0 0 1 0 1.4l-4.3 4.3a1 1 0 0 1-1.4-1.4l2.6-2.6H4zM20 7.5h-9.5l2.6-2.6a1 1 0 0 0-1.4-1.4L7.4 7.8a1 1 0 0 0 0 1.4l4.3 4.3a1 1 0 0 0 1.4-1.4L10.5 9.5H20z',
+        'M4 16.5h13M13.5 13l3.5 3.5-3.5 3.5M20 7.5H7M10.5 4 7 7.5 10.5 11'],
+      ['assistant','Assistant',
+        'M9.5 2.8l1.45 3.75c.2.52.6.92 1.12 1.12L15.8 9.1l-3.73 1.45c-.52.2-.92.6-1.12 1.12L9.5 15.4l-1.45-3.73c-.2-.52-.6-.92-1.12-1.12L3.2 9.1l3.73-1.45c.52-.2.92-.6 1.12-1.12zM17.5 13.4l.78 2.02c.11.28.33.5.61.61L20.9 16.8l-2.01.77c-.28.11-.5.33-.61.61l-.78 2.02-.77-2.02a1.1 1.1 0 0 0-.61-.61L14.1 16.8l2.02-.77c.28-.11.5-.33.61-.61z',
+        'M9.5 3.6l1.3 3.35c.23.6.7 1.07 1.3 1.3L15.45 9.1 12.1 10.4c-.6.23-1.07.7-1.3 1.3L9.5 15.05 8.2 11.7c-.23-.6-.7-1.07-1.3-1.3L3.55 9.1 6.9 7.8c.6-.23 1.07-.7 1.3-1.3zM17.5 14.3l.6 1.56c.13.34.4.6.74.73l1.56.6-1.56.6c-.34.13-.61.4-.74.74l-.6 1.55-.6-1.55a1.3 1.3 0 0 0-.73-.74l-1.56-.6 1.56-.6c.34-.13.6-.4.73-.73z'],
+      ['dividends','Dividends',
+        'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m1.1 4.6v1.2c1.3.2 2.3.8 2.9 1.6l-1.6 1.2c-.4-.5-1-.9-1.9-1V12c2 .5 3.4 1.3 3.4 3.2 0 1.7-1.3 2.9-3.3 3.1v1.2h-2.1v-1.2c-1.5-.2-2.7-.9-3.4-1.9l1.7-1.2c.4.6 1 1 1.9 1.2v-2.5c-2-.5-3.3-1.3-3.3-3.1 0-1.7 1.3-2.8 3.2-3V6.6z',
+        'M12 3.2v17.6M15.8 8.1c-.6-1-1.9-1.7-3.6-1.7-2.2 0-3.6 1.1-3.6 2.8 0 2 1.6 2.7 3.9 3.2 2.4.5 4 1.2 4 3.3 0 1.8-1.5 3-4 3-1.9 0-3.4-.7-4.2-2'],
+      ['settings','Settings',
+        'M4 7.5h2.2a3.4 3.4 0 0 1 6.6 0H20a1 1 0 0 1 0 2h-7.2a3.4 3.4 0 0 1-6.6 0H4a1 1 0 0 1 0-2m0 7h7.2a3.4 3.4 0 0 1 6.6 0H20a1 1 0 0 1 0 2h-2.2a3.4 3.4 0 0 1-6.6 0H4a1 1 0 0 1 0-2',
+        'M4 8.5h4.5M13.5 8.5H20M4 15.5h6.5M15.5 15.5H20M11 8.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0M8 15.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0']
+    ].map(t=>{ const on=S.tab===t[0] || (t[0]==='overview'&&isOv);
+      return {l:t[1], d:on?t[2]:t[3], go:go(t[0]),
+        fill:on?'currentColor':'none', sw:on?'0':'1.7', fw:on?'600':'400',
+        bg:'transparent', c:on?'var(--color-accent-600)':'var(--color-neutral-500)'}; });
+    const sessions=[{code:'TW',open:true},{code:'US',open:false}].map(s=>({
+      label:s.code, open:s.open,
+      bg:s.open?'var(--color-accent-100)':'var(--color-neutral-200)',
+      c:s.open?'var(--color-accent-800)':'var(--color-neutral-700)',
+      dot:s.open?this.GC:'var(--color-neutral-500)'}));
+    // net-worth history
+    const nwN={'1M':22,'3M':32,'6M':40,'YTD':44,'1Y':52,'MAX':64}[S.nwPeriod]||52;
+    const nwStart={'1M':.86,'3M':.74,'6M':.6,'YTD':.5,'1Y':.3,'MAX':.12}[S.nwPeriod];
+    const nwP=this.pts(31+nwN,nwN,nwStart,.93,.07);
+    const nwLine=this.path(nwP,34,330,120,14), nwArea=nwLine+'L330 106L34 106Z';
+    const nwLo=v.nw*(0.62+nwStart*0.3), nwChg=v.nw-nwLo;
+    const marketCards=[
+      {code:'TW',title:'Taiwan',cur:'TWD',mv:v.twMV,un:v.twUn,ta:v.twTa,re:v.twRe,dv:v.twDv,tr:v.twTR,cost:v.twCost,share:v.twMV/v.nw*100,session:'Open · 09:00–13:30',open:()=>this.setState({market:'TW'})},
+      {code:'US',title:'US',cur:'USD',mv:v.usMV,un:v.usUn,ta:v.usTa,re:v.usRe,dv:v.usDv,tr:v.usTR,cost:v.usCost,share:v.usMV*fx/v.nw*100,session:'Closed · opens 21:30',open:()=>this.setState({market:'US'})}
+    ].map(m=>{ const c=m.code==='TW'?'NT$':'US$'; const f=n=>this.sgn(n,c+this.fN(Math.abs(n)));
+      return {...m, mvF:c+this.fN(m.mv), shareF:Math.round(m.share)+'%',
+        rows:[{k:'Today',v:f(m.ta),c:this.col(m.ta),extra:this.pctF(m.ta/m.mv*100)},
+              {k:'Unrealized',v:f(m.un),c:this.col(m.un),extra:this.pctF(m.un/m.cost*100)},
+              {k:'Realized',v:f(m.re),c:this.col(m.re),extra:''},
+              {k:'Dividends',v:c+this.fN(m.dv),c:'var(--color-text)',extra:''}],
+        trF:f(m.tr), trC:this.col(m.tr), trPctF:this.pctF(m.tr/m.cost*100,1)}; });
+    // market dashboard
+    const list=this.H.filter(h=>h.m===mkt);
+    const sorted=[...list].sort((a,b)=>{ const A=this.metrics(a),B=this.metrics(b);
+      return S.sort==='mv'?B.mv-A.mv:S.sort==='today'?Math.abs(B.tp)-Math.abs(A.tp):B.gp-A.gp; });
+    const mkMV=list.reduce((s,h)=>s+this.metrics(h).mv,0);
+    const mkRows=sorted.map(h=>{ const x=this.metrics(h); return {
+      t:h.t,name:h.n,sub:this.fN(h.sh)+' sh · avg '+this.f2(h.avg)+' · '+(x.mv/mkMV*100).toFixed(1)+'%',
+      weight:Math.min(100,x.mv/mkMV*100).toFixed(1)+'%',
+      pxF:this.f2(x.px),mvF:this.compact(x.mv,h.m),
+      todF:(x.tp>0?'▲ ':x.tp<0?'▼ ':'')+Math.abs(x.tp).toFixed(2)+'%',todC:this.col(x.tp),
+      unF:this.sgn(x.un,this.compact(Math.abs(x.un),h.m).replace(/^[−]/,'')),gainF:this.pctF(x.gp,1),gainC:this.col(x.un),
+      open:()=>this.setState({stock:h.t,stockPeriod:'1Y'})};});
+    const mUn=isTW?v.twUn:v.usUn,mRe=isTW?v.twRe:v.usRe,mDv=isTW?v.twDv:v.usDv,mCost=isTW?v.twCost:v.usCost;
+    const c=isTW?'NT$':'US$', mEarn=mRe+mDv, mRet=mEarn+mUn, mTa=isTW?v.twTa:v.usTa;
+    const dashN={'1M':22,'3M':30,'1Y':46,'MAX':56}[S.dashPeriod]||46;
+    const dashP=this.pts(7+dashN,dashN,.1,.88,.06);
+    const dashLine=this.path(dashP,34,330,110,14), dashArea=dashLine+'L330 96L34 96Z';
+    // performance
+    const perfN={'3M':24,'6M':32,'YTD':40,'1Y':48,'MAX':60}[S.perfPeriod]||60;
+    const perfEnd={'3M':.62,'6M':.7,'YTD':.8,'1Y':.86,'MAX':.92}[S.perfPeriod];
+    const pP=this.pts(41+perfN,perfN,.2,perfEnd,.05), bP=this.pts(53+perfN,perfN,.2,perfEnd*0.66,.05);
+    const benchList=this.BENCH[mkt||'TW'], bench=benchList[S.benchIdx%benchList.length];
+    const twrV={'3M':6.2,'6M':11.4,'YTD':18.4,'1Y':22.1,'MAX':24.8}[S.perfPeriod];
+    const bmV={'3M':4.1,'6M':7.9,'YTD':11.9,'1Y':14.8,'MAX':16.1}[S.perfPeriod];
+    const mRng=this.rng(mkt==='US'?5:9);
+    const monthlyBars=['09','10','11','12','01','02','03','04','05','06','07','08'].map(m=>{ const val=(mRng()-0.34)*2;
+      return {m, h:(Math.abs(val)*44+6).toFixed(0)+'px', up:val>=0?'100%':'42%', c:val>=0?this.GC:this.LC}; });
+    // stock detail
+    const h=this.H.find(x=>x.t===S.stock); let st={};
+    if(h){ const x=this.metrics(h);
+      const sn={'1M':22,'3M':30,'6M':38,'1Y':46,'2Y':52,'5Y':58,'All':64}[S.stockPeriod]||46;
+      const sp=this.pts(h.seed*10+sn,sn,.22,.78,.14), W=300,HT=132,PAD=14;
+      const xy=f=>{ const i=Math.max(0,Math.min(sn-1,Math.round(f*(sn-1)))); return [f*W,HT-PAD-sp[i]*(HT-2*PAD)]; };
+      const tris=[],dots=[];
+      for(const tr of S.trades.filter(t=>t.t===h.t)){ const f=.06+((tr.d.charCodeAt(8)*31+tr.d.charCodeAt(9)*7)%86)/100;
+        const [mx,my]=xy(f);
+        tris.push(tr.y==='buy'?{d:'M'+mx.toFixed(1)+' '+(my+5).toFixed(1)+' l-5 9 h10 z',fill:this.GC}:{d:'M'+mx.toFixed(1)+' '+(my-5).toFixed(1)+' l-5 -9 h10 z',fill:this.LC}); }
+      for(const dv of S.dividends.filter(t=>t.t===h.t).slice(0,3)){ const f=.1+((dv.d.charCodeAt(6)*17+dv.d.charCodeAt(9)*11)%78)/100;
+        const [mx,my]=xy(f); dots.push({cx:mx.toFixed(1),cy:my.toFixed(1)}); }
+      const total=x.un+h.realized+h.divs;
+      const recs=[...S.trades.filter(t=>t.t===h.t).map(t=>({tag:t.y==='buy'?'BUY':'SELL',tagCls:t.y==='buy'?'tag-accent':'tag-outline',
+          detail:this.fN(t.sh)+' × '+this.f2(t.px)+' · fee '+this.fN(t.fee),d:t.d})),
+        ...S.dividends.filter(t=>t.t===h.t).map(t=>({tag:'DIV',tagCls:'tag-neutral',detail:this.cur(t.m)+this.fN(t.amt)+' · '+t.note,d:t.d}))]
+        .sort((a,b)=>a.d<b.d?1:-1).slice(0,6);
+      const rev=h.rev||[];
+      const revMax=rev.length?Math.max(...rev.map(r=>r[1])):1;
+      st={
+        stName:h.n,stCode:h.en,stPxF:this.f2(x.px),
+        stChgF:(x.chg>=0?'▲ ':'▼ ')+this.f2(Math.abs(x.chg))+' ('+this.pctF(x.tp)+')',stChgC:this.col(x.chg),
+        stSource:h.m==='TW'?'TWSE MIS · live':'Yahoo · 15 m delayed',
+        stPath:this.path(sp,0,W,HT,PAD),stArea:this.path(sp,0,W,HT,PAD)+'L300 118L0 118Z',
+        stTris:tris,stDivMarks:dots,stAxHi:this.f2(h.hi),stAxLo:this.f2(h.lo),
+        stHiF:this.f2(h.hi),stLoF:this.f2(h.lo),
+        stRangeW:Math.round((x.px-h.lo)/(h.hi-h.lo)*100)+'%',
+        stStats:h.stats.map(s=>({k:s[0],v:s[1]})),
+        stPos:[
+          {k:'Shares · avg cost',v:this.fN(h.sh)+' @ '+this.f2(h.avg),c:'inherit'},
+          {k:'Market value',v:this.cur(h.m)+this.fN(x.mv),c:'inherit'},
+          {k:'Unrealized (net)',v:this.sgn(x.un,this.fN(Math.abs(x.un)))+' · '+this.pctF(x.gp,1),c:this.col(x.un)},
+          {k:'Dividends',v:this.cur(h.m)+this.fN(h.divs),c:'inherit'},
+          {k:'Realized',v:h.realized?this.sgn(h.realized,this.cur(h.m)+this.fN(Math.abs(h.realized))):'—',c:h.realized?this.col(h.realized):'inherit'},
+          {k:'Total return',v:this.sgn(total,this.cur(h.m)+this.fN(Math.abs(total)))+' · '+this.pctF(total/x.cost*100,1),c:this.col(total)}
+        ],
+        stHasRevenue:rev.length>0,
+        revBars:rev.map(r=>({m:r[0],h:Math.max(6,r[1]/revMax*78).toFixed(0)+'px',c:r[2]>=0?'var(--color-accent-500)':'var(--color-neutral-400)'})),
+        revLatestM:rev.length?'2026-'+rev[rev.length-1][0]:'',
+        revLatestV:rev.length?(h.m==='TW'?'NT$'+this.f2(rev[rev.length-1][1])+'B':''):'',
+        revYoY:rev.length?this.pctF(rev[rev.length-1][2],1):'',
+        revYoYC:rev.length?this.col(rev[rev.length-1][2]):this.MU,
+        stHasFin:!!h.fin,
+        finRows:(h.fin||[]).map((f,i,arr)=>({q:f[0],rev:f[1],eps:f[2],gm:f[3],om:f[4],
+          gmC:i>0&&parseFloat(f[3])>parseFloat(arr[i-1][3])?this.GC:'inherit'})),
+        stRecords:recs, stNoRecords:recs.length===0
+      };
+    }
+    // trades
+    const tf=S.tradesFilter, sf=S.statusFilter;
+    const shown=S.trades.filter(r=>(tf==='All'||r.m===tf)&&(sf==='All'||r.st===sf));
+    const tradeRows=shown.map((r,i)=>({
+      tag:r.y==='buy'?'BUY':'SELL',tagCls:r.y==='buy'?'tag-accent':'tag-outline',t:r.t,name:r.n,d:r.d,
+      detail:this.fN(r.sh)+' × '+this.f2(r.px)+' · fee '+this.fN(r.fee)+' · '+this.cur(r.m)+this.fN(r.sh*r.px),
+      plF:r.pl?'Realized '+this.sgn(r.pl,this.cur(r.m)+this.fN(Math.abs(r.pl))):'',plC:r.pl?this.col(r.pl):'transparent',
+      st:r.st,stC:r.st==='Open'?'var(--color-accent-700)':'var(--color-neutral-500)',
+      del:()=>{ this.setState(s=>({trades:s.trades.filter(x=>x!==r)})); this.toast('Trade deleted'); }}));
+    const buys=shown.filter(r=>r.y==='buy').length;
+    // dividends
+    const divRows=S.dividends.map(r=>({t:r.t,name:r.n,sub:r.d+' · '+r.note,
+      amtF:this.cur(r.m)+(r.m==='US'?this.f2(r.amt):this.fN(r.amt)),
+      del:()=>{ this.setState(s=>({dividends:s.dividends.filter(x=>x!==r)})); this.toast('Dividend deleted'); }}));
+    const twYTD=S.dividends.filter(d=>d.m==='TW').reduce((a,b)=>a+b.amt,0);
+    const usYTD=S.dividends.filter(d=>d.m==='US').reduce((a,b)=>a+b.amt,0);
+    const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const calRows=S.calendar.map(r=>({t:r.t,name:r.n,day:r.ex.slice(8),mon:MON[+r.ex.slice(5,7)-1],
+      detail:'Ex-div '+r.ex+' · pays '+r.pay+' · '+r.rate,
+      estF:this.cur(r.m)+(r.m==='US'?this.f2(r.est):this.fN(r.est))}));
+    // chat
+    const msgs=S.chat.map(m=>({
+      isU:m.k==='u',isS:m.k==='s',isT:m.k==='t',isA:m.k==='a',isCard:m.k==='c'&&!m.dismissed,
+      text:m.text,dur:m.dur||'',open:!!m.open,chev:m.open?'rotate(90deg)':'rotate(0deg)',
+      toggle:()=>{m.open=!m.open;this.forceUpdate();},
+      table:m.table||[],showTable:!!m.showTable,th1:m.th1||'',th2:m.th2||'',th3:m.th3||'',
+      sources:m.sources||[],hasSources:!!m.hasSources,note:!!m.note,
+      side:m.side||'',t:m.t||'',shPx:m.k==='c'?this.fN(m.sh)+' @ '+this.f2(m.px):'',
+      dateFee:m.k==='c'?'Aug 17 · '+m.fee:'',pending:m.k==='c'&&!m.added,added:!!m.added,
+      dismiss:()=>{m.dismissed=true;this.forceUpdate();},
+      add:()=>{ m.added=true;
+        const known=this.H.find(x=>x.t===m.t);
+        this.setState(s=>({trades:[{y:m.side==='Buy'?'buy':'sell',t:m.t,n:known?known.n:m.t,m:/^\d/.test(m.t)?'TW':'US',sh:m.sh,px:m.px,d:'2026-08-17',fee:m.fee,st:m.side==='Buy'?'Open':'Closed'},...s.trades]}));
+        this.toast('Trade saved · FIFO recalculated'); }
+    }));
+    const chips=["Is 2330's gross margin improving?","Am I beating 加權指數?","What's the latest news on 2330?","I bought 2,000 shares of 00919 at 24.6 today"]
+      .map(t=>({t,use:()=>this.setState({chatInput:t},()=>this.sendChat())}));
+    // add form
+    const setF=k=>e=>this.setState({[k]:e.target.value});
+    const tkUp=S.fTicker.trim().toUpperCase();
+    // Market is explicit. Typing a ticker auto-picks it (all-digit codes → TWSE/TPEx,
+    // letters → US) but the user can always override, and the pick drives currency + fees.
+    const guess=tkUp?(/^\d/.test(tkUp)?'TW':'US'):null;
+    const known=this.H.find(x=>x.t===tkUp);
+    const mkSel=S.fMarket||guess||'TW', isTWform=mkSel==='TW';
+    const onTicker=e=>{ const val=e.target.value, up=val.trim().toUpperCase();
+      const k=this.H.find(x=>x.t===up);
+      const g=up?(k?k.m:(/^\d/.test(up)?'TW':'US')):null;
+      this.setState({fTicker:val, fMarket:g||S.fMarket}); };
+    const shN=parseFloat(S.fShares), pxN=parseFloat(S.fPrice);
+    const gross=(shN>0&&pxN>0)?shN*pxN:0;
+    const feeHint=gross?String(isTWform?Math.max(20,Math.round(gross*0.001425)):1):'—';
+    const saveAdd=()=>{
+      if(!tkUp){ this.setState({addErr:'Ticker is required.'}); return; }
+      if(S.addKind==='trade'&&!(shN>0&&pxN>0)){ this.setState({addErr:'Shares and price must be positive numbers.'}); return; }
+      if(S.addKind==='dividend'&&!(pxN>0)){ this.setState({addErr:'Amount must be a positive number.'}); return; }
+      if(isTWform&&!/^\d{4,6}[A-Z]?$/.test(tkUp)){ this.setState({addErr:'“'+tkUp+'” is not a Taiwan stock code (4–6 digits). Switch the market to US, or fix the code.'}); return; }
+      if(!isTWform&&!/^[A-Z][A-Z\.\-]{0,5}$/.test(tkUp)){ this.setState({addErr:'“'+tkUp+'” is not a US symbol (letters only). Switch the market to Taiwan, or fix the symbol.'}); return; }
+      const m=mkSel, name=known?known.n:tkUp;
+      if(S.addKind==='trade'){
+        const fee=parseFloat(S.fFee)||parseFloat(feeHint)||0;
+        this.setState(s=>({addOpen:false,addErr:'',fTicker:'',fShares:'',fPrice:'',fFee:'',fNotes:'',
+          trades:[{y:S.fType,t:tkUp,n:name,m,sh:shN,px:pxN,d:S.fDate,fee,st:S.fType==='buy'?'Open':'Closed'},...s.trades]}));
+        this.toast((S.fType==='buy'?'Buy added · lot open':'Sell added · FIFO matched')+' · '+(m==='TW'?'Taiwan':'US'));
+      } else {
+        this.setState(s=>({addOpen:false,addErr:'',fTicker:'',fPrice:'',fNotes:'',
+          dividends:[{t:tkUp,n:name,m,amt:pxN,d:S.fDate,note:S.fNotes||'cash dividend'},...s.dividends]}));
+        this.toast('Dividend added · '+(m==='TW'?'Taiwan':'US'));
+      }
+    };
+    // indices
+    const owned=S.idxSyms.map(sy=>this.IDX.find(i=>i.sym===sy)||{sym:sy,name:sy,m:'TW',px:0,chg:0,seed:3,o:0,h:0,l:0});
+    const barIdx=owned.filter(i=>!mkt||i.m===mkt);
+    const spark=(i)=>{ const p=this.pts(i.seed,22,i.chg>=0?.3:.7,i.chg>=0?.78:.28,.16); return this.path(p,0,104,42,6); };
+    const indexChips=barIdx.map(i=>({name:i.name,pxF:this.f2(i.px),c:this.col(i.chg),
+      chgShort:(i.chg>=0?'▲':'▼')+Math.abs(i.chg/(i.px-i.chg)*100).toFixed(2)+'%'}));
+    const indexCards=barIdx.map(i=>({name:i.name,sym:i.sym,pxF:this.f2(i.px),c:this.col(i.chg),
+      chgF:(i.chg>=0?'▲ ':'▼ ')+this.f2(Math.abs(i.chg))+' ('+Math.abs(i.chg/(i.px-i.chg)*100).toFixed(2)+'%)',
+      o:this.fN(i.o),h:this.fN(i.h),l:this.fN(i.l),spark:spark(i)}));
+    return {
+      signedOut:S.signedOut && !(this.props.startSignedIn ?? false),
+      signIn:()=>this.setState({signedOut:false}),
+      signOut:()=>this.setState({signedOut:true,tab:'overview',market:null,stock:null}),
+      isOvRoot:isOv&&!mkt&&!S.stock, isMarket:isOv&&!!mkt&&!S.stock, isStock:isOv&&!!S.stock,
+      isTrades:S.tab==='trades', isDividends:S.tab==='dividends', isAssistant:S.tab==='assistant', isSettings:S.tab==='settings',
+      tabs:tabDefs, stop:e=>e.stopPropagation(), clock, cadence:'TW open · auto-refresh 5 s',
+      sessions, fxF:fx.toFixed(2),
+      nwTW:v.nwTW, nwUS:v.nwUS,
+      heroStats:[
+        {k:'Today',v:this.sgn(v.nwT,this.compact(Math.abs(v.nwT),'TW').replace('−','')),c:this.col(v.nwT),sub:this.pctF(v.nwT/v.nw*100)},
+        {k:'Unrealized',v:this.sgn(v.unreal,this.compact(Math.abs(v.unreal),'TW').replace('−','')),c:this.col(v.unreal),sub:''},
+        {k:'Realized + div',v:this.sgn(v.earned,this.compact(Math.abs(v.earned),'TW').replace('−','')),c:this.col(v.earned),sub:''},
+        {k:'Total return',v:this.sgn(v.tr,this.compact(Math.abs(v.tr),'TW').replace('−','')),c:'#fff',sub:'≈ '+this.sgn(v.tr,'US$'+this.fN(Math.abs(v.tr)/fx))}
+      ],
+      nwPeriods:this.seg(['1M','3M','6M','YTD','1Y','MAX'],S.nwPeriod,l=>this.setState({nwPeriod:l})),
+      nwLine,nwArea,nwEndX:'330',nwEndY:(120-14-nwP[nwP.length-1]*92).toFixed(1),
+      nwAxHi:this.compact(v.nw*1.02,'TW'),nwAxMid:this.compact((v.nw+nwLo)/2,'TW'),nwAxLo:this.compact(nwLo*0.97,'TW'),
+      nwFrom:{'1M':"Jul '26",'3M':"May '26",'6M':"Feb '26",'YTD':"Jan '26",'1Y':"Aug '25",'MAX':"Sep '24"}[S.nwPeriod],
+      nwChgF:this.sgn(nwChg,'NT$'+this.fN(Math.abs(nwChg))),nwChgC:this.col(nwChg),nwChgPctF:this.pctF(nwChg/nwLo*100,1),
+      marketCards,
+      // market screen
+      mkTitle:isTW?'Taiwan':'United States', mkStatus:isTW?'Open':'Closed',
+      mkSessBg:isTW?'var(--color-accent-100)':'var(--color-neutral-200)',mkSessC:isTW?'var(--color-accent-800)':'var(--color-neutral-700)',
+      mkSessDot:isTW?this.GC:'var(--color-neutral-500)',
+      mkHours:isTW?'09:00–13:30 Taipei':'09:30–16:00 New York',
+      mkEarnedF:c+this.fN(mEarn), mkEarnedSigned:this.sgn(mEarn,c+this.fN(Math.abs(mEarn))), mkEarnC:this.col(mEarn),
+      mkReturnF:this.sgn(mRet,c+this.fN(Math.abs(mRet)))+' · '+this.pctF(mRet/mCost*100,1),
+      mkStats:[
+        {k:'Market value',v:c+this.fN(mkMV),c:'inherit',sub:list.length+' positions'},
+        {k:'Today',v:this.sgn(mTa,c+this.fN(Math.abs(mTa))),c:this.col(mTa),sub:this.pctF(mTa/mkMV*100)},
+        {k:'Unrealized P/L',v:this.sgn(mUn,c+this.fN(Math.abs(mUn))),c:this.col(mUn),sub:'net of exit costs · '+this.pctF(mUn/mCost*100,1)},
+        {k:'Realized P/L',v:this.sgn(mRe,c+this.fN(Math.abs(mRe))),c:this.col(mRe),sub:'FIFO'},
+        {k:'Dividends',v:c+this.fN(mDv),c:'inherit',sub:'received to date'},
+        {k:'Cost basis',v:c+this.fN(mCost),c:'inherit',sub:'open lots'}
+      ],
+      dashPeriods:this.seg(['1M','3M','1Y','MAX'],S.dashPeriod,l=>this.setState({dashPeriod:l})),
+      dashLine,dashArea,dashAxHi:this.compact(mEarn,mkt||'TW'),
+      dashFrom:{'1M':"Jul '26",'3M':"May '26",'1Y':"Aug '25",'MAX':"Sep '24"}[S.dashPeriod],
+      perfPeriods:this.seg(['3M','6M','YTD','1Y','MAX'],S.perfPeriod,l=>this.setState({perfPeriod:l})),
+      perfStats:[{k:'Return (TWR)',v:this.pctF(twrV,1),c:this.col(twrV)},
+                 {k:'Annualized',v:this.pctF(twrV*0.86,1),c:this.col(twrV)},
+                 {k:'vs '+bench[1],v:this.pctF(twrV-bmV,1),c:this.col(twrV-bmV)}],
+      perfPath:this.path(pP,0,304,120,14),benchPath:this.path(bP,0,304,120,14),
+      perfAxHi:'+'+Math.round(twrV*1.15)+'%',perfAxMid:'+'+Math.round(twrV*0.55)+'%',perfAxLo:'0%',
+      benchName:bench[1],cycleBenchmark:()=>this.setState({benchIdx:(S.benchIdx+1)%benchList.length}),
+      monthlyBars,
+      mkCount:list.length,mkMVF:c+this.fN(mkMV),mkRows,
+      sortOpts:[['Value','mv'],['Today','today'],['Gain %','gain']].map(o=>({l:o[0],
+        bg:S.sort===o[1]?'var(--color-accent)':'transparent',c:S.sort===o[1]?'#fff':'var(--color-neutral-700)',
+        set:()=>this.setState({sort:o[1]})})),
+      backRoot:()=>this.setState({market:null,stock:null}), backMarket:()=>this.setState({stock:null}),
+      stockPeriods:this.seg(['1M','3M','6M','1Y','2Y','5Y','All'],S.stockPeriod,l=>this.setState({stockPeriod:l})),
+      ...st,
+      // trades
+      tradeFilters:this.seg(['All','TW','US'],S.tradesFilter,l=>this.setState({tradesFilter:l})),
+      statusFilters:this.seg(['All','Open','Closed'],S.statusFilter,l=>this.setState({statusFilter:l})),
+      tradeRows,tradeCount:shown.length,volNote:buys+' buys · '+(shown.length-buys)+' sells',
+      openAddTrade:()=>this.setState({addOpen:true,addKind:'trade',addErr:''}),
+      openAddDiv:()=>this.setState({addOpen:true,addKind:'dividend',addErr:''}),
+      closeAdd:()=>this.setState({addOpen:false}),
+      addOpen:S.addOpen,addIsTrade:S.addKind==='trade',
+      addTitle:S.addKind==='trade'?'Add trade':'Add dividend',
+      typeOpts:this.seg(['buy','sell'],S.fType,l=>this.setState({fType:l})).map(o=>({...o,l:o.l.toUpperCase()})),
+      fTicker:S.fTicker,fShares:S.fShares,fPrice:S.fPrice,fFee:S.fFee,fDate:S.fDate,fNotes:S.fNotes,
+      fPriceLabel:S.addKind==='trade'?(isTWform?'Price · NT$':'Price · US$'):(isTWform?'Amount · NT$':'Amount · US$'),
+      feeHint,
+      mktOpts:[['TW','Taiwan · TWD'],['US','US · USD']].map(o=>({l:o[1],
+        bg:mkSel===o[0]?'var(--color-accent)':'transparent',c:mkSel===o[0]?'#fff':'var(--color-neutral-700)',
+        set:()=>this.setState({fMarket:o[0]})})),
+      fMktHint:known?('matched '+known.n):(guess?(guess==='TW'?'auto: numeric code → Taiwan':'auto: letters → US'):'auto-detected from the ticker'),
+      fTickerPh:isTWform?'2330 · 00919':'NVDA · VOO',
+      fMarket:isTWform?'TWSE/TPEx · fees 0.1425% + tax':'US · flat US$1 commission',
+      fTotalLabel:S.addKind==='trade'?'Gross':'Amount',
+      fTotal:S.addKind==='trade'?(gross?this.cur(mkSel)+this.fN(gross):'—'):(pxN>0?this.cur(mkSel)+this.fN(pxN):'—'),
+      onFTicker:onTicker,onFShares:setF('fShares'),onFPrice:setF('fPrice'),onFFee:setF('fFee'),onFDate:setF('fDate'),onFNotes:setF('fNotes'),
+      addErr:!!S.addErr,addErrText:S.addErr,saveAdd,
+      // dividends
+      divStats:[{k:'Taiwan · received',v:'NT$'+this.fN(twYTD)},{k:'US · received',v:'US$'+this.f2(usYTD)},{k:'Next 90 d est.',v:'NT$'+this.fN(7350)}],
+      divRows,divCount:S.dividends.length,calRows,
+      // assistant
+      msgs,chips,chatEmpty:S.chat.length===0,generating:S.generating,chatInput:S.chatInput,
+      onChatInput:e=>this.setState({chatInput:e.target.value}),
+      onChatKey:e=>{ if(e.key==='Enter') this.sendChat(); },
+      sendChat:()=>this.sendChat(), stopGen:()=>this.stopGen(),
+      newChat:()=>{ this.stopped=true; clearInterval(this.iv); this.setState({chat:[],generating:false}); },
+      toggleHist:()=>this.setState(s=>({histOpen:!s.histOpen})),histOpen:S.histOpen,
+      histRows:[
+        {t:"Is 2330's gross margin improving?",sub:'6 messages · Aug 16'},
+        {t:'Compare my TWR to 加權指數 this year',sub:'4 messages · Aug 12'},
+        {t:'When is the next 00919 ex-div date?',sub:'2 messages · Aug 9'}
+      ].map(r=>({...r,open:()=>{ this.setState({histOpen:false}); this.toast('Reopened “'+r.t.slice(0,22)+'…”'); }})),
+      appearanceOpts:this.seg(['Light','Dark','System'],S.appearance,l=>this.setState({appearance:l})),
+      appearanceNote:S.appearance==='System'?'Following iOS — currently '+(this.isDark()?'dark':'light'):'Always '+S.appearance.toLowerCase(),
+      provider:S.provider,
+      provOpts:this.seg(['OpenAI','Gemini','Claude'],S.provider,l=>this.setState({provider:l})),
+      apiKey:S.apiKey,onApiKey:setF('apiKey'),
+      showReasoning:S.showReasoning,
+      reasonBg:S.showReasoning?'var(--color-accent)':'var(--color-neutral-300)',reasonX:S.showReasoning?'21px':'3px',
+      toggleReason:()=>this.setState(s=>({showReasoning:!s.showReasoning})),
+      bgGenBg:S.bgGen?'var(--color-accent)':'var(--color-neutral-300)',bgGenX:S.bgGen?'21px':'3px',
+      toggleBg:()=>this.setState(s=>({bgGen:!s.bgGen})),
+      backendUrl:S.backendUrl,onBackendUrl:setF('backendUrl'),
+      backendRows:[
+        {k:'Health',v:'● 200 OK · 84 ms',c:this.GC},
+        {k:'TW quote relay',v:'● Connected · ngrok',c:this.GC},
+        {k:'Database',v:'Neon Postgres',c:'var(--color-text)'},
+        {k:'Last CSV export',v:'Aug 12, 2026',c:'var(--color-text)'}
+      ],
+      exportNote:'Last export Aug 12, 2026',
+      exportCsv:()=>this.toast('portfolio.csv exported · '+(S.trades.length+S.dividends.length)+' rows'),
+      marketRows:[
+        {k:'Taiwan · TWSE',hours:'09:00–13:30 Taipei',state:'Open',c:this.GC},
+        {k:'United States · NYSE',hours:'09:30–16:00 New York',state:'Closed',c:'var(--color-neutral-600)'}
+      ],
+      indexCount:S.idxSyms.length,
+      openIndices:()=>this.setState({idxEditOpen:true}),closeIndices:()=>this.setState({idxEditOpen:false}),
+      idxEditOpen:S.idxEditOpen,
+      idxOwned:owned.map(i=>({name:i.name,sym:i.sym,remove:()=>this.setState(s=>({idxSyms:s.idxSyms.filter(x=>x!==i.sym)}))})),
+      idxSuggest:this.SUGG.filter(s=>!S.idxSyms.includes(s[0])).map(s=>({name:s[1],sym:s[0],
+        add:()=>{ this.setState(st2=>({idxSyms:[...st2.idxSyms,s[0]]})); this.toast(s[1]+' added'); }})),
+      showIndexBar:!S.signedOut&&isOv&&barIdx.length>0,
+      indexExpanded:S.indexExpanded,indexChev:S.indexExpanded?'⌄':'⌃',
+      toggleIndex:()=>this.setState(s=>({indexExpanded:!s.indexExpanded})),
+      indexChips,indexCards,
+      // import
+      importOpen:S.importOpen,imp0:S.importStep===0,imp1:S.importStep===1,imp2:S.importStep===2,imp3:S.importStep===3,
+      impNote:S.impNote,onImpNote:setF('impNote'),
+      openImport:()=>this.setState({importOpen:true,importStep:0}),
+      closeImport:()=>this.setState({importOpen:false}),
+      runImport:()=>{ this.setState({importStep:1}); setTimeout(()=>this.setState({importStep:2}),1700); },
+      impRows:[
+        {tag:'BUY',tagCls:'tag-accent',t:'2603',name:'長榮',detail:'500 × 214.50 · 2026-08-14 · fee 153 · name → code resolved'},
+        {tag:'BUY',tagCls:'tag-accent',t:'3217',name:'優群',detail:'1,000 × 98.00 · 2026-04-22 · duplicate of an existing lot'},
+        {tag:'DIV',tagCls:'tag-neutral',t:'2603',name:'長榮',detail:'NT$5,000 · 2026-08-11 現金股利'}
+      ],
+      confirmImport:()=>{ this.setState(s=>({importStep:3,
+        trades:[{y:'buy',t:'2603',n:'長榮',m:'TW',sh:500,px:214.5,d:'2026-08-14',fee:153,st:'Open'},...s.trades],
+        dividends:[{t:'2603',n:'長榮',m:'TW',amt:5000,d:'2026-08-11',note:'現金股利 10.0/股'},...s.dividends]}));
+        setTimeout(()=>{ this.setState({importOpen:false}); this.toast('3 records imported'); },1400); },
+      aboutOpen:S.aboutOpen,openAbout:()=>this.setState({aboutOpen:true}),closeAbout:()=>this.setState({aboutOpen:false}),
+      toast:!!S.toast,toastText:S.toast
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -2,13 +2,25 @@ import Foundation
 import SwiftUI
 
 /// Formatting helpers mirroring the web app's format.ts so figures read the
-/// same across platforms (NT$ / $, signed percentages, em-dash for nil).
+/// same across platforms (NT$ / US$, signed percentages, em-dash for nil).
+///
+/// Two conventions the design fixes and nothing may deviate from:
+/// * a negative sign is a real minus, U+2212 — a hyphen is a different glyph,
+///   half the width, and reads as a dash between two numbers;
+/// * USD is written `US$`, not `$`, because every screen shows it next to NT$
+///   and a bare `$` in that company is ambiguous.
 enum Fmt {
+    /// U+2212 MINUS SIGN.
+    static let minus = "\u{2212}"
+
+    static func symbol(_ currency: String) -> String {
+        currency == "TWD" ? "NT$" : currency == "USD" ? "US$" : ""
+    }
+
     static func money(_ value: Double?, currency: String, digits: Int = 2) -> String {
         guard let v = value, !v.isNaN else { return "—" }
-        let symbol = currency == "TWD" ? "NT$" : currency == "USD" ? "$" : ""
-        let sign = v < 0 ? "-" : ""
-        return "\(sign)\(symbol)\(number(abs(v), digits: digits))"
+        let sign = v < 0 ? minus : ""
+        return "\(sign)\(symbol(currency))\(number(abs(v), digits: digits))"
     }
 
     static func number(_ value: Double?, digits: Int = 2) -> String {
@@ -26,16 +38,28 @@ enum Fmt {
         return number(value, digits: 4)
     }
 
-    static func pct(_ value: Double?) -> String {
+    /// A signed percentage. Daily moves carry 2 dp, returns 1 dp — the design
+    /// distinguishes them deliberately, so pass `digits` rather than rounding
+    /// a return to look like a tick.
+    static func pct(_ value: Double?, digits: Int = 2) -> String {
         guard let v = value, !v.isNaN else { return "—" }
-        let sign = v > 0 ? "+" : ""
-        return "\(sign)\(String(format: "%.2f", v))%"
+        let sign = v > 0 ? "+" : v < 0 ? minus : ""
+        return "\(sign)\(String(format: "%.\(digits)f", Swift.abs(v)))%"
     }
 
     static func signedMoney(_ value: Double?, currency: String, digits: Int = 2) -> String {
         guard let v = value, !v.isNaN else { return "—" }
         let sign = v > 0 ? "+" : ""
         return "\(sign)\(money(v, currency: currency, digits: digits))"
+    }
+
+    /// `+NT$1.2M` / `−US$42.0K` — a signed, compacted amount. What every stat
+    /// strip and holdings row uses, because a seven-figure P&L in full spends
+    /// the whole column saying nothing.
+    static func signedCompact(_ value: Double?, currency: String) -> String {
+        guard let v = value, !v.isNaN else { return "—" }
+        let body = compactMoney(Swift.abs(v), currency: currency)
+        return (v < 0 ? minus : "+") + body
     }
 
     // MARK: - Amounts vs prices
@@ -78,14 +102,13 @@ enum Fmt {
     /// tip, not on the rail.
     static func compactMoney(_ value: Double?, currency: String) -> String {
         guard let v = value, !v.isNaN else { return "—" }
-        let symbol = currency == "TWD" ? "NT$" : currency == "USD" ? "$" : ""
-        let sign = v < 0 ? "-" : ""
+        let sign = v < 0 ? minus : ""
         let a = Swift.abs(v)
         let (div, suffix): (Double, String) =
             a >= 1e9 ? (1e9, "B") : a >= 1e6 ? (1e6, "M") : a >= 1e3 ? (1e3, "K") : (1, "")
         let scaled = a / div
         let digits = suffix.isEmpty ? 0 : (scaled < 10 ? 1 : 0)
-        return "\(sign)\(symbol)\(String(format: "%.\(digits)f", scaled))\(suffix)"
+        return "\(sign)\(symbol(currency))\(String(format: "%.\(digits)f", scaled))\(suffix)"
     }
 
     /// Big "net worth" style number — thousands separators, no decimals.
@@ -110,7 +133,7 @@ enum Fmt {
     static func compact(_ value: Double?) -> String {
         guard let v = value, !v.isNaN else { return "—" }
         let abs = Swift.abs(v)
-        let sign = v < 0 ? "-" : ""
+        let sign = v < 0 ? minus : ""
         switch abs {
         case 1e12...: return "\(sign)\(String(format: "%.2f", abs / 1e12))T"
         case 1e9...: return "\(sign)\(String(format: "%.2f", abs / 1e9))B"

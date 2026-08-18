@@ -4,7 +4,11 @@ import SwiftUI
 struct StockTrackerApp: App {
     @StateObject private var store = PortfolioStore()
     @StateObject private var auth = AuthStore()
+    @StateObject private var settings = AppSettings.shared
+    @StateObject private var toasts = ToastCenter.shared
     @State private var showSplash = true
+
+    init() { Theme.registerFonts() }
 
     var body: some Scene {
         WindowGroup {
@@ -24,8 +28,12 @@ struct StockTrackerApp: App {
                 }
             }
             .environmentObject(auth)
+            .environmentObject(settings)
+            .environmentObject(toasts)
             .tint(Theme.accent)
-            .preferredColorScheme(.dark)
+            // The one place the Appearance setting is applied. `nil` for
+            // .system hands the decision back to iOS.
+            .preferredColorScheme(settings.appearance.colorScheme)
             .task {
                 if ProcessInfo.processInfo.environment["UITEST_GUEST"] == "1" {
                     auth.continueAsGuest()

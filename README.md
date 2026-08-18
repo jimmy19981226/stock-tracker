@@ -10,13 +10,19 @@ A **native iOS app + responsive web dashboard + FastAPI backend** for tracking *
 
 <div align="center">
 
-**iOS app**
+**iOS app** — light and dark, following the system or your own choice
 
-<img src="docs/screenshots/ios-overview.png" width="240" alt="Net-worth overview" />
+<img src="docs/screenshots/ios-overview.png" width="220" alt="Combined net-worth overview" />
 &nbsp;
-<img src="docs/screenshots/ios-dashboard.png" width="240" alt="Portfolio dashboard" />
+<img src="docs/screenshots/ios-dashboard.png" width="220" alt="Market dashboard" />
 &nbsp;
-<img src="docs/screenshots/ios-assistant.png" width="240" alt="AI assistant" />
+<img src="docs/screenshots/ios-stock.png" width="220" alt="Stock detail with trade markers" />
+
+<img src="docs/screenshots/ios-trades.png" width="220" alt="Trade log" />
+&nbsp;
+<img src="docs/screenshots/ios-assistant.png" width="220" alt="AI assistant" />
+&nbsp;
+<img src="docs/screenshots/ios-dark.png" width="220" alt="Dark theme" />
 
 **Web dashboard** — read-only, any phone or computer over the internet
 
@@ -39,7 +45,9 @@ A **native iOS app + responsive web dashboard + FastAPI backend** for tracking *
 
 ## 📱 Native iOS app
 
-A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — bottom tab bar, dark "studio" theme, Swift Charts, an animated splash, Google sign-in, multi-provider AI (OpenAI / Gemini / Claude with your own key), **Claude-style Markdown** in the assistant, and per-user data scoping. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md). (Screenshots at the top of this README.)
+A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — five tabs (Overview · Trades · Assistant · Dividends · Settings), Swift Charts, an animated splash, Google sign-in, multi-provider AI (OpenAI / Gemini / Claude with your own key), Markdown rendering in the assistant, and per-user data scoping.
+
+**The design**: a light technical ground with a steel-blue accent, Barlow Condensed numerals over Barlow body text, grouped cards with soft elevation, and exactly one dark field per screen — the net-worth hero. **Both themes ship**: Light / Dark / System, picked in Settings. Gain and loss colours are a setting too (US green-up or TW red-up), because Taiwanese boards paint a rise red — and every P&L value carries a ▲/▼ so the meaning never rests on colour alone. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md). (Screenshots at the top of this README.)
 
 ## 📲 Home Screen widget
 
@@ -54,7 +62,7 @@ A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + V
 ## What's inside
 
 ### 🌏 Multi-market overview (TW + US)
-- **Two portfolios, one app** — Taiwan (TWD) and US (USD) holdings are tracked separately, each with their own dashboard, trades, and dividends. Market is detected from the ticker format (numeric → TW, letters → US).
+- **Two portfolios, one app** — Taiwan (TWD) and US (USD) holdings each get their own dashboard, while Trades and Dividends are single screens across both markets with a TW/US filter. Market is auto-detected from the ticker format (numeric → TW, letters → US) and is always an explicit, overridable control on the record form.
 - **Overview landing page** — a TW card and a US card showing each market's value, total P/L, and today's move. Tap a card to enter that portfolio; the back button returns you to the overview.
 - **Combined net worth** — both portfolios summed into a single figure shown in **both NT$ and US$**, with the live USD↔TWD rate. The number flashes green/red as it ticks.
 - **Combined unrealized P&L** — the Overview also shows unrealized P&L alone (open positions' gain/loss, US converted to NT$ at the live rate) alongside the all-in Total Return figure, so you can see them separately.
@@ -68,8 +76,8 @@ A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + V
 - Per-currency summary grid: market value, unrealized P/L, realized P/L, dividends, and today's move (accent-colored)
 - Unrealized P/L is **net of estimated exit costs** (sell commission + transaction tax), so it matches your broker's 損益試算 / 獲利率 rather than the gross gain
 - **Cumulative earnings chart** (Swift Charts) stacking realized P/L + dividends
-- **Allocation donut** — what each position is worth as a share of that market's total, colored by a fixed, CVD-safe categorical palette keyed to the ticker (stable across refreshes/re-sorts, not by rank), with a legend directly labeling each slice's ticker, name (Chinese for TW), and %; positions past the top 7 fold into "Other" so the legend never grows past 8 rows
-- **Holdings list** — each position with shares, market value, live price, today's move in **both $ and %**, and unrealized P&L, sortable by market value, today's move, or gain %
+- **Performance card** — time-weighted return, annualized, and the gap against the market's benchmark index, with the two curves overlaid and twelve months of P&L underneath. Tap the benchmark name to compare against a different index.
+- **Holdings list** — each position with shares, avg cost, live price, today's move, market value and unrealized P&L, plus a weight bar showing its share of the market; sortable by value, today's move, or gain %
 
 Holdings/summary refresh while a portfolio is on screen — every 5 s while that market is open, 60 s otherwise.
 
@@ -87,12 +95,14 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 - **Visible reasoning** — Claude extended thinking and Gemini thought summaries stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle).
 - **Background generation** — replies keep generating server-side if you switch apps or lock the screen; the finished answer is waiting when you come back. The stop button cancels the server run too.
 - **Always ready** — opening the Assistant pre-warms the backend and pre-builds your portfolio context, so the first message streams immediately.
-- **Streaming replies** rendered as **Claude-style Markdown** in a serif reading voice — headings, bold, lists, code blocks, blockquotes, tables — with a shimmering thinking indicator.
+- **Streaming replies** rendered as Markdown in the app's own reading voice — headings, bold, lists, code blocks, blockquotes, tables — with the tool lines above them and the "not investment advice" note below.
 - **Portfolio-aware** — every chat carries a snapshot of your holdings + light fundamentals; mention a ticker and its monthly revenue + quarterly margins are attached so the model answers with real numbers.
-- **Chat history** — past conversations are saved; reopen one, delete with a swipe, or clear them all.
+- **Chat history** — past conversations are saved; reopen one, long-press to delete, or clear them all.
 
 ### 🛠 Trade & dividend management
-- Add, edit, and delete **trades** (buy/sell) and **dividends**, scoped per market (TW / US)
+- Add, edit, and delete **trades** (buy/sell) and **dividends**, with the market as an explicit TW/US control that drives the currency, the automatic fee (TW: max(20, gross × 0.1425%); US: flat 1) and validation — a lettered symbol filed under Taiwan is rejected with a specific message rather than silently guessed
+- **Every record has its own page** — market, date, shares, price, fee, gross, total cost or net proceeds, the realized P/L a sell booked, notes, and why the lot reads Open or Closed
+- **Paged logs** — the trade and dividend lists page a dozen rows at a time, and the pager keeps the same position on every page
 - **FIFO cost basis** — realized P/L matches how US brokers report on the 1099 (first-in, first-out); open lots give the cost basis of shares still held
 - Backend **CSV import/export** endpoints (one unified file for trades + dividends) and auto-seed from `backend/data/seed/portfolio.csv` on first boot
 - **AI image import** — snap a brokerage statement/screenshot and a vision model extracts the trades + dividends to review before saving. You can add a **free-text note** alongside the image (e.g. "US trade in USD", "the 優群 row is 3217") that the model uses to disambiguate, and it resolves a Taiwan **company name → stock code** when the document shows only the name.
@@ -440,7 +450,7 @@ This means questions like *"is 2330's gross margin improving?"* or *"compare 233
 
 - The backend streams Server-Sent Events: `init` → `status` (tool progress) / `thinking` (reasoning deltas) / `chunk` (answer tokens) / `action` (proposed records) → `done`. It routes by `X-AI-Provider` / `X-AI-Key`; Gemini can fall back to the server's `GOOGLE_AI_API_KEY`.
 - Generation runs in a **detached server-side worker** — if the app is backgrounded or loses the stream, the reply still completes and persists; the app recovers it automatically on return. `POST /api/ai/chats/{id}/stop` cancels the run.
-- The iOS app consumes the stream with `URLSession.bytes`, renders partial **Markdown** live (serif reading voice), streams reasoning into a collapsible section, and turns `action` events into the same confirm card the image import uses.
+- The iOS app consumes the stream with `URLSession.bytes`, renders partial **Markdown** live, streams reasoning into a collapsible section, and turns `action` events into the same confirm card the image import uses.
 
 ### Persistent chat history
 

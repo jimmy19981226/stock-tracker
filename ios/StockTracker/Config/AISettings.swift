@@ -21,6 +21,17 @@ enum AIProvider: String, CaseIterable, Identifiable {
         }
     }
 
+    /// What fits on a segment and in a pill — four providers share one control,
+    /// so the vendor prefix ("Google", "Anthropic") is dropped there.
+    var shortName: String {
+        switch self {
+        case .gemini: return "Gemini"
+        case .openai: return "OpenAI"
+        case .claude: return "Claude"
+        case .nvidia: return "NVIDIA"
+        }
+    }
+
     /// Where to get a key, shown under the field.
     var keyHint: String {
         switch self {

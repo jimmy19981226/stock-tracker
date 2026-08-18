@@ -24,8 +24,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aistockstudio.app
-        MARKETING_VERSION: "1.1.0"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "1.2.0"
+        CURRENT_PROJECT_VERSION: "3"
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -33,15 +33,24 @@ targets:
       path: StockTracker/Info.plist
       properties:
         CFBundleDisplayName: Stock Studio
-        CFBundleShortVersionString: "1.1.0"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "1.2.0"
+        CFBundleVersion: "3"
         LSRequiresIPhoneOS: true
-        # Dark-only app. Without this the system launch screen renders in the
-        # light appearance, so every cold start flashed white before the dark
-        # splash faded in.
-        UIUserInterfaceStyle: Dark
+        # The app ships both themes and follows the in-app Appearance setting
+        # (Light / Dark / System), so it must NOT pin UIUserInterfaceStyle —
+        # doing so would freeze the system launch screen and the keyboard in
+        # one appearance while the UI honoured the other.
         UILaunchScreen:
-          UIColorName: ""
+          UIColorName: LaunchBackground
+        # Barlow (body) + Barlow Condensed (numerals & headings), OFL, bundled
+        # from Resources/Fonts. The design is built on the condensed numerals —
+        # falling back to the system face changes every figure's width.
+        UIAppFonts:
+          - Barlow-Regular.ttf
+          - Barlow-Medium.ttf
+          - Barlow-SemiBold.ttf
+          - BarlowCondensed-Medium.ttf
+          - BarlowCondensed-SemiBold.ttf
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:

@@ -1,160 +1,209 @@
 import SwiftUI
 
+/// The trade log for both markets, filtered rather than split — a portfolio
+/// held across two exchanges is still one log, and the FIFO cost basis that
+/// gives every row its realized P/L is computed over all of it.
 struct TradesView: View {
-    let market: MarketCode
     @EnvironmentObject private var store: PortfolioStore
+    @EnvironmentObject private var toasts: ToastCenter
+
+    @State private var marketFilter: MarketFilter = .all
+    @State private var statusFilter: StatusFilter = .all
     @State private var editing: Trade?
+    /// The record page's subject, held by id so it follows an edit rather than
+    /// showing the snapshot that was tapped.
+    @State private var viewingID: Int?
+    @State private var page = 0
     @State private var showAdd = false
     @State private var showImport = false
     @State private var actionError: String?
-    @State private var selectedYear: Int? = nil
+
+    enum MarketFilter: String, CaseIterable, Identifiable {
+        case all = "All", tw = "TW", us = "US"
+        var id: String { rawValue }
+        var market: MarketCode? {
+            switch self {
+            case .all: return nil
+            case .tw: return .TW
+            case .us: return .US
+            }
+        }
+    }
+
+    enum StatusFilter: String, CaseIterable, Identifiable {
+        case all = "All", open = "Open", closed = "Closed"
+        var id: String { rawValue }
+        var status: TradeStatus? {
+            switch self {
+            case .all: return nil
+            case .open: return .open
+            case .closed: return .closed
+            }
+        }
+    }
 
     private var allTrades: [Trade] {
-        store.trades(for: market).sorted { $0.tradeDate > $1.tradeDate }
+        store.trades.sorted { ($0.tradeDate, $0.id) > ($1.tradeDate, $1.id) }
     }
 
-    private var availableYears: [Int] {
-        let years = allTrades.compactMap { Int($0.tradeDate.prefix(4)) }
-        return Array(Set(years)).sorted(by: >)
-    }
-
-    private var trades: [Trade] {
-        guard let year = selectedYear else { return allTrades }
-        return allTrades.filter { $0.tradeDate.hasPrefix(String(year)) }
-    }
-
-    private var totalBuys: Double {
-        trades.filter { $0.type == .buy }
-            .reduce(0) { $0 + $1.shares * $1.price + $1.fee }
-    }
-
-    private var totalSells: Double {
-        trades.filter { $0.type == .sell }
-            .reduce(0) { $0 + $1.shares * $1.price - $1.fee }
-    }
-
-    /// Realized P/L booked by the filtered trades — FIFO lots with buy fees in
-    /// the cost basis and sell fees deducted, mirroring the backend's
-    /// _apply_trade so this agrees with the dashboard's Realized figure.
-    /// The whole history is always walked (cost basis crosses years); only
-    /// sells inside the filter window count toward the total.
-    private var totalEarned: Double {
-        var lots: [String: [(shares: Double, costPerShare: Double)]] = [:]
-        var earned = 0.0
-        let yearPrefix = selectedYear.map(String.init)
-        for t in allTrades.sorted(by: { ($0.tradeDate, $0.id) < ($1.tradeDate, $1.id) }) {
-            if t.type == .buy {
-                guard t.shares > 0 else { continue }
-                lots[t.ticker, default: []]
-                    .append((t.shares, (t.shares * t.price + t.fee) / t.shares))
-                continue
-            }
-            var qty = t.shares
-            var delta = -t.fee
-            var open = lots[t.ticker] ?? []
-            while qty > 1e-9, !open.isEmpty {
-                let take = min(qty, open[0].shares)
-                delta += take * (t.price - open[0].costPerShare)
-                open[0].shares -= take
-                qty -= take
-                if open[0].shares <= 1e-9 { open.removeFirst() }
-            }
-            lots[t.ticker] = open
-            if qty > 1e-9 { delta += qty * t.price }  // over-sell: no cost basis
-            if yearPrefix == nil || t.tradeDate.hasPrefix(yearPrefix!) { earned += delta }
+    private var shown: [Trade] {
+        allTrades.filter {
+            (marketFilter.market == nil || $0.market == marketFilter.market)
+                && (statusFilter.status == nil || $0.status == statusFilter.status)
         }
-        return earned
+    }
+
+    private var realized: [Int: Double] { FIFO.realized(store.trades) }
+
+    private var pager: Paginator<Trade> { Paginator(items: shown, page: page) }
+
+    private var viewing: Trade? {
+        viewingID.flatMap { id in store.trades.first { $0.id == id } }
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                if trades.isEmpty {
-                    EmptyState(icon: "arrow.left.arrow.right",
-                               title: selectedYear != nil ? "No trades in \(selectedYear!)" : "No trades yet",
-                               message: selectedYear != nil ? "Try a different year or 'All'." : "Tap + to log your first buy or sell.")
-                } else {
-                    TradeSummaryCard(
-                        buys: totalBuys,
-                        sells: totalSells,
-                        earned: totalEarned,
-                        currency: market.currencyCode,
-                        year: selectedYear
-                    )
-                    .cardStyle()
-                    .padding(.bottom, 14)
-                    ForEach(trades) { trade in
-                        TradeRow(trade: trade, name: store.name(for: trade.ticker))
-                            .onTapGesture { editing = trade }
-                            .contextMenu {
-                                Button("Edit") { editing = trade }
-                                Button("Delete", role: .destructive) { delete(trade) }
-                            }
-                    }
-                }
-            }
-            .padding(16)
-        }
-        .refreshable { await store.loadAll() }
-        .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if !availableYears.isEmpty {
-                    Menu {
-                        Button {
-                            selectedYear = nil
-                        } label: {
-                            HStack {
-                                Text("All time")
-                                if selectedYear == nil { Image(systemName: "checkmark") }
-                            }
-                        }
-                        ForEach(availableYears, id: \.self) { year in
-                            Button {
-                                selectedYear = year
-                            } label: {
-                                HStack {
-                                    Text(String(year))
-                                    if selectedYear == year { Image(systemName: "checkmark") }
-                                }
-                            }
-                        }
-                    } label: {
-                        Label(selectedYear.map { String($0) } ?? "All", systemImage: "calendar")
-                            .font(.system(size: 14, weight: .medium))
-                            .fixedSize()
-                    }
-                    // Same Menu label-sizing quirk as the holdings sort pill:
-                    // rebuild when the title changes so it never clips.
-                    .id(selectedYear)
-                }
-                Button { showImport = true } label: { Image(systemName: "text.viewfinder") }
-                Button { showAdd = true } label: { Image(systemName: "plus") }
-            }
-        }
-        .sheet(isPresented: $showImport) {
-            ImportRecordsView()
-        }
-        .sheet(isPresented: $showAdd) {
-            TradeFormView(market: market, existing: nil)
-        }
-        .onAppear {
-            if ProcessInfo.processInfo.environment["UITEST_TRADE_FORM"] == "1" { showAdd = true }
-            if ProcessInfo.processInfo.environment["UITEST_IMPORT"] == "1" { showImport = true }
-        }
-        .sheet(item: $editing) { trade in
-            TradeFormView(market: market, existing: trade)
-        }
-        .alert("Couldn't delete trade", isPresented: .constant(actionError != nil)) {
-            Button("OK") { actionError = nil }
-        } message: {
-            Text(actionError ?? "")
+        if let trade = viewing {
+            TradeRecordView(trade: trade,
+                            realized: realized[trade.id],
+                            name: store.name(for: trade.ticker),
+                            onBack: { viewingID = nil },
+                            onDelete: {
+                                viewingID = nil
+                                delete(trade)
+                            })
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+        } else {
+            list
         }
     }
 
+    /// Every trade row is this tall, so a page of eight looks like a page of
+    /// twelve minus four blanks — and the pager under it doesn't move.
+    private static let rowHeight: CGFloat = 74
+
+    private var list: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                HStack {
+                    BrandLine()
+                    Spacer()
+                    Button { showImport = true } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "text.viewfinder")
+                                .font(.system(size: 12, weight: .medium))
+                            Text("AI import").font(Theme.Typo.detail)
+                        }
+                        .foregroundStyle(Theme.accent)
+                        .padding(.horizontal, Theme.Space.xs)
+                        .padding(.vertical, 2)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                ScreenTitle("Trades") {
+                    PrimaryButton(title: "+ Add trade", fullWidth: false) { showAdd = true }
+                }
+                .padding(.bottom, 2)
+
+                HStack(spacing: Theme.Space.s) {
+                    SegmentedControl(options: MarketFilter.allCases.map { ($0, $0.rawValue) },
+                                     selection: $marketFilter, fill: false)
+                    Spacer(minLength: Theme.Space.s)
+                    SegmentedControl(options: StatusFilter.allCases.map { ($0, $0.rawValue) },
+                                     selection: $statusFilter, fill: false)
+                }
+
+                HStack {
+                    Text("\(shown.count) records")
+                    Spacer()
+                    Text(volumeNote)
+                }
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+
+                if let actionError {
+                    ErrorBanner(message: actionError) { self.actionError = nil }
+                }
+
+                let rows = pager.slice
+
+                if shown.isEmpty {
+                    EmptyState(icon: "arrow.left.arrow.right",
+                               title: allTrades.isEmpty ? "No trades yet" : "No trades match",
+                               message: allTrades.isEmpty
+                                   ? "Add your first buy or sell — or import a brokerage statement."
+                                   : "Try a different market or status filter.")
+                        .appCard()
+                } else {
+                    Color.clear.frame(height: pager.filler(rowHeight: Self.rowHeight))
+
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(rows.enumerated()), id: \.element.id) { index, trade in
+                            TradeRow(trade: trade,
+                                     name: store.name(for: trade.ticker),
+                                     realized: realized[trade.id])
+                                .frame(height: Self.rowHeight)
+                                .background(Theme.card)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    withAnimation(.easeOut(duration: 0.22)) {
+                                        viewingID = trade.id
+                                    }
+                                }
+                                .contextMenu {
+                                    Button("Open record") {
+                                        viewingID = trade.id
+                                    }
+                                    Button("Edit") { editing = trade }
+                                    Button("Delete", role: .destructive) { delete(trade) }
+                                }
+                            if index < rows.count - 1 { RowDivider() }
+                        }
+                    }
+                    .appListCard()
+
+                    PageBar(page: $page, pageCount: pager.pageCount,
+                            rangeLabel: pager.rangeLabel)
+                }
+
+                Text("FIFO cost basis — a sell consumes the oldest lots first; any buy lot with shares left is Open. Realized P/L matches broker reporting.")
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, Theme.Space.xxs)
+            }
+            .screenPadding()
+        }
+        .screenBackground()
+        .refreshable { await store.loadAll() }
+        .onChange(of: marketFilter) { _, _ in page = 0 }
+        .onChange(of: statusFilter) { _, _ in page = 0 }
+        .onChange(of: shown.count) { _, _ in page = min(page, pager.pageCount - 1) }
+        .sheet(isPresented: $showImport) { ImportRecordsView() }
+        .sheet(isPresented: $showAdd) {
+            TradeFormView(market: marketFilter.market ?? .TW, existing: nil)
+        }
+        .sheet(item: $editing) { TradeFormView(market: $0.market, existing: $0) }
+        .onAppear {
+            let env = ProcessInfo.processInfo.environment
+            if env["UITEST_TRADE_FORM"] == "1" { showAdd = true }
+            if env["UITEST_IMPORT"] == "1" { showImport = true }
+        }
+    }
+
+    private var volumeNote: String {
+        let buys = shown.filter { $0.type == .buy }.count
+        return "\(buys) buys · \(shown.count - buys) sells"
+    }
+
+    /// Deletes are immediate and reported by a toast — an "are you sure?" on
+    /// every row would be noise on a log the user is actively curating, and
+    /// the record is one re-entry away.
     private func delete(_ trade: Trade) {
         Task {
             do {
                 try await APIClient.shared.deleteTrade(trade.id)
+                toasts.show("Trade deleted · \(trade.ticker)")
             } catch {
                 actionError = (error as? APIError)?.errorDescription ?? error.localizedDescription
             }
@@ -163,95 +212,53 @@ struct TradesView: View {
     }
 }
 
-private struct TradeSummaryCard: View {
-    let buys: Double
-    let sells: Double
-    let earned: Double
-    let currency: String
-    let year: Int?
-
-    private var net: Double { sells - buys }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // String(year) — a raw Int interpolation gets a locale comma ("2,026").
-            Text(year != nil ? "Summary for \(String(year!))" : "All-time summary")
-                .font(.subheadline)
-                .foregroundStyle(Theme.secondaryText)
-            HStack(spacing: 16) {
-                stat("Bought", Fmt.money(buys, currency: currency, digits: 0),
-                     color: Theme.negative)
-                stat("Sold", Fmt.money(sells, currency: currency, digits: 0),
-                     color: Theme.positive)
-                stat("Net cash", Fmt.signedMoney(net, currency: currency, digits: 0),
-                     color: net >= 0 ? Theme.positive : Theme.negative)
-                stat("Earned", Fmt.signedMoney(earned, currency: currency, digits: 0),
-                     color: Theme.pl(earned))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func stat(_ label: String, _ value: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(Theme.mutedText)
-            Text(value)
-                .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                .foregroundStyle(color)
-                .minimumScaleFactor(0.65)
-                .lineLimit(1)
-        }
-    }
-}
-
+/// One trade: what it was, what it cost, what it booked, and whether the lot
+/// is still open.
 private struct TradeRow: View {
     let trade: Trade
     let name: String
+    let realized: Double?
 
+    private var currency: String { trade.market.currencyCode }
     private var isBuy: Bool { trade.type == .buy }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(trade.ticker)
-                            .font(.system(.body, design: .rounded).weight(.bold))
-                            .foregroundStyle(Theme.primaryText)
-                        Text(isBuy ? "Buy" : "Sell")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(isBuy ? Theme.positive : Theme.negative)
-                        if trade.status == .closed {
-                            Text("Closed")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Theme.mutedText)
-                        }
-                    }
-                    if !name.isEmpty {
-                        Text(name)
-                            .font(.caption)
-                            .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(1)
-                    }
-                    Text(Fmt.prettyDate(trade.tradeDate))
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedText)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text("\(Fmt.shares(trade.shares)) @ \(Fmt.price(trade.price, currency: trade.market.currencyCode))")
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .foregroundStyle(Theme.primaryText)
-                    Text(Fmt.money(trade.shares * trade.price, currency: trade.market.currencyCode, digits: 0))
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
+        HStack(spacing: Theme.Space.m) {
+            TagChip(text: isBuy ? "BUY" : "SELL",
+                    style: isBuy ? .accent : .outline, width: 44)
+
+            VStack(alignment: .leading, spacing: 1) {
+                TickerLine(ticker: trade.ticker, name: name)
+                Text(detail)
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.textSecondary)
+                    .numeral(0.85)
+                if let realized, !isBuy {
+                    Text("Realized \(Fmt.signedAmount(realized, currency: currency))")
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.pl(realized))
+                        .numeral(0.85)
                 }
             }
-            .padding(.vertical, 12)
-            Theme.rowSeparator
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(trade.tradeDate.prefix(10))
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                Text(trade.status == .open ? "Open" : "Closed")
+                    .font(Theme.Typo.microMed)
+                    .foregroundStyle(trade.status == .open ? Theme.accent : Theme.textTertiary)
+            }
         }
-        .contentShape(Rectangle())
+        .padding(.horizontal, Theme.Space.l)
+        .padding(.vertical, Theme.Space.m + 2)
+    }
+
+    private var detail: String {
+        let gross = trade.shares * trade.price
+        return "\(Fmt.shares(trade.shares)) × \(Fmt.number(trade.price, digits: 2))"
+            + " · fee \(Fmt.number(trade.fee, digits: 0))"
+            + " · \(Fmt.amount(gross, currency: currency))"
     }
 }
