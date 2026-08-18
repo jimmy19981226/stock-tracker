@@ -1,301 +1,366 @@
 import SwiftUI
 
-/// Lets the user point the app at a different backend (e.g. the Mac's LAN IP
-/// when running on a physical device, or the deployed Render URL).
+/// Settings, as six plain groups. Every row is either an identity, a
+/// preference, or a fact about the system — nothing here is a feature.
 struct SettingsView: View {
     @EnvironmentObject private var store: PortfolioStore
     @EnvironmentObject private var auth: AuthStore
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var settings: AppSettings
+    @EnvironmentObject private var toasts: ToastCenter
+    @Environment(\.colorScheme) private var colorScheme
+
     @State private var baseURL = AppConfig.baseURL
-    @State private var googleClientID = AppConfig.googleClientID
+    @State private var provider = AISettings.activeProvider
+    @State private var apiKey = ""
+    @State private var health: String?
     @State private var checking = false
-    @State private var checkResult: String?
     @State private var quoteSources: QuoteSourcesStatus?
     @State private var deviceMISUp: Bool?
-    @State private var loadingSources = false
-
-    /// Developer plumbing stays folded away by default. A backend URL and an
-    /// OAuth client id are things you set once, if ever — giving them the same
-    /// prominence as your account made the screen read as a config file.
-    @State private var showAdvanced = false
+    @State private var showIndices = false
+    @State private var showAbout = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 14) {
-                    accountCard
-                    aiCard
-                    marketDataCard
-                    advancedCard
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                BrandLine()
+                Text("Settings")
+                    .font(Theme.Typo.title)
+                    .foregroundStyle(Theme.text)
+                    .padding(.bottom, Theme.Space.l)
 
-                    // Version lives here as well as on the splash — Settings is
-                    // where people actually go looking for it, and both read the
-                    // same bundle values so they can't disagree.
-                    Text("AI Stock Studio · Version \(AppConfig.versionDisplay)")
-                        .font(Theme.Typo.micro)
-                        .foregroundStyle(Theme.mutedText)
-                        .padding(.top, Theme.Space.xs)
-                }
-                .padding(16)
-                .padding(.bottom, 40)
+                group("Account") { accountCard }
+                group("Appearance") { appearanceCard }
+                group("AI assistant") { aiCard }
+                group("Backend") { backendCard }
+                group("Markets & indices") { marketsCard }
+                group("About") { aboutCard }
+
+                Text("AI Stock Studio · self-hosted · no analytics, no telemetry\nNot investment advice. Prices may be delayed.")
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, Theme.Space.xxs)
             }
-            .background(Theme.backgroundGradient.ignoresSafeArea())
-            .task { await loadQuoteSources() }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                // An icon (circular glass control), not text ("Cancel" renders
-                // as a rounded rectangle that visibly morphs into the circular
-                // back chevron when a subpage like AI Assistant is pushed).
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("Cancel")
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        AppConfig.baseURL = baseURL
-                        AppConfig.googleClientID = googleClientID
-                        Task {
-                            await store.loadMarkets()
-                            await store.loadAll()
-                        }
-                        dismiss()
-                    }
-                }
-            }
+            .screenPadding(bottom: 20)
         }
+        .screenBackground()
+        .task { await probe() }
+        .onAppear { apiKey = AISettings.apiKey(for: provider) ?? "" }
+        .sheet(isPresented: $showIndices) { IndexEditorView().environmentObject(store) }
+        .fullScreenCover(isPresented: $showAbout) { AboutView { showAbout = false } }
     }
 
-    // MARK: - Cards
+    private func group<Content: View>(_ title: String,
+                                      @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text(title)
+                .font(Theme.Typo.row)
+                .foregroundStyle(Theme.textStrong)
+            content()
+        }
+        .padding(.bottom, Theme.Space.xxl)
+    }
 
-    /// Identity leads the screen: who you're signed in as, and the one action
-    /// that changes it.
+    // MARK: Account
+
     private var accountCard: some View {
         let signedIn = auth.user?.isGuest == false
-        return Card {
-            VStack(alignment: .leading, spacing: Theme.Space.l) {
-                HStack(spacing: Theme.Space.m) {
-                    Image(systemName: signedIn ? "person.crop.circle.fill" : "person.crop.circle")
-                        .font(.system(size: 34))
-                        .foregroundStyle(signedIn ? Theme.accent : Theme.mutedText)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(auth.user?.name ?? "Guest")
-                            .font(Theme.Typo.section)
-                            .foregroundStyle(Theme.primaryText)
-                            .lineLimit(1)
-                        Text(auth.user.map { $0.email.isEmpty ? "Not signed in" : $0.email }
-                             ?? "Not signed in")
-                            .font(Theme.Typo.caption)
-                            .foregroundStyle(Theme.mutedText)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                }
-                Button {
-                    if signedIn { auth.signOut() }
-                    else { Task { await auth.signInWithGoogle() } }
-                    dismiss()
-                } label: {
-                    Text(signedIn ? "Sign out" : "Sign in with Google")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(signedIn ? Theme.negative : Color.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(signedIn ? Theme.wash(Theme.negative) : Theme.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
+        return HStack(spacing: Theme.Space.m + 2) {
+            Text(auth.user?.initials.isEmpty == false ? auth.user!.initials : "G")
+                .font(Theme.Typo.row)
+                .foregroundStyle(Theme.accentChipText)
+                .frame(width: 38, height: 38)
+                .background(Theme.accentTint)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous))
 
-    private var aiCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: Theme.Space.s) {
-                settingsLabel("ASSISTANT")
-                NavigationLink { AIProviderSettingsView() } label: {
-                    HStack(spacing: Theme.Space.m) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Theme.accent)
-                            .frame(width: 30, height: 30)
-                            .background(Theme.wash(Theme.accent))
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("AI provider")
-                                .font(Theme.Typo.value)
-                                .foregroundStyle(Theme.primaryText)
-                            Text("OpenAI, Gemini or Claude — with your own key")
-                                .font(Theme.Typo.micro)
-                                .foregroundStyle(Theme.mutedText)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                        }
-                        Spacer(minLength: Theme.Space.s)
-                        Text(AISettings.activeProvider.displayName)
-                            .font(Theme.Typo.caption)
-                            .foregroundStyle(Theme.secondaryText)
-                            .lineLimit(1)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.mutedText)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var marketDataCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                settingsLabel("MARKET DATA")
-                sourceRow(name: "TWSE MIS",
-                          covers: "Real-time · Taiwan stocks",
-                          info: deviceMISUp.map { QuoteSourceInfo(available: $0, via: nil, realtime: true) })
-                sourceRow(name: "Yahoo Finance",
-                          covers: "Delayed · US stocks + TW fallback",
-                          info: quoteSources?.yahoo)
-                Text("MIS serves real-time Taiwan quotes when reachable. Yahoo covers US at all times and fills in for Taiwan when MIS is unavailable.")
+            VStack(alignment: .leading, spacing: 1) {
+                Text(auth.user.map { $0.email.isEmpty ? $0.name : $0.email } ?? "Guest")
+                    .font(Theme.Typo.row)
+                    .foregroundStyle(Theme.text)
+                    .lineLimit(1)
+                Text(signedIn ? "Google sign-in · data scoped to this account"
+                              : "Guest · records stay on this backend")
                     .font(Theme.Typo.micro)
-                    .foregroundStyle(Theme.mutedText)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: Theme.Space.s)
+
+            SecondaryButton(title: signedIn ? "Sign out" : "Sign in") {
+                if signedIn { auth.signOut() } else { Task { await auth.signInWithGoogle() } }
             }
         }
+        .appCard()
     }
 
-    /// Backend URL, OAuth client id and the connection test — folded away.
-    private var advancedCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                Button {
-                    withAnimation(.snappy(duration: 0.28)) { showAdvanced.toggle() }
-                } label: {
-                    HStack {
-                        settingsLabel("ADVANCED")
-                        Spacer()
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(Theme.mutedText)
-                            .rotationEffect(.degrees(showAdvanced ? 0 : -90))
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+    // MARK: Appearance
 
-                if showAdvanced {
-                    field("Backend URL", text: $baseURL,
-                          placeholder: "http://127.0.0.1:8011", url: true,
-                          hint: "Simulator can use 127.0.0.1. On a real iPhone use your Mac's LAN IP and start uvicorn with --host 0.0.0.0.")
-                    field("Google OAuth client ID", text: $googleClientID,
-                          placeholder: "123-abc.apps.googleusercontent.com", url: false,
-                          hint: "Required for Google sign-in. Create an iOS OAuth client for bundle id com.aistockstudio.app.")
-                    Button {
-                        Task { await testConnection() }
-                    } label: {
-                        HStack(spacing: Theme.Space.s) {
-                            Text("Test connection")
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Theme.accent)
-                            Spacer()
-                            if checking {
-                                ProgressView().controlSize(.small)
-                            } else if let r = checkResult {
-                                Text(r)
-                                    .font(Theme.Typo.caption)
-                                    .foregroundStyle(r == "OK" ? Theme.positive : Theme.negative)
-                            }
-                        }
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, Theme.Space.m)
-                        .background(Theme.cardElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private func settingsLabel(_ text: String) -> some View {
-        Text(text)
-            .font(Theme.Typo.label)
-            .tracking(0.8)
-            .foregroundStyle(Theme.mutedText)
-    }
-
-    private func field(_ title: String, text: Binding<String>,
-                       placeholder: String, url: Bool, hint: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title)
+    private var appearanceCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            SegmentedControl(options: Appearance.allCases.map { ($0, $0.label) },
+                             selection: Binding(get: { settings.appearance },
+                                                set: { settings.appearance = $0 }))
+            Text(appearanceNote)
                 .font(Theme.Typo.caption)
-                .foregroundStyle(Theme.secondaryText)
-            TextField(placeholder, text: text)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(url ? .URL : .default)
-                .font(.system(size: 14, design: .monospaced))
-                .foregroundStyle(Theme.primaryText)
-                .padding(.vertical, 10)
-                .padding(.horizontal, Theme.Space.m)
-                .background(Theme.cardElevated)
-                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-            Text(hint)
-                .font(Theme.Typo.micro)
-                .foregroundStyle(Theme.mutedText)
+                .foregroundStyle(Theme.textSecondary)
+
+            Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 2)
+
+            Text("Gain / loss colours").statLabelStyle()
+            SegmentedControl(options: PLConvention.allCases.map { ($0, $0.label) },
+                             selection: Binding(get: { settings.plConvention },
+                                                set: { settings.plConvention = $0 }))
+            Text("Taiwanese boards paint a rise red. This changes the colours only — never a sign or a number.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .appCard()
     }
 
-    /// One market-data source row: status dot, name + what it covers, and
-    /// live probe verdict on the right — "In use" when active, "Unavailable" when not.
-    private func sourceRow(name: String, covers: String, info: QuoteSourceInfo?) -> some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(info == nil ? Theme.mutedText
-                      : info!.available ? Theme.positive : Theme.negative)
-                .frame(width: 9, height: 9)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(name)
-                Text(covers)
-                    .font(.caption2)
-                    .foregroundStyle(Theme.secondaryText)
+    private var appearanceNote: String {
+        settings.appearance == .system
+            ? "Following iOS — currently \(colorScheme == .dark ? "dark" : "light")"
+            : "Always \(settings.appearance.label.lowercased())"
+    }
+
+    // MARK: AI
+
+    private var aiCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text("Provider — your own key, stored in the iOS Keychain and sent per request. Never stored on the server.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            SegmentedControl(options: AIProvider.allCases.map { ($0, $0.shortName) },
+                             selection: Binding(get: { provider },
+                                                set: { newValue in
+                                                    provider = newValue
+                                                    AISettings.activeProvider = newValue
+                                                    apiKey = AISettings.apiKey(for: newValue) ?? ""
+                                                }))
+
+            LabeledField(label: "API key · \(provider.shortName)") {
+                SecureField(provider.keyPrefixHint, text: $apiKey)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onChange(of: apiKey) { _, newValue in
+                        AISettings.setApiKey(newValue, for: provider)
+                    }
             }
-            Spacer()
-            if loadingSources {
-                ProgressView()
-            } else if let info {
-                let viaSuffix = info.via.map { " · \($0)" } ?? ""
-                Text(info.available ? "In use\(viaSuffix)" : "Unavailable")
-                    .font(.caption.weight(info.available ? .medium : .regular))
-                    .foregroundStyle(info.available ? Theme.positive : Theme.negative)
+
+            Menu {
+                ForEach(provider.availableModels) { model in
+                    Button {
+                        AISettings.setModel(model.id, for: provider)
+                        selectedModel = model.id
+                    } label: {
+                        Text("\(model.label) — \(model.note)")
+                    }
+                }
+            } label: {
+                KeyValueRow("Model") {
+                    HStack(spacing: 4) {
+                        Text(currentModelLabel)
+                            .font(Theme.Typo.detailMed)
+                            .foregroundStyle(Theme.accent)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
             }
+
+            toggleRow("Show reasoning while thinking",
+                      isOn: Binding(get: { settings.showReasoning },
+                                    set: { settings.showReasoning = $0 }))
+            toggleRow("Keep generating in background",
+                      isOn: Binding(get: { settings.backgroundGeneration },
+                                    set: { settings.backgroundGeneration = $0 }))
+        }
+        .appCard()
+    }
+
+    @State private var selectedModel: String = ""
+
+    private var currentModelLabel: String {
+        let id = selectedModel.isEmpty ? AISettings.selectedModel(for: provider) : selectedModel
+        return provider.availableModels.first { $0.id == id }?.label ?? id
+    }
+
+    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Theme.line).frame(height: 1)
+            Toggle(isOn: isOn) {
+                Text(title)
+                    .font(Theme.Typo.detail)
+                    .foregroundStyle(Theme.text)
+            }
+            .tint(Theme.accent)
+            .padding(.vertical, 9)
         }
     }
 
-    private func loadQuoteSources() async {
-        loadingSources = true
-        async let backend = try? APIClient.shared.getQuoteSources()
-        async let device = MISQuotes.isUp()
-        quoteSources = await backend
-        deviceMISUp = await device
-        loadingSources = false
+    // MARK: Backend
+
+    private var backendCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            LabeledField(label: "Backend URL") {
+                TextField(AppConfig.defaultBaseURL, text: $baseURL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .onSubmit { applyBackend() }
+            }
+            statusRow("Health", value: health ?? (checking ? "checking…" : "—"),
+                      ok: health?.hasPrefix("200") == true)
+            statusRow("TW quote relay",
+                      value: deviceMISUp == true ? "Connected · TWSE MIS"
+                           : quoteSources?.mis.available == true ? "Connected · relay" : "Unavailable",
+                      ok: deviceMISUp == true || quoteSources?.mis.available == true)
+            statusRow("US quotes",
+                      value: quoteSources?.yahoo.available == true ? "Yahoo · reachable" : "Unavailable",
+                      ok: quoteSources?.yahoo.available == true)
+
+            SecondaryButton(title: "Apply & reload", fullWidth: true) { applyBackend() }
+                .padding(.top, Theme.Space.xxs)
+        }
+        .appCard()
     }
 
-    private func testConnection() async {
-        checking = true
-        checkResult = nil
-        let saved = AppConfig.baseURL
+    private func statusRow(_ key: String, value: String, ok: Bool) -> some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Theme.line).frame(height: 1)
+            KeyValueRow(key) {
+                HStack(spacing: 5) {
+                    Circle().fill(ok ? Theme.gain : Theme.textTertiary).frame(width: 6, height: 6)
+                    Text(value)
+                        .font(Theme.Typo.detailMed)
+                        .foregroundStyle(ok ? Theme.text : Theme.textSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.vertical, Theme.Space.s)
+        }
+    }
+
+    private func applyBackend() {
         AppConfig.baseURL = baseURL
-        do {
-            _ = try await APIClient.shared.getMarkets()
-            checkResult = "OK"
-        } catch {
-            checkResult = "Failed"
+        toasts.show("Backend set · reloading")
+        Task {
+            await store.loadMarkets()
+            await store.loadAll()
+            await probe()
         }
-        AppConfig.baseURL = saved
+    }
+
+    // MARK: Markets
+
+    private var marketsCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(MarketCode.allCases) { market in
+                let open = store.isOpen(market)
+                KeyValueRow(market.displayName) {
+                    HStack(spacing: 5) {
+                        Text(store.config(for: market)?.hoursCaption ?? "—")
+                            .font(Theme.Typo.detail)
+                            .foregroundStyle(Theme.text)
+                        Text("·").foregroundStyle(Theme.textTertiary)
+                        Text(open ? "Open" : "Closed")
+                            .font(Theme.Typo.detailMed)
+                            .foregroundStyle(open ? Theme.gain : Theme.textSecondary)
+                    }
+                }
+                .padding(.vertical, 7)
+                RowDivider(inset: 0)
+            }
+
+            HStack {
+                Text("Followed indices · \(store.indices.count)")
+                    .font(Theme.Typo.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                Spacer()
+                SecondaryButton(title: "Edit") { showIndices = true }
+            }
+            .padding(.top, Theme.Space.m)
+
+            Text("Hours & holidays are DB-driven — editable without a redeploy.")
+                .font(Theme.Typo.micro)
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.top, Theme.Space.xs)
+        }
+        .appCard()
+    }
+
+    // MARK: About
+
+    private var aboutCard: some View {
+        VStack(spacing: 0) {
+            KeyValueRow("Version", AppConfig.versionDisplay).padding(.vertical, 5)
+            RowDivider(inset: 0)
+            KeyValueRow("Market data", "TWSE MIS · Yahoo · FinMind").padding(.vertical, 5)
+            RowDivider(inset: 0)
+            Button { showAbout = true } label: {
+                KeyValueRow("Privacy & disclosures") {
+                    Text("View ›")
+                        .font(Theme.Typo.detailMed)
+                        .foregroundStyle(Theme.accent)
+                }
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .appCard()
+    }
+
+    // MARK: Probes
+
+    private func probe() async {
+        checking = true
+        async let sources = try? APIClient.shared.getQuoteSources()
+        async let device = MISQuotes.isUp()
+        let start = Date()
+        let reachable = (try? await APIClient.shared.getMarkets()) != nil
+        health = reachable
+            ? "200 OK · \(Int(Date().timeIntervalSince(start) * 1000)) ms"
+            : "unreachable"
+        quoteSources = await sources
+        deviceMISUp = await device
         checking = false
+    }
+}
+
+/// The disclosures page. Long-form, so it gets a full screen rather than a
+/// sheet the user has to scroll inside a scroll.
+struct AboutView: View {
+    let onClose: () -> Void
+
+    var body: some View {
+        ModalScaffold(title: "Privacy & disclosures", onClose: onClose) {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                paragraph("Your trades and dividends live in your own database — SQLite on disk or your own Postgres. Nothing is sent to us, and there is no analytics or telemetry in this app.")
+                paragraph("Market data comes from public endpoints only: TWSE MIS for Taiwan quotes, Yahoo for US quotes and daily history, FinMind for Taiwan monthly revenue. No broker login is ever required.")
+                paragraph("The assistant is opt-in. When you ask a question, your portfolio snapshot is sent to the provider you chose, using your own API key. The key is stored in the iOS Keychain and never on the server.")
+                Text("This app reports your own records and public data. It does not provide investment advice or recommendations, and prices may be delayed.")
+                    .font(Theme.Typo.bodyMed)
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Version \(AppConfig.versionDisplay)")
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
+    }
+
+    private func paragraph(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.Typo.body)
+            .foregroundStyle(Theme.text)
+            .lineSpacing(4)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

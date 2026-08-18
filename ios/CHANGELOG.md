@@ -11,6 +11,64 @@ anywhere, even for the same marketing version.
 
 ---
 
+## 1.2.0 (build 3) — 2026-08-17
+
+Rebuilt the whole iOS UI to the `design_handoff_ios_ui/` spec.
+
+### Design language
+- **New palette and type.** Light technical ground, steel-blue accent, grouped
+  white cards with a soft shadow (no borders), and exactly one dark hero field
+  per screen. Barlow Condensed SemiBold carries every number and heading;
+  Barlow carries prose. Both faces are bundled (OFL) and registered via
+  `UIAppFonts` — the design does not survive the system face.
+- **Light / Dark / System.** Both themes are fully defined and resolved from
+  the trait collection, so no view branches on `colorScheme`. The app no longer
+  pins `UIUserInterfaceStyle: Dark`, and the launch screen follows.
+- **Gain/loss is a user setting.** `Theme.pl(_:)` returns green-up (US) or
+  red-up (TW); nothing names a hue at a call site. Every P&L value pairs the
+  colour with a ▲/▼ glyph.
+- **One ladder per dimension** — `Theme.Typo`, `Theme.Space`, `Theme.Radius`,
+  and the colour tokens. One segmented control serves periods, filters and
+  sorting.
+
+### Structure
+- **Five tabs**, drawn rather than `TabView`'s: Overview, Trades, Assistant,
+  Dividends, Settings. Trades and Dividends are now whole-portfolio screens
+  with market/status filters instead of sub-tabs of one market.
+- **Overview** leads with the combined net worth in NT$, a four-column stat
+  strip quoted in US$ (today / unrealized / realized + dividends / total
+  return), the net-worth curve (1M–MAX) and a tappable card per market.
+- **Market dashboard** leads with total earned (realized + dividends), a 2×3
+  stat grid, the total-earned curve, Performance (TWR / annualized / vs a
+  tappable benchmark, plus 12 months of P&L), and a holdings list with weight
+  bars and a Value/Today/Gain sort.
+- **Stock detail** gains trade markers on the price line with a legend, a
+  52-week range bar, a nine-cell stats grid, 月營收 and quarterly financials.
+- **Every trade has its own page.** Tapping a row opens the record — market,
+  date, shares, price, fee, gross, total cost or net proceeds, the realized
+  P/L a sell booked, notes, and why the lot reads Open or Closed — with Edit
+  and Delete there. A tap used to drop straight into an edit form.
+- **The record sheet is one sheet** for trades and dividends, with an explicit
+  Taiwan/US control that auto-selects from the ticker, drives the currency and
+  the automatic fee, and rejects a symbol that doesn't match its market.
+- **AI import** is a four-step modal that flags duplicates and writes nothing
+  until the review is confirmed.
+- **The assistant** shows a turn in the order it happens — question, tool
+  lines, collapsible reasoning, answer — and every write tool lands in a draft
+  card that saves nothing until confirmed.
+
+### Fixed
+- Charts no longer sit on an automatic y-domain: `AreaMark` anchors its fill at
+  zero, which dragged the stock price chart down to 0 and ran the performance
+  axis to ±500% while the curves collapsed into the bottom fifth.
+- Screens no longer add the design's 60pt top inset *on top of* the safe area.
+- **Lists scroll again from anywhere on a row.** The swipe-to-delete gesture was
+  exclusive, so it won the drag from the enclosing scroll view the moment a
+  finger moved on a row — which is most of a list screen. It now runs
+  simultaneously and only claims a drag that is clearly horizontal.
+- Quarterly financials show "2026 Q1", not "2026-03-31", and drop rows that
+  carry no revenue and no EPS.
+
 ## 1.1.0 (build 2) — 2026-07-31
 
 ### Design

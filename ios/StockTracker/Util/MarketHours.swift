@@ -65,3 +65,16 @@ enum MarketHours {
         return .closed
     }
 }
+
+extension MarketConfig {
+    private static func clock(_ minute: Int) -> String {
+        String(format: "%02d:%02d", minute / 60, minute % 60)
+    }
+    /// "09:00–13:30 Taipei" — the caption under a market's title.
+    var hoursCaption: String {
+        let city = timezone.split(separator: "/").last.map {
+            $0.replacingOccurrences(of: "_", with: " ")
+        } ?? timezone
+        return "\(Self.clock(openMinute))–\(Self.clock(closeMinute)) \(city)"
+    }
+}

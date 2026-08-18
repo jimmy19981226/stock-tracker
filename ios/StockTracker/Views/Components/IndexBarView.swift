@@ -1,26 +1,24 @@
-import SwiftUI
 import Charts
+import SwiftUI
 
-/// Market-index strip pinned to the bottom of a market's pages — it stays
-/// visible while switching between Dashboard / Trades / Dividends, like the
-/// index footer in broker apps. Shows only the page's own market's indices
-/// (TW page → 加權指數…, US page → S&P 500…).
+/// The market-index strip, pinned above the tab bar on the Overview tab.
 ///
-/// Interactions:
-///   • chevron (⌃) — expands the strip into detail cards with a 1-month mini
-///     chart and the day's open/high/low per index
-///   • tap an index (strip or card) — pushes the full detail page (same page
-///     as an individual stock)
-///   • ＋ — editor sheet to add/reorder/delete followed indices
+/// Collapsed it is a single scrolling line — the least a market index can be
+/// and still be worth glancing at. Expanded it becomes one recessed card per
+/// index with the day's range and a month of shape. It lives in the navigation
+/// chrome, so it draws no surface of its own beyond the divider that separates
+/// it from the tab bar.
 struct IndexBarView: View {
-    let market: MarketCode
+    /// `nil` on the Overview root (show everything); a market on a dashboard.
+    let market: MarketCode?
     @EnvironmentObject private var store: PortfolioStore
     @State private var showEditor = false
     @State private var expanded = false
     @State private var details: [String: StockDetail] = [:]
 
     private var indices: [IndexQuote] {
-        store.indices.filter { $0.market == market }
+        guard let market else { return store.indices }
+        return store.indices.filter { $0.market == market }
     }
 
     var body: some View {
@@ -28,69 +26,58 @@ struct IndexBarView: View {
             EmptyView()
         } else {
             VStack(spacing: 0) {
-                Rectangle().fill(Theme.stroke).frame(height: 1)
-
                 if expanded {
-                    // Fixed (non-scrolling) panel — every card fully visible.
-                    VStack(spacing: 10) {
+                    VStack(spacing: Theme.Space.s) {
                         ForEach(indices) { q in
-                            NavigationLink(value: q) {
-                                IndexDetailCard(quote: q, detail: details[q.symbol])
-                            }
-                            .buttonStyle(.plain)
-                            .task { await loadDetail(q.symbol) }
+                            IndexDetailCard(quote: q, detail: details[q.symbol])
+                                .task { await loadDetail(q.symbol) }
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 10)
+                    .padding(.horizontal, Theme.Space.l)
+                    .padding(.top, Theme.Space.m)
+                    .padding(.bottom, 2)
                 }
 
                 HStack(spacing: 0) {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 18) {
+                        HStack(spacing: Theme.Space.xl) {
                             ForEach(indices) { q in
-                                NavigationLink(value: q) { IndexChip(quote: q) }
-                                    .buttonStyle(.plain)
+                                IndexChip(quote: q)
                             }
-                            Button {
-                                showEditor = true
-                            } label: {
-                                Image(systemName: "plus.circle")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(Theme.mutedText)
+                            Button { showEditor = true } label: {
+                                Text("＋")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(Theme.textTertiary)
                             }
+                            .buttonStyle(.plain)
                             .accessibilityLabel("Edit indices")
                         }
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, Theme.Space.l)
                     }
                     Button {
                         withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
                     } label: {
                         Image(systemName: expanded ? "chevron.down" : "chevron.up")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Theme.secondaryText)
-                            .frame(width: 40, height: 30)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Theme.textStrong)
+                            .frame(width: 36, height: 26)
                             .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .accessibilityLabel(expanded ? "Hide index details" : "Show index details")
                 }
-                .padding(.vertical, 7)
+                .padding(.vertical, 6)
+                .padding(.trailing, 4)
             }
-            // A pinned bar floating over the scrolling content is exactly the
-            // navigation layer Apple reserves Liquid Glass for, so on iOS 26
-            // this is the real thing and older systems keep the material
-            // approximation. Squared off, because it spans the full width and
-            // meets the tab bar — a capsule here would read as a stray pill.
-            .navGlass(in: Rectangle())
+            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
             .sheet(isPresented: $showEditor) {
-                IndexEditorView()
-                    .environmentObject(store)
+                IndexEditorView().environmentObject(store)
             }
         }
     }
 
-    /// One detail fetch per symbol per screen visit — the price/change in the
-    /// card stay live from the store; the fetch only feeds the chart + O/H/L.
+    /// One detail fetch per symbol per screen visit — price and change stay
+    /// live from the store; the fetch only feeds the sparkline and O/H/L.
     private func loadDetail(_ symbol: String) async {
         guard details[symbol] == nil else { return }
         if let d = try? await APIClient.shared.getStockDetail(symbol, period: .oneMonth) {
@@ -99,150 +86,121 @@ struct IndexBarView: View {
     }
 }
 
-/// One index in the slim strip: name, level, and today's move (▲/▼, colored).
+/// One index on the collapsed line: name, level, today's move.
 private struct IndexChip: View {
     let quote: IndexQuote
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.xs) {
             Text(quote.name)
-                .font(.system(.footnote, design: .rounded).weight(.semibold))
-                .foregroundStyle(Theme.secondaryText)
-                .lineLimit(1)
+                .font(Theme.Typo.detailMed)
+                .foregroundStyle(Theme.textStrong)
             Text(Fmt.number(quote.price, digits: 2))
-                .font(.system(.footnote, design: .rounded).weight(.bold))
-                .monospacedDigit()
-                .foregroundStyle(Theme.primaryText)
-                .contentTransition(.numericText())
-                .animation(.easeOut(duration: 0.25), value: quote.price)
-            ChangeLabel(change: quote.change, changePct: quote.changePct, size: .caption2)
+                .font(Theme.Typo.inlineNum)
+                .foregroundStyle(Theme.text)
+                .rollingNumber(quote.price)
+            MovePct(pct: quote.changePct)
         }
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
     }
 }
 
-/// Expanded card: big price + change, day open/high/low, and a 1-month
-/// closing-price mini chart. Tapping it opens the full detail page.
+/// The expanded card: a recessed `inset` surface — the one place in the app
+/// that surface is used, because these sit *inside* the chrome rather than on
+/// the ground and a white card here would read as a floating panel.
 private struct IndexDetailCard: View {
     let quote: IndexQuote
     let detail: StockDetail?
 
     private var closes: [(Int, Double)] {
-        (detail?.history ?? [])
-            .compactMap(\.close)
-            .enumerated()
-            .map { ($0.offset, $0.element) }
+        (detail?.history ?? []).compactMap(\.close).enumerated().map { ($0.offset, $0.element) }
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
+        HStack(spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Space.xs) {
                     Text(quote.name)
-                        .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        .foregroundStyle(Theme.primaryText)
+                        .font(Theme.Typo.rowSm)
+                        .foregroundStyle(Theme.text)
                     Text(quote.symbol)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedText)
+                        .font(Theme.Typo.nano)
+                        .foregroundStyle(Theme.textSecondary)
                 }
-                // Price and change stacked on separate single lines — a long
-                // index level must never wrap mid-number.
                 Text(Fmt.number(quote.price, digits: 2))
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.primaryText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .contentTransition(.numericText())
-                    .animation(.easeOut(duration: 0.25), value: quote.price)
-                ChangeLabel(change: quote.change, changePct: quote.changePct, size: .caption)
+                    .font(Theme.Typo.value)
+                    .foregroundStyle(Theme.text)
+                    .numeral()
+                    .rollingNumber(quote.price)
+                changeLine
                 if let live = detail?.live {
-                    HStack(spacing: 10) {
+                    HStack(spacing: Theme.Space.m) {
                         ohl("O", live.dayOpen)
                         ohl("H", live.dayHigh)
                         ohl("L", live.dayLow)
                     }
+                    .padding(.top, 2)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: Theme.Space.s)
 
             if closes.count >= 2 {
                 Chart(closes, id: \.0) { point in
                     LineMark(x: .value("i", point.0), y: .value("close", point.1))
-                        .lineStyle(StrokeStyle(lineWidth: 1.8))
-                        .foregroundStyle(Theme.plMark(quote.change))
-                        .interpolationMethod(.catmullRom)
+                        .lineStyle(StrokeStyle(lineWidth: 1.8, lineCap: .round))
+                        .foregroundStyle(Theme.pl(quote.change))
+                        .interpolationMethod(.monotone)
                 }
                 .chartXAxis(.hidden)
                 .chartYAxis(.hidden)
                 .chartYScale(domain: .automatic(includesZero: false))
-                .frame(width: 116, height: 46)
+                .frame(width: 104, height: 42)
                 .overlay(alignment: .topTrailing) {
                     Text("1M")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.mutedText)
-                        .offset(y: -2)
+                        .font(Theme.Typo.axisSm)
+                        .foregroundStyle(Theme.textTertiary)
                 }
             } else {
-                ProgressView()
-                    .controlSize(.small)
-                    .frame(width: 116, height: 46)
+                ProgressView().controlSize(.small).frame(width: 104, height: 42)
             }
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.mutedText)
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Theme.cardElevated.opacity(0.85))
-        )
+        .padding(.horizontal, Theme.Space.m + 2)
+        .padding(.vertical, Theme.Space.m)
+        .background(Theme.inset)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var changeLine: some View {
+        if let change = quote.change {
+            HStack(spacing: 4) {
+                Text((change >= 0 ? "▲ " : "▼ ") + Fmt.number(abs(change), digits: 2))
+                if let pct = quote.changePct {
+                    Text("(\(Fmt.number(abs(pct), digits: 2))%)")
+                }
+            }
+            .font(Theme.Typo.captionMed)
+            .foregroundStyle(Theme.pl(change))
+            .numeral()
+            .rollingNumber(change)
+        }
     }
 
     private func ohl(_ label: String, _ value: Double?) -> some View {
         HStack(spacing: 3) {
-            Text(label).font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.mutedText)
+            Text(label)
+                .font(Theme.Typo.nano)
+                .foregroundStyle(Theme.textTertiary)
             Text(Fmt.number(value, digits: 0))
-                .font(.system(size: 10, weight: .semibold))
-                .monospacedDigit()
-                .foregroundStyle(Theme.secondaryText)
+                .font(Theme.Typo.nano)
+                .foregroundStyle(Theme.textSecondary)
         }
     }
 }
 
-/// ▲/▼ + change + (pct), colored like the rest of the app's P&L.
-private struct ChangeLabel: View {
-    let change: Double?
-    let changePct: Double?
-    var size: Font.TextStyle = .caption2
-
-    var body: some View {
-        if let change {
-            HStack(spacing: 2) {
-                Image(systemName: change >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
-                    .font(.system(size: 8, weight: .bold))
-                Text(Fmt.number(abs(change), digits: 2))
-                    .font(.system(size, design: .rounded).weight(.semibold))
-                    .monospacedDigit()
-                if let changePct {
-                    Text("(\(Fmt.number(abs(changePct), digits: 2))%)")
-                        .font(.system(size, design: .rounded).weight(.semibold))
-                        .monospacedDigit()
-                }
-            }
-            .foregroundStyle(Theme.pl(change))
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .contentTransition(.numericText())
-            .animation(.easeOut(duration: 0.25), value: change)
-        }
-    }
-}
-
-/// Editor sheet: reorder/delete followed indices, add by symbol, or tap a
-/// common suggestion. Saves to the backend on Done.
+/// Editor sheet: reorder/remove followed indices, add by symbol, or tap a
+/// suggestion. Saves to the backend on Done.
 struct IndexEditorView: View {
     @EnvironmentObject private var store: PortfolioStore
     @Environment(\.dismiss) private var dismiss
@@ -265,73 +223,86 @@ struct IndexEditorView: View {
         ("^HSI", "恒生指數"),
     ]
 
-    private var remainingSuggestions: [(symbol: String, name: String)] {
+    private var remaining: [(symbol: String, name: String)] {
         Self.suggestions.filter { !symbols.contains($0.symbol) }
     }
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Your indices") {
-                    ForEach(symbols, id: \.self) { s in
-                        HStack {
-                            Text(Self.suggestions.first { $0.symbol == s }?.name
-                                 ?? store.indices.first { $0.symbol == s }?.name
-                                 ?? s)
-                            Spacer()
-                            Text(s).foregroundStyle(.secondary).font(.footnote)
-                        }
-                    }
-                    .onDelete { symbols.remove(atOffsets: $0) }
-                    .onMove { symbols.move(fromOffsets: $0, toOffset: $1) }
-                }
+    private func name(for symbol: String) -> String {
+        Self.suggestions.first { $0.symbol == symbol }?.name
+            ?? store.indices.first { $0.symbol == symbol }?.name
+            ?? symbol
+    }
 
-                Section("Add by symbol") {
+    var body: some View {
+        SheetScaffold(title: "Market indices", onClose: { dismiss() }) {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                Text("Your indices").statLabelStyle()
+
+                VStack(spacing: 0) {
+                    ForEach(Array(symbols.enumerated()), id: \.element) { index, symbol in
+                        HStack(spacing: Theme.Space.m) {
+                            Text("≡")
+                                .font(Theme.Typo.detail)
+                                .foregroundStyle(Theme.textTertiary)
+                            Text(name(for: symbol))
+                                .font(Theme.Typo.detailMed)
+                                .foregroundStyle(Theme.text)
+                            Spacer(minLength: Theme.Space.s)
+                            Text(symbol)
+                                .font(Theme.Typo.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                            Button {
+                                symbols.removeAll { $0 == symbol }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .frame(width: 24, height: 24)
+                                    .overlay(Circle().stroke(Theme.line, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, Theme.Space.m + 2)
+                        .padding(.vertical, Theme.Space.m)
+                        if index < symbols.count - 1 { RowDivider(inset: 0) }
+                    }
+                }
+                .appListCard(radius: Theme.Radius.inset)
+
+                LabeledField(label: "Add by symbol") {
                     HStack {
-                        TextField("Yahoo symbol, e.g. ^N225 or 0050.TW", text: $newSymbol)
+                        TextField("^N225 · 0050.TW", text: $newSymbol)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
                         Button("Add") { addNew() }
+                            .font(Theme.Typo.detailMed)
+                            .foregroundStyle(Theme.accent)
                             .disabled(newSymbol.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
 
-                if !remainingSuggestions.isEmpty {
-                    Section("Suggestions") {
-                        ForEach(remainingSuggestions, id: \.symbol) { s in
-                            Button {
+                if !remaining.isEmpty {
+                    Text("Suggestions").statLabelStyle()
+                    FlowRow(spacing: Theme.Space.s) {
+                        ForEach(remaining, id: \.symbol) { s in
+                            SecondaryButton(title: "\(s.name)  \(s.symbol)  ＋") {
                                 symbols.append(s.symbol)
-                            } label: {
-                                HStack {
-                                    Text(s.name).foregroundStyle(Theme.primaryText)
-                                    Spacer()
-                                    Text(s.symbol).foregroundStyle(.secondary).font(.footnote)
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundStyle(Theme.accent)
-                                }
                             }
                         }
                     }
                 }
 
                 if let errorMessage {
-                    Section { Text(errorMessage).foregroundStyle(Theme.negative) }
+                    Text(errorMessage)
+                        .font(Theme.Typo.detail)
+                        .foregroundStyle(Theme.loss)
                 }
+
+                PrimaryButton(title: saving ? "Saving…" : "Done", disabled: saving) { save() }
+                    .padding(.top, Theme.Space.xxs)
             }
-            .environment(\.editMode, .constant(.active))
-            .navigationTitle("Market indices")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(saving ? "Saving…" : "Done") { save() }
-                        .disabled(saving)
-                }
-            }
-            .onAppear { symbols = store.indices.map(\.symbol) }
         }
+        .onAppear { symbols = store.indices.map(\.symbol) }
     }
 
     private func addNew() {

@@ -393,122 +393,31 @@ final class AssistantViewModel: ObservableObject {
     }
 }
 
-/// The AI assistant chat — a native iMessage-style transcript with a streamed
-/// reply bubble, backed by the same /api/ai/chat SSE endpoint as the web app.
+/// The assistant.
+///
+/// A turn is shown in the order it actually happens: the question, the tools
+/// the model reached for, what it was thinking, then the answer — and, when the
+/// model wants to *write* something, a draft card that saves nothing until it
+/// is confirmed. That last rule holds for every write tool, without exception.
 struct AssistantView: View {
     // Owned by RootView so streaming + transcript survive leaving this page.
     @ObservedObject var vm: AssistantViewModel
     @EnvironmentObject private var store: PortfolioStore
-    @State private var showSettings = false
+    @EnvironmentObject private var settings: AppSettings
     @State private var showHistory = false
     @State private var providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
-
-    // Mirrors of the persisted provider/model so the header re-renders when
-    // they're switched from the in-chat menu.
     @State private var activeProvider = AISettings.activeProvider
-    @State private var activeModel = AISettings.selectedModel(for: AISettings.activeProvider)
-
-    /// Short label for the currently active model, e.g. "Gemini 2.5 Flash".
-    private var activeModelLabel: String {
-        activeProvider.availableModels.first { $0.id == activeModel }?.label ?? activeModel
-    }
-
-    /// Switch provider/model right from the chat header. Keys still live in
-    /// Settings — picking a keyless provider routes there.
-    private func select(provider: AIProvider, model: String) {
-        AISettings.activeProvider = provider
-        AISettings.setModel(model, for: provider)
-        activeProvider = provider
-        activeModel = model
-        providerHasKey = AISettings.hasKey(for: provider)
-        if !providerHasKey { showSettings = true }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
+            header
             transcript
-            if !providerHasKey {
-                noKeyBanner
-            }
             inputBar
         }
         .screenBackground()
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                // Tap the title to switch provider/model without a trip to
-                // Settings (keys still live there).
-                Menu {
-                    ForEach(AIProvider.allCases) { provider in
-                        Menu {
-                            ForEach(provider.availableModels) { m in
-                                Button {
-                                    select(provider: provider, model: m.id)
-                                } label: {
-                                    if provider == activeProvider && m.id == activeModel {
-                                        Label(m.label, systemImage: "checkmark")
-                                    } else {
-                                        Text(m.label)
-                                    }
-                                }
-                            }
-                        } label: {
-                            if AISettings.hasKey(for: provider) {
-                                Text(provider.displayName)
-                            } else {
-                                Label(provider.displayName, systemImage: "key")
-                            }
-                        }
-                    }
-                    Divider()
-                    Button { showSettings = true } label: {
-                        Label("API keys & settings…", systemImage: "gearshape")
-                    }
-                } label: {
-                    VStack(spacing: 1) {
-                        Text("Assistant")
-                            .font(.headline)
-                            .foregroundStyle(Theme.primaryText)
-                        HStack(spacing: 3) {
-                            Text("\(activeProvider.displayName) · \(activeModelLabel)")
-                                .font(.system(size: 11, weight: .regular))
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 8, weight: .semibold))
-                        }
-                        .foregroundStyle(Theme.mutedText)
-                    }
-                    .fixedSize()
-                }
-                // Menu freezes its label's size at first layout on some iOS
-                // versions (see the holdings sort pill) — rebuild per selection
-                // so the subtitle never clips.
-                .id("\(activeProvider.rawValue)-\(activeModel)")
-            }
-            ToolbarItem(placement: .topBarLeading) {
-                Button { showHistory = true } label: {
-                    Image(systemName: "clock.arrow.circlepath")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { vm.reset() } label: { Image(systemName: "square.and.pencil") }
-                    .disabled(vm.messages.isEmpty && vm.streamingText.isEmpty)
-            }
-            // A Done button above the keyboard so it can always be dismissed
-            // (otherwise it covers the tab bar and traps the user on this page).
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { inputFocused = false }
-            }
-        }
         .sheet(isPresented: $showHistory) { ChatHistoryView(vm: vm) }
-        .sheet(isPresented: $showSettings, onDismiss: {
-            // Settings may have changed the provider/model/keys — resync.
-            activeProvider = AISettings.activeProvider
-            activeModel = AISettings.selectedModel(for: activeProvider)
-            providerHasKey = AISettings.hasKey(for: activeProvider)
-        }) { SettingsView() }
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             photoItem = nil
@@ -523,400 +432,288 @@ struct AssistantView: View {
         .task { await vm.loadStatus() }
         .onAppear {
             activeProvider = AISettings.activeProvider
-            activeModel = AISettings.selectedModel(for: activeProvider)
             providerHasKey = AISettings.hasKey(for: activeProvider)
-            // Wake a cold backend + pre-build the chat context while the user
-            // is still reading/typing, so the first send streams immediately.
+            // Wake a cold backend and pre-build the chat context while the user
+            // is still reading, so the first send streams immediately.
             Task { await APIClient.shared.prewarmAI() }
             if ProcessInfo.processInfo.environment["UITEST_HISTORY"] == "1" { showHistory = true }
         }
     }
 
-    /// Setup prompt above the composer. It was a full-bleed 18%-accent bar that
-    /// read as an alert; it's an invitation, so it now sits as an inset card
-    /// with the accent carried by the icon rather than a wash across the width.
-    private var noKeyBanner: some View {
-        Button { showSettings = true } label: {
-            HStack(spacing: Theme.Space.m) {
-                Image(systemName: "key.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 28, height: 28)
-                    .background(Theme.wash(Theme.accent))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Add your \(AISettings.activeProvider.displayName) key")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Theme.primaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    Text("Needed before the assistant can reply")
-                        .font(Theme.Typo.micro)
-                        .foregroundStyle(Theme.mutedText)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: Theme.Space.s)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Theme.mutedText)
-            }
-            .padding(.horizontal, Theme.Space.m)
-            .padding(.vertical, 10)
-            .background(Theme.cardElevated)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 6)
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: Theme.Space.s) {
+            IconButton(symbol: "clock") { showHistory = true }
+                .accessibilityLabel("Chat history")
+            Text("✦ Assistant")
+                .font(Theme.Typo.headingLg)
+                .foregroundStyle(Theme.text)
+            Spacer(minLength: Theme.Space.xs)
+            TagChip(text: activeProvider.shortName, style: .accent)
+            IconButton(symbol: "square.and.pencil") { vm.reset() }
+                .disabled(vm.messages.isEmpty && vm.streamingText.isEmpty)
+                .accessibilityLabel("New chat")
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, Theme.Space.screenH)
+        .padding(.top, Theme.Space.screenTop)
+        .padding(.bottom, Theme.Space.m)
+        .navChrome(edge: .bottom)
     }
+
+    // MARK: Transcript
 
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(alignment: .leading, spacing: Theme.Space.m) {
                     if vm.messages.isEmpty && vm.streamingText.isEmpty {
-                        welcome
+                        emptyState
                     }
-                    ForEach(Array(vm.messages.enumerated()), id: \.offset) { idx, msg in
-                        // Keep the last reply's reasoning attached above it,
+
+                    ForEach(Array(vm.messages.enumerated()), id: \.offset) { index, message in
+                        // The last reply's reasoning stays attached above it,
                         // collapsed but re-expandable, until the next send.
-                        if idx == vm.messages.count - 1, msg.role == "assistant",
-                           !vm.thinkingText.isEmpty, !vm.isStreaming {
-                            ReasoningSection(text: vm.thinkingText, active: false)
+                        if index == vm.messages.count - 1, message.role == "assistant",
+                           !vm.thinkingText.isEmpty, !vm.isStreaming, settings.showReasoning {
+                            ReasoningBlock(text: vm.thinkingText, active: false)
                         }
-                        ChatBubble(message: msg)
+                        MessageView(message: message)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
+
                     if vm.isStreaming {
-                        Group {
-                            VStack(alignment: .leading, spacing: 12) {
-                                if !vm.thinkingText.isEmpty {
-                                    // Live reasoning — expanded while it
-                                    // streams, collapses when the answer
-                                    // starts; tap to toggle anytime.
-                                    ReasoningSection(text: vm.thinkingText,
-                                                     active: vm.streamingText.isEmpty)
-                                }
-                                if vm.streamingText.isEmpty {
-                                    if vm.thinkingText.isEmpty {
-                                        ThinkingIndicator(text: vm.streamStatus ?? "Thinking…")
-                                            .animation(.easeInOut(duration: 0.25), value: vm.streamStatus)
-                                    } else if let status = vm.streamStatus {
-                                        ThinkingIndicator(text: status)
-                                    }
-                                } else {
-                                    // Trailing ▍ = the live-generation cursor.
-                                    ChatBubble(message: ChatMessage(role: "assistant",
-                                                                    content: vm.streamingText + " ▍"))
-                                }
+                        VStack(alignment: .leading, spacing: Theme.Space.m) {
+                            if let status = vm.streamStatus {
+                                ToolStatusLine(text: status)
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            if !vm.thinkingText.isEmpty, settings.showReasoning {
+                                ReasoningBlock(text: vm.thinkingText,
+                                               active: vm.streamingText.isEmpty)
+                            }
+                            if vm.streamingText.isEmpty {
+                                if vm.thinkingText.isEmpty && vm.streamStatus == nil {
+                                    ToolStatusLine(text: "reading your portfolio…")
+                                }
+                            } else {
+                                AnswerView(text: vm.streamingText + " ▍")
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .id("streaming")
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
 
-                    // The assistant proposed trades/dividends (from typed text
-                    // or a read image) — review card, nothing saved yet.
+                    // A write tool proposed records. This card is the only way
+                    // they reach the database.
                     if vm.pendingImport != nil {
-                        ImportReviewCard(vm: vm, store: store)
+                        DraftRecordsCard(vm: vm, store: store)
+                    }
+
+                    if !providerHasKey {
+                        noKeyBanner
                     }
                     if let error = vm.error {
                         ErrorBanner(message: error)
                     }
+                    if vm.isStreaming {
+                        generatingRow
+                    }
                     Color.clear.frame(height: 1).id("bottom")
                 }
-                .padding(16)
-                // Spring the new-message/thinking rows in instead of popping.
-                .animation(.spring(response: 0.35, dampingFraction: 0.85),
-                           value: vm.messages.count)
-                .animation(.spring(response: 0.35, dampingFraction: 0.85),
-                           value: vm.isStreaming)
+                .padding(.horizontal, Theme.Space.screenH)
+                .padding(.vertical, Theme.Space.l)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.messages.count)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.isStreaming)
             }
-            // Swipe down on the transcript to dismiss the keyboard.
             .scrollDismissesKeyboard(.interactively)
-            // A soft tick when a reply lands (message count grows).
             .sensoryFeedback(.impact(weight: .light), trigger: vm.messages.count)
             .onChange(of: vm.messages.count) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
-            .onChange(of: vm.streamingText) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
-            .onChange(of: vm.thinkingText) { _, _ in
-                proxy.scrollTo("bottom", anchor: .bottom)
-            }
-            .onChange(of: vm.pendingAttachment == nil) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
-            }
+            .onChange(of: vm.streamingText) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+            .onChange(of: vm.thinkingText) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             .onChange(of: vm.pendingImport == nil) { _, _ in
                 withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }
     }
 
-    /// Portfolio-aware starter prompts — tap to send. Kept short so each fits
-    /// one line; they showcase the assistant's range (analysis, news via web
-    /// grounding, fundamentals).
-    private static let starterPrompts: [(icon: String, text: String)] = [
-        ("chart.line.uptrend.xyaxis", "How is my portfolio doing today?"),
-        ("trophy", "What are my best and worst performers?"),
-        ("newspaper", "Any news affecting my holdings?"),
-        ("scalemass", "Am I too concentrated? Review my allocation"),
-        ("building.2", "Summarize 2330's latest quarter"),
+    /// While a reply is in flight. It says the generation survives leaving the
+    /// app because it does — the server finishes the turn either way — and the
+    /// Stop is right there for when that isn't what you wanted.
+    private var generatingRow: some View {
+        HStack(spacing: Theme.Space.m) {
+            PulsingCaption(text: "✦ generating" + (settings.backgroundGeneration
+                ? " — continues if you leave the app" : ""))
+            SecondaryButton(title: "Stop") { vm.stopStreaming() }
+        }
+    }
+
+    // MARK: Empty state
+
+    private static let suggestions = [
+        "How is my portfolio doing today?",
+        "Am I beating my benchmark this year?",
+        "What's the latest news on my biggest holding?",
+        "I bought 2,000 shares of 00919 at 24.6 today",
     ]
 
-    private var welcome: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 40))
-                    .foregroundStyle(
-                        LinearGradient(colors: [Theme.accent, Theme.accent.opacity(0.55)],
-                                       startPoint: .top, endPoint: .bottom))
-                    .shadow(color: Theme.accent.opacity(0.5), radius: 18)
-                Text("Ask anything about your portfolio")
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(Theme.primaryText)
-                    .multilineTextAlignment(.center)
-                Text("Portfolio-aware · Web search · Statement import")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedText)
-            }
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text("Try asking").eyebrowStyle(Theme.textSecondary)
 
-            VStack(spacing: 8) {
-                ForEach(Self.starterPrompts, id: \.text) { prompt in
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                ForEach(Self.suggestions, id: \.self) { prompt in
                     Button {
-                        vm.input = prompt.text
+                        vm.input = prompt
                         vm.send()
                     } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: prompt.icon)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Theme.accent)
-                                .frame(width: 22)
-                            Text(prompt.text)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(Theme.primaryText)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.85)
-                            Spacer()
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Theme.mutedText)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 13)
-                        // Depth instead of a hairline outline: five stacked
-                        // 7%-white boxes read as a wireframe, not as buttons.
-                        .background(Theme.cardElevated)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .shadow(color: .black.opacity(0.28), radius: 8, y: 3)
+                        Text(prompt)
+                            .font(Theme.Typo.detail)
+                            .foregroundStyle(Theme.text)
+                            .multilineTextAlignment(.leading)
+                            .padding(.horizontal, Theme.Space.m + 2)
+                            .padding(.vertical, Theme.Space.s + 1)
+                            .background(Theme.card)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
+                                    .stroke(Theme.line, lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button,
+                                                        style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .disabled(!providerHasKey)
                 }
             }
+
+            Text("Typed tools — portfolio summary, holdings, trades, dividends, live quotes for any ticker, price history, TWR/XIRR/benchmark, dividend calendar, net-worth history, FX, market hours, web search. Write tools only ever draft a record for your confirmation.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: 300, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Theme.Space.xs)
         }
-        .padding(.top, 36)
+        .padding(.top, Theme.Space.m)
     }
 
+    /// Setup prompt — an invitation, not an alert, so it sits inline as a card
+    /// rather than a full-bleed warning band.
+    private var noKeyBanner: some View {
+        HStack(spacing: Theme.Space.m) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 28, height: 28)
+                .background(Theme.accentTint)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.pill, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Add your \(activeProvider.shortName) key")
+                    .font(Theme.Typo.detailMed)
+                    .foregroundStyle(Theme.text)
+                Text("Settings → AI assistant. The assistant can't reply without it.")
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .appCard(padding: Theme.Space.m)
+    }
+
+    // MARK: Compose
+
     private var inputBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Staged photo — attached but not sent yet. Type a prompt to go
-            // with it (or leave it blank) and hit Send to upload both together.
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             if let attachment = vm.pendingAttachment {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: Theme.Space.s) {
                     Image(uiImage: attachment)
-                        .resizable()
-                        .scaledToFill()
+                        .resizable().scaledToFill()
                         .frame(width: 56, height: 56)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.segment,
+                                                    style: .continuous))
                     Spacer()
                     Button {
                         withAnimation(.snappy(duration: 0.3)) { vm.removeAttachment() }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 20))
-                            .foregroundStyle(Theme.mutedText, Theme.cardElevated)
+                            .foregroundStyle(Theme.textSecondary, Theme.track)
                     }
+                    .buttonStyle(.plain)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            HStack(spacing: 10) {
-                // Attach a photo — the AI reads it in-conversation (a stock
-                // chart, a trade confirmation, a brokerage statement…).
+            HStack(spacing: Theme.Space.s) {
                 PhotosPicker(selection: $photoItem, matching: .images) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(vm.isSubmittingImport ? Theme.mutedText : Theme.secondaryText)
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 30, height: 30)
                 }
                 .disabled(vm.isSubmittingImport)
 
-                // Send button lives inside the field pill (ChatGPT-style), and
-                // becomes a stop button while a reply is streaming.
-                HStack(alignment: .bottom, spacing: 6) {
-                    TextField(vm.pendingAttachment == nil ? "Ask about your portfolio…" : "Add a note (optional)…",
-                             text: $vm.input, axis: .vertical)
-                        .focused($inputFocused)
-                        .lineLimit(1...5)
-                        .padding(.leading, 6)
-                        .padding(.vertical, 5)
-                    Button {
-                        if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
-                    } label: {
-                        Image(systemName: vm.isStreaming ? "stop.circle.fill" : "arrow.up.circle.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(vm.isStreaming ? Theme.primaryText
-                                             : vm.canSend ? Theme.accent : Theme.mutedText)
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                    .disabled(!vm.isStreaming && !vm.canSend)
+                TextField(vm.pendingAttachment == nil ? "Ask about your portfolio…"
+                                                      : "Add a note (optional)…",
+                          text: $vm.input, axis: .vertical)
+                    .focused($inputFocused)
+                    .lineLimit(1...5)
+                    .font(Theme.Typo.body)
+                    .foregroundStyle(Theme.text)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 9)
+                    .background(Theme.card)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
+                            .stroke(Theme.line, lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button,
+                                                style: .continuous))
+                    .onSubmit { vm.send() }
+
+                Button {
+                    if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
+                } label: {
+                    Image(systemName: vm.isStreaming ? "stop.fill" : "paperplane.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(vm.isStreaming || vm.canSend ? Theme.accent : Theme.textTertiary)
+                        .clipShape(Circle())
+                        .contentTransition(.symbolEffect(.replace))
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Theme.cardElevated.opacity(0.9))
-                .clipShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 21, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-                )
+                .buttonStyle(.plain)
+                .disabled(!vm.isStreaming && !vm.canSend)
             }
         }
-        .padding(12)
-        // Frosted compose bar over the gradient — matches the index strip
-        // and the iOS-native look, instead of a flat tinted band.
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-            Rectangle().fill(Theme.stroke).frame(height: 1)
-        }
+        .padding(.horizontal, Theme.Space.screenH)
+        .padding(.top, Theme.Space.m)
+        .padding(.bottom, Theme.Space.m)
+        .navChrome(edge: .top)
     }
 }
 
-/// Collapsible reasoning section, like Claude's: a tappable "Reasoning" row
-/// with a chevron. While the model is still reasoning (`active`) it stays
-/// expanded and streams the thought text; when the answer starts it collapses
-/// to a single row, and the user can re-expand it anytime.
-private struct ReasoningSection: View {
-    let text: String
-    let active: Bool
-    @State private var expanded: Bool
-    @State private var userToggled = false
+// MARK: - Message parts
 
-    init(text: String, active: Bool) {
-        self.text = text
-        self.active = active
-        _expanded = State(initialValue: active)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                userToggled = true
-                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkle")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(active ? "Reasoning…" : "Reasoning")
-                        .font(.footnote.weight(.medium))
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
-                }
-                .foregroundStyle(Theme.mutedText)
-            }
-            .buttonStyle(.plain)
-
-            if expanded {
-                HStack(alignment: .top, spacing: 10) {
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Theme.stroke)
-                        .frame(width: 3)
-                    Text(text)
-                        .font(.system(size: 13, design: .serif))
-                        .italic()
-                        .foregroundStyle(Theme.secondaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .transition(.opacity)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // Auto-collapse when reasoning finishes, unless the user pinned it
-        // open themselves.
-        .onChange(of: active) { _, nowActive in
-            if !nowActive && !userToggled {
-                withAnimation(.easeInOut(duration: 0.2)) { expanded = false }
-            }
-        }
-    }
-}
-
-/// Bare inline "thinking" row — a pulsing accent sparkle plus a shimmering
-/// status line (highlight sweeping left→right), directly in the chat flow with
-/// no bubble container. The text is either the backend's live status
-/// ("Searching the web…") or a generic "Thinking…".
-private struct ThinkingIndicator: View {
-    let text: String
-    var icon: String = "sparkles"
-
-    var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            let pulse = (sin(t * 3) + 1) / 2
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .scaleEffect(0.9 + 0.15 * pulse)
-                    .opacity(0.6 + 0.4 * pulse)
-                shimmer(t)
-            }
-            .padding(.vertical, 6)
-        }
-    }
-
-    private func shimmer(_ t: Double) -> some View {
-        // Phase runs -0.4 → 1.4 so the highlight fully enters and exits.
-        let phase = t.truncatingRemainder(dividingBy: 1.6) / 1.6 * 1.8 - 0.4
-        return Text(text)
-            // Serif to match the reply voice it precedes.
-            .font(.system(size: 15, design: .serif))
-            .foregroundStyle(
-                LinearGradient(
-                    stops: [
-                        .init(color: Theme.secondaryText, location: 0),
-                        .init(color: Theme.primaryText, location: 0.5),
-                        .init(color: Theme.secondaryText, location: 1),
-                    ],
-                    startPoint: UnitPoint(x: phase - 0.35, y: 0.5),
-                    endPoint: UnitPoint(x: phase + 0.35, y: 0.5)))
-    }
-}
-
-private struct ChatBubble: View {
+/// A user turn or an assistant answer.
+private struct MessageView: View {
     let message: ChatMessage
+    @State private var showFullScreen = false
+
     private var isUser: Bool { message.role == "user" }
     private var content: String { Self.stripMeta(message.content) }
-    // Independent of vm.isStreaming by design — an attached photo stays
-    // tappable to review full-screen even while the reply is generating.
-    @State private var showFullScreen = false
 
     var body: some View {
         if isUser {
-            VStack(alignment: .trailing, spacing: 6) {
+            VStack(alignment: .trailing, spacing: Theme.Space.xs) {
                 if let img = message.displayImage {
                     HStack {
                         Spacer(minLength: 40)
                         Button { showFullScreen = true } label: {
                             Image(uiImage: img)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 180, height: 180)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .resizable().scaledToFill()
+                                .frame(width: 170, height: 170)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card,
+                                                            style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
@@ -928,55 +725,167 @@ private struct ChatBubble: View {
                     HStack {
                         Spacer(minLength: 40)
                         Text(content)
-                            .font(.subheadline.weight(.medium))
-                            // Black text — readable on every accent style (incl. gold).
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            // Slight top-lit gradient so the bubble reads as a lit
-                            // surface, not a flat color chip.
-                            .background(
-                                LinearGradient(
-                                    colors: [Theme.accent.opacity(0.92), Theme.accent],
-                                    startPoint: .top, endPoint: .bottom)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .font(Theme.Typo.body)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, Theme.Space.l)
+                            .padding(.vertical, Theme.Space.m)
+                            .background(Theme.accent)
+                            // 18/18/5/18: the one clipped corner points at the
+                            // sender, the way every message app draws a tail
+                            // without drawing a tail.
+                            .clipShape(UnevenRoundedRectangle(
+                                topLeadingRadius: 18, bottomLeadingRadius: 18,
+                                bottomTrailingRadius: 5, topTrailingRadius: 18,
+                                style: .continuous))
                             .textSelection(.enabled)
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         } else {
-            // Assistant replies render as full-width formatted Markdown in the
-            // Claude serif reading voice (typography only — app colors stay).
-            MarkdownText(markdown: content, serif: true)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contextMenu {
-                    Button {
-                        UIPasteboard.general.string = content
-                    } label: {
-                        Label("Copy reply", systemImage: "doc.on.doc")
-                    }
-                }
+            AnswerView(text: content)
         }
     }
 
     /// Strip the internal `<!--meta:{...}-->` header(s) the backend prepends to
-    /// the canonical reply. Loops because older chats can carry more than one
-    /// (models used to see the header in history and echo their own copy).
+    /// the canonical reply. Loops because older chats can carry more than one.
     static func stripMeta(_ s: String) -> String {
         var out = s.trimmingCharacters(in: .whitespacesAndNewlines)
         while out.hasPrefix("<!--meta:"), let r = out.range(of: "-->") {
-            out = String(out[r.upperBound...])
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            out = String(out[r.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return out
     }
 }
 
-/// Assistant-side card showing parsed trades/dividends with toggles and an
-/// Add button — the in-chat version of the import review screen.
-private struct ImportReviewCard: View {
+/// The answer itself, plus the disclosure the answer always needs. Rendered in
+/// the body face rather than a serif: a serif reading voice was tried here
+/// before, as part of a wholesale restyle of this screen, and reverted.
+private struct AnswerView: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            MarkdownText(markdown: text, serif: false)
+                .textSelection(.enabled)
+            Text("Observation from your data — not investment advice.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contextMenu {
+            Button {
+                UIPasteboard.general.string = text
+            } label: {
+                Label("Copy reply", systemImage: "doc.on.doc")
+            }
+        }
+    }
+}
+
+/// A tool the model reached for, as it happens. One quiet line with an accent
+/// dot — enough to see what it is doing, never enough to compete with the
+/// answer that follows.
+private struct ToolStatusLine: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: Theme.Space.xs) {
+            Circle().fill(Theme.accent).frame(width: 5, height: 5)
+            Text(text)
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+        }
+    }
+}
+
+/// Streamed reasoning: expanded while the model is still thinking, collapsed
+/// once the answer starts, re-expandable forever after. Shown only when
+/// "Show reasoning" is on.
+private struct ReasoningBlock: View {
+    let text: String
+    let active: Bool
+    @State private var expanded: Bool
+    @State private var userToggled = false
+    @State private var started = Date()
+
+    init(text: String, active: Bool) {
+        self.text = text
+        self.active = active
+        _expanded = State(initialValue: active)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                userToggled = true
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: Theme.Space.s) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    Text("Reasoning \(duration)")
+                        .eyebrowStyle(Theme.textStrong)
+                        .tracking(11 * 0.10)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(Theme.textStrong)
+                .padding(.horizontal, Theme.Space.m + 2)
+                .padding(.vertical, Theme.Space.s)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                Text(text)
+                    .font(Theme.Typo.detail)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, Theme.Space.m + 2)
+                    .padding(.bottom, Theme.Space.m)
+                    .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.track)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.inset, style: .continuous))
+        .onChange(of: active) { _, nowActive in
+            // Auto-collapse when the thinking ends, unless the reader pinned it.
+            if !nowActive && !userToggled {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded = false }
+            }
+        }
+    }
+
+    private var duration: String {
+        active ? "…" : String(format: "· %.1f s", Date().timeIntervalSince(started))
+    }
+}
+
+/// A caption that breathes while work is in flight.
+private struct PulsingCaption: View {
+    let text: String
+    @State private var dim = false
+
+    var body: some View {
+        Text(text)
+            .font(Theme.Typo.detail)
+            .foregroundStyle(Theme.textSecondary)
+            .opacity(dim ? 0.35 : 1)
+            .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: dim)
+            .onAppear { dim = true }
+    }
+}
+
+/// The drafted-record card.
+///
+/// The model can propose a trade; it cannot book one. Everything a write tool
+/// produces lands here first, itemised, with every row switchable, and reaches
+/// the database only when **Add** is tapped.
+private struct DraftRecordsCard: View {
     @ObservedObject var vm: AssistantViewModel
     let store: PortfolioStore
 
@@ -985,114 +894,91 @@ private struct ImportReviewCard: View {
     }
 
     private var addTitle: String {
-        let t = vm.importTradeOn.filter { $0 }.count
-        let d = vm.importDividendOn.filter { $0 }.count
+        let trades = vm.importTradeOn.filter { $0 }.count
+        let divs = vm.importDividendOn.filter { $0 }.count
         var parts: [String] = []
-        if t > 0 { parts.append("\(t) trade\(t == 1 ? "" : "s")") }
-        if d > 0 { parts.append("\(d) dividend\(d == 1 ? "" : "s")") }
+        if trades > 0 { parts.append("\(trades) trade\(trades == 1 ? "" : "s")") }
+        if divs > 0 { parts.append("\(divs) dividend\(divs == 1 ? "" : "s")") }
         return parts.isEmpty ? "Add" : "Add \(parts.joined(separator: " · "))"
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Here's what I found — untick anything that's wrong, then add:")
-                .font(.subheadline)
-                .foregroundStyle(Theme.primaryText)
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack {
+                Text("Drafted — confirm to save").eyebrowStyle(Theme.accent)
+                Spacer(minLength: Theme.Space.s)
+            }
 
             if let parsed = vm.pendingImport {
                 VStack(spacing: 0) {
                     ForEach(Array(parsed.trades.enumerated()), id: \.offset) { i, row in
-                        importRow(
+                        draftRow(
                             isOn: Binding(
                                 get: { vm.importTradeOn.indices.contains(i) ? vm.importTradeOn[i] : false },
                                 set: { if vm.importTradeOn.indices.contains(i) { vm.importTradeOn[i] = $0 } }),
-                            title: row.ticker,
-                            tag: row.type == .buy ? "Buy" : "Sell",
-                            tagColor: row.type == .buy ? Theme.positive : Theme.negative,
-                            detail: "\(Fmt.shares(row.shares)) @ \(Fmt.number(row.price))",
-                            date: row.date
-                        )
+                            tag: row.type == .buy ? "BUY" : "SELL",
+                            style: row.type == .buy ? .accent : .outline,
+                            ticker: row.ticker,
+                            detail: "\(Fmt.shares(row.shares)) @ \(Fmt.number(row.price, digits: 2))"
+                                + " · \(row.date.prefix(10))"
+                                + (row.fee.map { " · fee \(Fmt.number($0, digits: 0))" } ?? ""),
+                            last: i == parsed.trades.count - 1 && parsed.dividends.isEmpty)
                     }
                     ForEach(Array(parsed.dividends.enumerated()), id: \.offset) { i, row in
-                        importRow(
+                        draftRow(
                             isOn: Binding(
                                 get: { vm.importDividendOn.indices.contains(i) ? vm.importDividendOn[i] : false },
                                 set: { if vm.importDividendOn.indices.contains(i) { vm.importDividendOn[i] = $0 } }),
-                            title: row.ticker,
-                            tag: "Dividend",
-                            tagColor: Theme.accent,
-                            detail: "+\(Fmt.number(row.amount))",
-                            date: row.date
-                        )
+                            tag: "DIV", style: .neutral,
+                            ticker: row.ticker,
+                            detail: "\(Fmt.number(row.amount, digits: 2)) · \(row.date.prefix(10))",
+                            last: i == parsed.dividends.count - 1)
                     }
                 }
 
                 if !parsed.notes.isEmpty {
                     Text(parsed.notes)
-                        .font(.caption)
-                        .foregroundStyle(Theme.secondaryText)
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
 
-            HStack(spacing: 10) {
-                Button {
+            HStack(spacing: Theme.Space.s) {
+                PrimaryButton(title: addTitle,
+                              disabled: selectedCount == 0,
+                              busy: vm.isSubmittingImport) {
                     Task { await vm.submitImport(store: store) }
-                } label: {
-                    Group {
-                        if vm.isSubmittingImport { ProgressView().tint(.black) }
-                        else {
-                            Text(addTitle)
-                                .font(.system(.subheadline, design: .rounded).weight(.bold))
-                        }
-                    }
-                    .foregroundStyle(selectedCount == 0 ? Theme.mutedText : .black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(selectedCount == 0 ? Theme.cardElevated : Theme.accent)
-                    .clipShape(Capsule())
                 }
-                .disabled(selectedCount == 0 || vm.isSubmittingImport)
-
-                Button("Dismiss") { vm.cancelImport() }
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.secondaryText)
+                SecondaryButton(title: "Discard") { vm.cancelImport() }
             }
         }
-        .cardStyle(padding: 14)
+        .appCard()
     }
 
-    private func importRow(isOn: Binding<Bool>, title: String, tag: String,
-                           tagColor: Color, detail: String, date: String) -> some View {
+    private func draftRow(isOn: Binding<Bool>, tag: String, style: TagChip.Style,
+                          ticker: String, detail: String, last: Bool) -> some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Toggle("", isOn: isOn).labelsHidden()
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(title)
-                            .font(.system(.subheadline, design: .rounded).weight(.bold))
-                            .foregroundStyle(Theme.primaryText)
-                        Text(tag)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(tagColor)
-                    }
-                    Text(date)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedText)
+            HStack(spacing: Theme.Space.m) {
+                TagChip(text: tag, style: style, width: 46)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(ticker)
+                        .font(Theme.Typo.row)
+                        .foregroundStyle(Theme.text)
+                    Text(detail)
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
                 }
-                Spacer()
-                Text(detail)
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(Theme.primaryText)
+                Spacer(minLength: Theme.Space.s)
+                Toggle("", isOn: isOn).labelsHidden().tint(Theme.accent)
             }
-            .padding(.vertical, 8)
-            Rectangle().fill(Theme.stroke).frame(height: 1)
+            .padding(.vertical, Theme.Space.s)
+            if !last { RowDivider(inset: 0) }
         }
     }
 }
 
-/// Full-screen, pinch-to-zoom review of a chat-attached photo. Tap the image
-/// or the close button to dismiss; works whether the image is still local
-/// (just picked/sent) or reloaded from a past chat's persisted history.
+/// Full-screen, pinch-to-zoom review of a chat-attached photo.
 private struct FullScreenImageViewer: View {
     let image: UIImage
     @Environment(\.dismiss) private var dismiss
@@ -1102,8 +988,7 @@ private struct FullScreenImageViewer: View {
         ZStack(alignment: .topTrailing) {
             Color.black.ignoresSafeArea()
             Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
+                .resizable().scaledToFit()
                 .scaleEffect(zoom)
                 .gesture(
                     MagnificationGesture()

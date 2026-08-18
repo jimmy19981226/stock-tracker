@@ -6,7 +6,7 @@ import SwiftUI
 /// AttributedString's Markdown parser; block structure is parsed here.
 struct MarkdownText: View {
     let markdown: String
-    var textColor: Color = Theme.primaryText
+    var textColor: Color = Theme.text
     /// Claude-style serif reading voice for body text and headings. Colors and
     /// code/table styling are unaffected — this is typography only.
     var serif = false
@@ -26,8 +26,8 @@ struct MarkdownText: View {
         switch block {
         case let .heading(level, text):
             inline(text)
-                .font(.system(size: headingSize(level), weight: .bold,
-                              design: serif ? .serif : .rounded))
+                .font(serif ? .system(size: headingSize(level), weight: .bold, design: .serif)
+                            : .custom("BarlowCondensed-SemiBold", size: headingSize(level)))
                 .foregroundStyle(textColor)
                 .padding(.top, level <= 2 ? 2 : 0)
 
@@ -70,11 +70,11 @@ struct MarkdownText: View {
                     .foregroundStyle(textColor)
                     .padding(12)
             }
-            .background(Theme.bg)
+            .background(Theme.inset)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Theme.stroke, lineWidth: 1)
+                    .stroke(Theme.line, lineWidth: 1)
             )
 
         case let .quote(lines):
@@ -84,11 +84,11 @@ struct MarkdownText: View {
                     .frame(width: 3)
                 multiline(lines)
                     .font(bodyFont)
-                    .foregroundStyle(Theme.secondaryText)
+                    .foregroundStyle(Theme.textSecondary)
             }
 
         case .rule:
-            Rectangle().fill(Theme.stroke).frame(height: 1).padding(.vertical, 2)
+            Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 2)
 
         case let .table(header, rows):
             // GFM table → a real grid (wide tables scroll horizontally).
@@ -98,7 +98,7 @@ struct MarkdownText: View {
                         ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
                             inline(cell)
                                 .font(.footnote.weight(.semibold))
-                                .foregroundStyle(Theme.secondaryText)
+                                .foregroundStyle(Theme.textSecondary)
                         }
                     }
                     Divider()
@@ -114,18 +114,19 @@ struct MarkdownText: View {
                 }
                 .padding(10)
             }
-            .background(Theme.bg.opacity(0.6))
+            .background(Theme.inset)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Theme.stroke, lineWidth: 1)
+                    .stroke(Theme.line, lineWidth: 1)
             )
         }
     }
 
-    /// Body text voice: 15pt serif in Claude mode, .subheadline otherwise.
+    /// Body voice. Barlow by default — the app's own prose face; `serif` is
+    /// kept as an escape hatch but is not what the Assistant uses.
     private var bodyFont: Font {
-        serif ? .system(size: 15, design: .serif) : .subheadline
+        serif ? .system(size: 15, design: .serif) : Theme.Typo.body
     }
 
     private func headingSize(_ level: Int) -> CGFloat {

@@ -500,20 +500,22 @@ struct ValuePoint: Codable, Identifiable, Hashable {
     let total: Double
 }
 
-/// Period tabs for the portfolio-value chart (Stocks-app style).
+/// Period tabs for the portfolio-value chart. Six segments, matching the
+/// design's net-worth control; the backend accepts these yfinance shorthands
+/// verbatim (see _VALUE_PERIODS in routers/portfolio.py).
 enum ValuePeriod: String, CaseIterable, Identifiable {
-    case week = "5d"
     case month = "1mo"
     case threeMonth = "3mo"
+    case sixMonth = "6mo"
     case ytd = "ytd"
     case year = "1y"
     case max
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .week: return "1W"
         case .month: return "1M"
         case .threeMonth: return "3M"
+        case .sixMonth: return "6M"
         case .ytd: return "YTD"
         case .year: return "1Y"
         case .max: return "MAX"
@@ -522,13 +524,18 @@ enum ValuePeriod: String, CaseIterable, Identifiable {
     /// Suffix for the range-change line ("+NT$12,345 (+1.2%) Past month").
     var changeSuffix: String {
         switch self {
-        case .week: return "Past week"
         case .month: return "Past month"
         case .threeMonth: return "Past 3 months"
+        case .sixMonth: return "Past 6 months"
         case .ytd: return "This year"
         case .year: return "Past year"
         case .max: return "All time"
         }
+    }
+    /// The "from" caption under the chart's left edge.
+    func fromLabel(first: Date?) -> String {
+        guard let first else { return "" }
+        return first.formatted(.dateTime.month(.abbreviated).year(.twoDigits))
     }
 }
 
@@ -549,7 +556,7 @@ enum HistoryPeriod: String, CaseIterable, Identifiable {
         case .oneYear: return "1Y"
         case .twoYear: return "2Y"
         case .fiveYear: return "5Y"
-        case .max: return "MAX"
+        case .max: return "All"
         }
     }
 }

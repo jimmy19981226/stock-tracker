@@ -1,90 +1,85 @@
 import SwiftUI
 
-/// The pre-sign-in page. Brand hero + value props, a "Continue with Google"
-/// button, and a guest fallback so the app is usable before Google OAuth is set up.
+/// The sign-in gate: a full-bleed hero field, the product name at 40pt, one
+/// sentence of what it is, and two equally-weighted ways in. Nothing else —
+/// a feature list here would be read by nobody and would push the buttons
+/// below the fold on a small phone.
 struct OnboardingView: View {
     @EnvironmentObject private var auth: AuthStore
 
     var body: some View {
         ZStack {
-            Theme.backgroundGradient.ignoresSafeArea()
-            LinearGradient(colors: [Theme.accent.opacity(0.25), .clear],
-                           startPoint: .top, endPoint: .center)
+            LinearGradient(colors: [Theme.heroTop, Theme.heroBottom],
+                           startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 Spacer()
 
-                BrandMark(stroke: Theme.accent)
-                    .frame(width: 84, height: 84)
+                Text("✦")
+                    .font(.system(size: 46))
+                    .foregroundStyle(Theme.heroText)
                 Text("AI Stock Studio")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(Theme.primaryText)
-                    .padding(.top, 16)
-                Text("Your TW & US portfolio, live —\nwith an AI analyst in your pocket.")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.secondaryText)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-
-                VStack(alignment: .leading, spacing: 14) {
-                    feature("chart.line.uptrend.xyaxis", "Live holdings, P&L and dividends")
-                    feature("sparkles", "Ask AI about your portfolio")
-                    feature("lock.shield", "Signed in with your Google account")
-                }
-                .padding(.top, 36)
-                .padding(.horizontal, 8)
+                    .font(Theme.Typo.signIn)
+                    .foregroundStyle(Theme.heroText)
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+                Text("Taiwan and US portfolios in one net worth. Live prices, dividends, FIFO P/L, and an assistant that reads your holdings.")
+                    .font(Theme.Typo.body)
+                    .foregroundStyle(Theme.heroLabel)
+                    .frame(maxWidth: 280, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Spacer()
 
                 if let error = auth.errorMessage {
                     Text(error)
-                        .font(.caption)
-                        .foregroundStyle(Theme.negative)
-                        .multilineTextAlignment(.center)
-                        .padding(.bottom, 8)
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.heroLabel)
+                        .padding(.bottom, Theme.Space.s)
                 }
 
                 Button {
                     Task { await auth.signInWithGoogle() }
                 } label: {
-                    HStack(spacing: 10) {
+                    Group {
                         if auth.isSigningIn {
-                            ProgressView().tint(.black)
+                            ProgressView().tint(Theme.heroBottom)
                         } else {
-                            Image(systemName: "g.circle.fill")
+                            Text("Continue with Google")
                         }
-                        Text("Continue with Google")
-                            .font(.system(.body, design: .rounded).weight(.bold))
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Theme.accent)
-                    .foregroundStyle(.black)
-                    .clipShape(Capsule())
+                    .font(Theme.Typo.button)
+                    .foregroundStyle(Theme.heroBottom)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
                 }
+                .buttonStyle(.plain)
                 .disabled(auth.isSigningIn)
 
-                Button("Continue without signing in") {
-                    auth.continueAsGuest()
+                Button { auth.continueAsGuest() } label: {
+                    Text("Continue as guest")
+                        .font(Theme.Typo.button)
+                        .foregroundStyle(Theme.heroText)
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
+                                .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                        )
                 }
-                .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                .foregroundStyle(Theme.secondaryText)
-                .padding(.top, 14)
-            }
-            .padding(24)
-        }
-    }
+                .buttonStyle(.plain)
+                .padding(.top, Theme.Space.m)
 
-    private func feature(_ icon: String, _ text: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.accent)
-                .frame(width: 26)
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(Theme.primaryText)
+                Text("Your trades stay on your own backend. No broker login, no analytics.")
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.heroLabel)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, Theme.Space.l)
+            }
+            .padding(.horizontal, 26)
+            .padding(.bottom, 46)
         }
     }
 }
