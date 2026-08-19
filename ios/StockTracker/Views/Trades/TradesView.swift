@@ -9,6 +9,9 @@ struct TradesView: View {
 
     @State private var marketFilter: MarketFilter = .all
     @State private var statusFilter: StatusFilter = .all
+    /// "All", or a four-digit year. A trade log only grows, so scoping it to a
+    /// year is how the realized figure below becomes answerable at all.
+    @State private var year: String = "All"
     @State private var editing: Trade?
     /// The record page's subject, held by id so it follows an edit rather than
     /// showing the snapshot that was tapped.
@@ -46,11 +49,28 @@ struct TradesView: View {
         store.trades.sorted { ($0.tradeDate, $0.id) > ($1.tradeDate, $1.id) }
     }
 
+    private var years: [String] {
+        ["All"] + Set(allTrades.map { String($0.tradeDate.prefix(4)) })
+            .sorted(by: >)
+    }
+
     private var shown: [Trade] {
         allTrades.filter {
             (marketFilter.market == nil || $0.market == marketFilter.market)
                 && (statusFilter.status == nil || $0.status == statusFilter.status)
+                && (year == "All" || $0.tradeDate.hasPrefix(year))
         }
+    }
+
+    /// Realized P/L booked in the selected scope, per market. FIFO is walked
+    /// over the *whole* ledger — cost basis crosses years — and only sells
+    /// inside the window are counted.
+    private func earned(_ market: MarketCode) -> Double {
+        let booked = realized
+        return allTrades
+            .filter { $0.type == .sell && $0.market == market }
+            .filter { year == "All" || $0.tradeDate.hasPrefix(year) }
+            .reduce(0) { $0 + (booked[$1.id] ?? 0) }
     }
 
     private var realized: [Int: Double] { FIFO.realized(store.trades) }
@@ -113,6 +133,24 @@ struct TradesView: View {
                                      selection: $statusFilter, fill: false)
                 }
 
+                if years.count > 1 {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        SegmentedControl(options: years.map { ($0, $0) },
+                                         selection: $year, fill: false)
+                    }
+                }
+
+                HStack(spacing: Theme.Space.s) {
+                    StatCell(label: "Earned · TW",
+                             value: Fmt.signedAmount(earned(.TW), currency: "TWD"),
+                             caption: year == "All" ? "realized, all time" : "realized in \(year)",
+                             valueColor: Theme.pl(earned(.TW)))
+                    StatCell(label: "Earned · US",
+                             value: Fmt.signedAmount(earned(.US), currency: "USD"),
+                             caption: year == "All" ? "realized, all time" : "realized in \(year)",
+                             valueColor: Theme.pl(earned(.US)))
+                }
+
                 HStack {
                     Text("\(shown.count) records")
                     Spacer()
@@ -129,10 +167,7 @@ struct TradesView: View {
 
                 if shown.isEmpty {
                     EmptyState(icon: "arrow.left.arrow.right",
-                               title: allTrades.isEmpty ? "No trades yet" : "No trades match",
-                               message: allTrades.isEmpty
-                                   ? "Add your first buy or sell — or import a brokerage statement."
-                                   : "Try a different market or status filter.")
+                               title: emptyTitle, message: emptyMessage)
                         .appCard()
                 } else {
                     Color.clear.frame(height: pager.filler(rowHeight: Self.rowHeight))
@@ -178,6 +213,7 @@ struct TradesView: View {
         .refreshable { await store.loadAll() }
         .onChange(of: marketFilter) { _, _ in page = 0 }
         .onChange(of: statusFilter) { _, _ in page = 0 }
+        .onChange(of: year) { _, _ in page = 0 }
         .onChange(of: shown.count) { _, _ in page = min(page, pager.pageCount - 1) }
         .sheet(isPresented: $showImport) { ImportRecordsView() }
         .sheet(isPresented: $showAdd) {
@@ -189,6 +225,18 @@ struct TradesView: View {
             if env["UITEST_TRADE_FORM"] == "1" { showAdd = true }
             if env["UITEST_IMPORT"] == "1" { showImport = true }
         }
+    }
+
+    private var emptyTitle: String {
+        if allTrades.isEmpty { return "No trades yet" }
+        let scope = marketFilter == .all ? "" : " \(marketFilter.rawValue)"
+        return year == "All" ? "No\(scope) trades match" : "No\(scope) trades in \(year)"
+    }
+
+    private var emptyMessage: String {
+        allTrades.isEmpty
+            ? "Add your first buy or sell — or import a brokerage statement."
+            : "Try a different market, status or year."
     }
 
     private var volumeNote: String {

@@ -51,6 +51,27 @@ def estimate_exit_cost(ticker: str, market_value: float, market: str = "TW") -> 
     return float(fee + tax)
 
 
+def sell_costs(ticker: str, gross_proceeds: float, market: str = "TW") -> dict:
+    """Commission and transaction tax on selling ``gross_proceeds`` worth.
+
+    The itemised twin of :func:`estimate_exit_cost` — same rates, same
+    per-component flooring — for callers that must *show* the split rather than
+    just net it off (the assistant's ``simulate_sale``). Kept here rather than
+    re-derived by a caller: a model or a screen that computes 0.3% where the
+    app charges 0.1% eventually disagrees with the number the user is looking
+    at, and the screen is what they trust.
+    """
+    if gross_proceeds <= 0:
+        return {"commission": 0.0, "tax": 0.0, "tax_rate": 0.0, "total": 0.0}
+    if (market or "TW").upper() == "US":
+        return {"commission": 0.0, "tax": 0.0, "tax_rate": 0.0, "total": 0.0}
+    rate = _sell_tax_rate(ticker)
+    commission = float(math.floor(gross_proceeds * SELL_FEE_RATE))
+    tax = float(math.floor(gross_proceeds * rate))
+    return {"commission": commission, "tax": tax, "tax_rate": rate,
+            "total": commission + tax}
+
+
 @dataclass
 class HoldingState:
     """Per-ticker position tracked as FIFO lots — first-in, first-out — so
@@ -105,6 +126,58 @@ def _apply_trade(state: HoldingState, trade: Trade) -> None:
         # data-entry error, but don't silently drop its P/L).
         if qty > 1e-9:
             state.realized_pl += qty * trade.price
+
+
+def build_lots(trades: Iterable[Trade]) -> list[dict]:
+    """Every buy lot for these trades, with how much of it a later sell ate.
+
+    ``compute_states`` answers "what do I hold"; the trades router's
+    ``_compute_statuses`` answers "is this row open". Neither exposes the
+    arithmetic in between — which lot, bought when, at what unit cost, with how
+    many shares left — and that is exactly what a sell-side question needs.
+    Reconstructing it from raw trades is where partial fills get lost, so it is
+    computed once, here, from the same FIFO walk everything else uses.
+
+    Oldest first, per ticker. ``shares_remaining == 0`` means fully consumed.
+    """
+    out: list[dict] = []
+    by_ticker: dict[str, list[Trade]] = {}
+    for t in trades:
+        by_ticker.setdefault(t.ticker, []).append(t)
+
+    today = date.today()
+    for ticker, rows in by_ticker.items():
+        open_lots: deque = deque()   # [trade_id, remaining, unit_cost, buy_date]
+        for tr in sorted(rows, key=lambda t: (t.trade_date, t.id)):
+            if tr.type == "buy":
+                if tr.shares <= 0:
+                    continue
+                unit = (tr.shares * tr.price + tr.fee) / tr.shares
+                lot = [tr.id, tr.shares, unit, tr.trade_date]
+                open_lots.append(lot)
+                out.append({
+                    "lot_id": tr.id, "ticker": ticker,
+                    "buy_date": tr.trade_date.isoformat(),
+                    "shares_bought": tr.shares, "shares_remaining": tr.shares,
+                    "unit_cost": round(unit, 4), "market": tr.market,
+                    "_lot": lot,
+                })
+                continue
+            qty = tr.shares
+            while qty > 1e-9 and open_lots:
+                lot = open_lots[0]
+                take = min(qty, lot[1])
+                lot[1] -= take
+                qty -= take
+                if lot[1] <= 1e-9:
+                    open_lots.popleft()
+
+    for row in out:
+        lot = row.pop("_lot")
+        row["shares_remaining"] = round(max(lot[1], 0.0), 6)
+        buy_date = lot[3]
+        row["days_held"] = (today - buy_date).days
+    return out
 
 
 def compute_states(trades: Iterable[Trade]) -> dict[str, HoldingState]:

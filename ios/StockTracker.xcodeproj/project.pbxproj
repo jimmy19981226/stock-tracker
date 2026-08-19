@@ -43,6 +43,7 @@
 		B64FE601905F5EE8EAA30EAB /* BarlowCondensed-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 37A37E66A81C0A890E7898DB /* BarlowCondensed-SemiBold.ttf */; };
 		B8E4357708B182BFC68DA0ED /* StockTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F057F8A620AE04DF20F4ADE /* StockTrackerApp.swift */; };
 		B95715AE9277F06B812098F6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 825E322AF0AEF20495E3B05D /* RootView.swift */; };
+		C70FF8EC4E6F00007F8525BC /* RecordProposal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68BB83BE3A8E038F9F762B64 /* RecordProposal.swift */; };
 		D2E4DBE812B160BBFF05EED6 /* ImportRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01ED1814C71609892E781704 /* ImportRecordsView.swift */; };
 		D78FEB5E77F1F4CA9A8CE0AC /* DesignTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7E7BCA5F1381655138CE5D /* DesignTour.swift */; };
 		E2D5EA21AF4D64EFD0F2C7AF /* MISQuotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9250130334BCF77C5C7FBE /* MISQuotes.swift */; };
@@ -91,6 +92,7 @@
 		5F057F8A620AE04DF20F4ADE /* StockTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StockTrackerApp.swift; sourceTree = "<group>"; };
 		65B5A3CEF34E1BC529FCF43A /* Format.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Format.swift; sourceTree = "<group>"; };
 		665969461AD6B11CA8AF0BDD /* DividendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividendsView.swift; sourceTree = "<group>"; };
+		68BB83BE3A8E038F9F762B64 /* RecordProposal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordProposal.swift; sourceTree = "<group>"; };
 		77EFFE959FD549B9C09E7C44 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		7B510C92B73EC980E35D9A9E /* AuthTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthTokenProvider.swift; sourceTree = "<group>"; };
 		7C0022A32062951F42AF0176 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
@@ -280,6 +282,7 @@
 			isa = PBXGroup;
 			children = (
 				08AC8ECD4D8CF200DD39E0D0 /* Models.swift */,
+				68BB83BE3A8E038F9F762B64 /* RecordProposal.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -502,6 +505,7 @@
 				0780612FCDA147CB8A1A34EB /* OverviewView.swift in Sources */,
 				7627E3A44E431B1BC3550299 /* PerformanceCard.swift in Sources */,
 				1C33E05E8D518C96FBD268EF /* PortfolioStore.swift in Sources */,
+				C70FF8EC4E6F00007F8525BC /* RecordProposal.swift in Sources */,
 				B95715AE9277F06B812098F6 /* RootView.swift in Sources */,
 				000659CBFC245C9063C71573 /* SettingsView.swift in Sources */,
 				8CFE8965E1D09E8960D77EB7 /* SplashView.swift in Sources */,
@@ -540,7 +544,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -548,7 +552,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -724,7 +728,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -732,7 +736,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 1.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

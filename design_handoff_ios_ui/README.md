@@ -1,5 +1,18 @@
 # Handoff: AI Stock Studio — iOS UI redesign
 
+## What's in this bundle
+| File | What it is |
+| --- | --- |
+| `README.md` | This document — the iOS UI redesign spec (tokens, screens, behavior) |
+| `ASSISTANT_TOOLS.md` | Assistant tool spec: 6 new tools + 11 upgrades to existing ones, with JSON schemas, repo paths and acceptance criteria |
+| `AI Stock Studio App.dc.html` | Interactive design reference for all screens — open in a browser |
+| `Assistant Tool Spec.dc.html` | The assistant tool spec as a printable document |
+| `Assistant Icon Options.dc.html` | Assistant tab icon explorations |
+
+Two workstreams, independent of each other: the UI recreation (this README) and the assistant
+tool/backend upgrade (`ASSISTANT_TOOLS.md`). The three new confirm cards described in
+`ASSISTANT_TOOLS.md` (edit, delete, batch import) follow the card styling defined below.
+
 ## Overview
 A full visual + interaction redesign of the stock-tracker iOS app (jimmy19981226/stock-tracker), covering
 sign-in, Overview (combined net worth), the per-market dashboard, stock detail, Trades, Dividends,

@@ -153,6 +153,26 @@ final class DesignTour: XCTestCase {
         app.swipeUp(); sleep(1); snap(app, "56-assistant-demo-scrolled")
     }
 
+    /// The three write cards, seeded from the exact JSON the backend emits.
+    func testConfirmCards() throws {
+        for (env, shot) in [("UITEST_CHAT_EDIT", "80-card-edit"),
+                            ("UITEST_CHAT_DELETE", "81-card-delete"),
+                            ("UITEST_CHAT_IMPORT", "82-card-batch"),
+                            // The pre-update payload shape: no `op`, no `id`.
+                            // It must still render, and still mean "create".
+                            ("UITEST_CHAT_LEGACY", "83-card-legacy")] {
+            let app = makeApp()
+            app.launchEnvironment[env] = "1"
+            app.launchEnvironment["UITEST_TAB"] = "assistant"
+            app.launch()
+            sleep(6)
+            XCTAssertTrue(app.staticTexts["Nothing is saved until you confirm"].exists,
+                          "\(env): no write card rendered")
+            snap(app, shot)
+            app.terminate()
+        }
+    }
+
     func testTour() throws {
         let app = makeApp()
         app.launch()

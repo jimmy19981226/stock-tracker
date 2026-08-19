@@ -397,7 +397,7 @@ final class APIClient {
         onChunk: @escaping @MainActor (String) -> Void,
         onDone: @escaping @MainActor (String, [String]) -> Void,
         onStatus: @escaping @MainActor (String) -> Void = { _ in },
-        onAction: @escaping @MainActor (ParsedRecords) -> Void = { _ in },
+        onAction: @escaping @MainActor (RecordProposal) -> Void = { _ in },
         onThinking: @escaping @MainActor (String) -> Void = { _ in }
     ) async throws {
         var req = URLRequest(url: try url("/api/ai/chat"))
@@ -469,11 +469,15 @@ final class APIClient {
                 // holdings…") so the UI isn't a silent spinner.
                 if let text = evt["text"] as? String { await onStatus(text) }
             case "action":
-                // A write tool proposed records — decoded into the same
-                // ParsedRecords the image-import confirm card renders.
+                // A write tool proposed records. Decoded with the *plain*
+                // decoder, not the shared snake_case one: the payload's keys
+                // are already the wire names the model declares
+                // (`duplicate_of` is mapped explicitly), and converting them
+                // twice would turn `duplicate_of` into `duplicateOf` before
+                // the CodingKey ever sees it.
                 if let rec = evt["records"] as? [String: Any],
                    let data = try? JSONSerialization.data(withJSONObject: rec),
-                   let parsed = try? decoder.decode(ParsedRecords.self, from: data) {
+                   let parsed = try? JSONDecoder().decode(RecordProposal.self, from: data) {
                     await onAction(parsed)
                 }
             case "done":

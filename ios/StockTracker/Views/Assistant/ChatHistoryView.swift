@@ -7,7 +7,7 @@ struct ChatHistoryView: View {
     @State private var confirmClearAll = false
 
     var body: some View {
-        SheetScaffold(title: "Chat history", onClose: { dismiss() }) {
+        SheetScaffold(title: "Conversations", onClose: { dismiss() }) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 HStack {
                     Spacer()

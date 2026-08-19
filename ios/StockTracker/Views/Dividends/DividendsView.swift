@@ -12,14 +12,41 @@ struct DividendsView: View {
     /// The record page's subject, held by id so it follows an edit.
     @State private var viewingID: Int?
     @State private var page = 0
+    /// Market and year scope, matching the Trades log — the two questions
+    /// asked of a dividend record are "which market" and "which tax year".
+    @State private var marketFilter: MarketFilter = .all
+    @State private var year: String = "All"
     @State private var showAdd = false
     @State private var calendar: DividendCalendar?
     @State private var calendarFailed = false
     @State private var fetchedCalendar = false
     @State private var actionError: String?
 
-    private var dividends: [Dividend] {
+    enum MarketFilter: String, CaseIterable, Identifiable {
+        case all = "All", tw = "TW", us = "US"
+        var id: String { rawValue }
+        var market: MarketCode? {
+            switch self {
+            case .all: return nil
+            case .tw: return .TW
+            case .us: return .US
+            }
+        }
+    }
+
+    private var allDividends: [Dividend] {
         store.dividends.sorted { ($0.payDate, $0.id) > ($1.payDate, $1.id) }
+    }
+
+    private var years: [String] {
+        ["All"] + Set(allDividends.map { String($0.payDate.prefix(4)) }).sorted(by: >)
+    }
+
+    private var dividends: [Dividend] {
+        allDividends.filter {
+            (marketFilter.market == nil || $0.market == marketFilter.market)
+                && (year == "All" || $0.payDate.hasPrefix(year))
+        }
     }
 
     private var pager: Paginator<Dividend> { Paginator(items: dividends, page: page) }
@@ -53,9 +80,19 @@ struct DividendsView: View {
                 BrandLine()
 
                 ScreenTitle("Dividends") {
-                    PrimaryButton(title: "+ Add", fullWidth: false) { showAdd = true }
+                    PrimaryButton(title: "+ Add dividend", fullWidth: false) { showAdd = true }
                 }
                 .padding(.bottom, 2)
+
+                HStack(spacing: Theme.Space.s) {
+                    SegmentedControl(options: MarketFilter.allCases.map { ($0, $0.rawValue) },
+                                     selection: $marketFilter, fill: false)
+                    Spacer(minLength: Theme.Space.s)
+                    if years.count > 1 {
+                        SegmentedControl(options: years.map { ($0, $0) },
+                                         selection: $year, fill: false, compact: true)
+                    }
+                }
 
                 statRow
 
@@ -63,24 +100,26 @@ struct DividendsView: View {
                     ErrorBanner(message: actionError) { self.actionError = nil }
                 }
 
-                if !upcoming.isEmpty {
+                if !upcomingGroups.isEmpty {
                     SectionLabel("Dividend calendar — upcoming")
                         .padding(.top, Theme.Space.xxs)
-                    VStack(spacing: 0) {
-                        ForEach(Array(upcoming.enumerated()), id: \.offset) { index, row in
-                            UpcomingRow(item: row, name: store.name(for: row.ticker))
-                            if index < upcoming.count - 1 { RowDivider() }
-                        }
+                    ForEach(upcomingGroups) { group in
+                        UpcomingGroupCard(group: group, store: store)
                     }
-                    .appListCard()
                 }
 
-                SectionLabel("Received · \(dividends.count)")
-                    .padding(.top, Theme.Space.xxs)
+                HStack {
+                    Text("\(dividends.count) records")
+                    Spacer()
+                    Text(volumeNote)
+                }
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .padding(.top, Theme.Space.xxs)
 
                 if dividends.isEmpty {
-                    EmptyState(icon: "dollarsign.circle", title: "No dividends yet",
-                               message: "Record a payment, or import a statement.")
+                    EmptyState(icon: "dollarsign.circle",
+                               title: emptyTitle, message: emptyMessage)
                         .appCard()
                 } else {
                     let rows = pager.slice
@@ -114,6 +153,8 @@ struct DividendsView: View {
         .screenBackground()
         .refreshable { await store.loadAll() }
         .onChange(of: dividends.count) { _, _ in page = min(page, pager.pageCount - 1) }
+        .onChange(of: marketFilter) { _, _ in page = 0 }
+        .onChange(of: year) { _, _ in page = 0 }
         .task { await loadCalendar() }
         .sheet(isPresented: $showAdd) { DividendFormView(market: .TW, existing: nil) }
         .sheet(item: $editing) { DividendFormView(market: $0.market, existing: $0) }
@@ -122,7 +163,10 @@ struct DividendsView: View {
     // MARK: Stats
 
     private func received(_ market: MarketCode) -> Double {
-        store.dividends(for: market).reduce(0) { $0 + $1.amount }
+        allDividends
+            .filter { $0.market == market }
+            .filter { year == "All" || $0.payDate.hasPrefix(year) }
+            .reduce(0) { $0 + $1.amount }
     }
 
     /// What is expected to land in the next quarter. The US leg is converted at
@@ -148,24 +192,52 @@ struct DividendsView: View {
     }
 
     private var statRow: some View {
-        HStack(spacing: Theme.Space.s) {
-            // Short labels with the qualifier in the caption: three cells
-            // across a 390pt screen leaves ~100pt each, and "TAIWAN · RECEIVED"
-            // truncated to "TAIWAN · RECE…".
+        let caption = year == "All" ? "received" : "received in \(year)"
+        return HStack(spacing: Theme.Space.s) {
             StatCell(label: "Taiwan",
                      value: Fmt.amount(received(.TW), currency: "TWD"),
-                     caption: "received")
+                     caption: caption)
             StatCell(label: "US",
                      value: Fmt.amount(received(.US), currency: "USD"),
-                     caption: "received")
-            StatCell(label: "Next 90 d",
-                     value: Fmt.amount(next90.value, currency: next90.currency),
-                     caption: next90.caption)
+                     caption: caption)
         }
     }
 
-    private var upcoming: [DividendCalendar.Upcoming] {
-        Array((calendar?.upcoming ?? []).prefix(5))
+    struct UpcomingGroup: Identifiable {
+        let market: MarketCode
+        let rows: [DividendCalendar.Upcoming]
+        var id: String { market.rawValue }
+        var title: String { market == .TW ? "Taiwan" : "US" }
+        var currency: String { market.currencyCode }
+        var subtotal: Double { rows.reduce(0) { $0 + ($1.amount ?? 0) } }
+        var countLabel: String { "\(rows.count) payment\(rows.count == 1 ? "" : "s")" }
+    }
+
+    private var upcomingGroups: [UpcomingGroup] {
+        let all = calendar?.upcoming ?? []
+        return MarketCode.allCases
+            .filter { marketFilter.market == nil || marketFilter.market == $0 }
+            .map { market in
+                UpcomingGroup(market: market,
+                              rows: Array(all.filter { $0.market == market }.prefix(5)))
+            }
+    }
+
+    private var volumeNote: String {
+        let tw = dividends.filter { $0.market == .TW }.count
+        return "\(tw) TW · \(dividends.count - tw) US"
+    }
+
+    private var emptyTitle: String {
+        if allDividends.isEmpty { return "No dividends yet" }
+        let scope = marketFilter == .all ? "" : " \(marketFilter.rawValue)"
+        return year == "All" ? "No\(scope) dividends match" : "No\(scope) dividends in \(year)"
+    }
+
+    private var emptyMessage: String {
+        marketFilter == .us && allDividends.allSatisfy({ $0.market != .US })
+            ? "Nothing recorded for the US sleeve yet — record a payment, or import a statement."
+            : "Record a payment, or import a statement."
     }
 
     // MARK: Actions
@@ -202,6 +274,64 @@ struct DividendsView: View {
     }
 }
 
+/// One market's upcoming payments, with its own subtotal.
+///
+/// Grouped by market rather than listed flat, because the subtotal is the
+/// point and there is no honest combined one: TW and US dividends are paid in
+/// different currencies, and adding them would need a rate the reader didn't
+/// ask about. Recessed onto `inset` so the group reads as a panel of estimates
+/// rather than a card of records.
+private struct UpcomingGroupCard: View {
+    let group: DividendsView.UpcomingGroup
+    let store: PortfolioStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
+                Text(group.market.rawValue)
+                    .eyebrowStyle(Theme.accentChipText, size: 12)
+                    .chipFill(Theme.accentTint, radius: 7)
+                Text(group.title)
+                    .font(Theme.Typo.detailMed)
+                    .foregroundStyle(Theme.textStrong)
+                Spacer(minLength: Theme.Space.xs)
+                Text(Fmt.amount(group.subtotal, currency: group.currency))
+                    .font(Theme.Typo.inlineNum)
+                    .foregroundStyle(Theme.text)
+                    .numeral()
+                Text(group.countLabel)
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+
+            VStack(spacing: 0) {
+                if group.rows.isEmpty {
+                    Text("No upcoming ex-dividend dates.")
+                        .font(Theme.Typo.detail)
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Theme.Space.l)
+                } else {
+                    ForEach(Array(group.rows.enumerated()), id: \.offset) { index, row in
+                        UpcomingRow(item: row, name: store.name(for: row.ticker))
+                        if index < group.rows.count - 1 {
+                            Rectangle().fill(Theme.accentSoft).frame(height: 1)
+                                .padding(.leading, Theme.Space.l)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.inset)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                    .stroke(Theme.accentSoft, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+        }
+    }
+}
+
 /// One upcoming payment. The date badge is the row's anchor — these rows are
 /// scanned by "when", not by "which".
 private struct UpcomingRow: View {
@@ -222,7 +352,7 @@ private struct UpcomingRow: View {
             }
             .frame(width: 42)
             .padding(.vertical, 4)
-            .background(Theme.accentTint)
+            .background(Theme.card)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.segment, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {

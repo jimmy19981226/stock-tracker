@@ -11,6 +11,71 @@ anywhere, even for the same marketing version.
 
 ---
 
+## 1.3.0 (build 4) — 2026-08-19
+
+Assistant tool surface v2, from `design_handoff_ios_ui/ASSISTANT_TOOLS.md`, plus
+the design update's year scoping and grouped dividend calendar.
+
+### The defect this fixes
+`get_trades` returned no `id`, so the model could read a trade and never refer
+to it again — and `add_trade` was the only write it had. "That 2330 buy should
+have been 1,035" produced a *second* buy, and FIFO status, cost basis and every
+unrealized figure downstream went wrong. Records now carry ids and the
+assistant can amend as well as add.
+
+### Backend — 24 tools, up from 14
+- **Identity**: `get_trades` and `get_dividends` return `id`; trades also carry
+  `realized_pl` on closed sells, and take `year` and `type` filters.
+- **New writes** — `update_trade`, `update_dividend`, `delete_trade`,
+  `delete_dividend`, and `propose_records`, which carries any number of records
+  of either kind and any mix of create/update/delete in one call. All follow
+  the existing contract exactly: **propose only, never persist.**
+- A delete proposal carries the consequences of going through with it,
+  computed server-side by re-running FIFO without the row — status flips, the
+  realized P/L that moves on other sells, and whether the ledger would be left
+  with more shares sold than bought. The model never authors that text.
+- A create proposal carries `duplicate_of` when an existing record matches
+  ticker + date + shares + price.
+- **New reads** — `get_stock_info` (fundamentals, 月營收, 8 quarters, from the
+  same service the Stock detail screen uses), `get_lots` (per-lot FIFO
+  arithmetic), `simulate_sale` (the app's own 損益試算 path — 0.1425%
+  commission, 0.3% tax on a stock and 0.1% on an ETF), `get_allocation`, and
+  `get_followed_indices` so "am I beating the market" can mean the indices this
+  user actually follows.
+- `get_quote` takes up to 10 tickers and `get_price_history` up to 3 with a
+  `1d`/`1wk`/`1mo` interval — five tickers used to cost five of six rounds.
+- `get_market_status` returns the next open and close as ISO timestamps,
+  holidays included, instead of leaving the model to guess.
+- `search_web` appends the company name to a bare TW code server-side.
+- Loop ceiling 6 → 8 now that quotes and history batch, and the uniform
+  8,000-char result cap became per-tool caps that **downsample series rather
+  than cut them** — a truncated JSON array reads as a whole series and produces
+  a confidently wrong trend.
+- `add_trade`/`add_dividend` stay registered and working, and now accept an
+  explicit `market`.
+
+### iOS — three new confirm cards
+Every write still lands on a card that saves nothing until confirmed.
+- **Correction card** — the changed fields only, old struck through, new beside
+  it. Unchanged fields are never re-listed.
+- **Deletion card** — the record in full plus the server's consequence lines on
+  a loss-tinted panel. The destructive action names its object ("Delete this
+  trade") and is deliberately *not* the default focus: "Keep it" comes first.
+- **Batch card** — one row per proposed record with its own switch, duplicates
+  arriving unticked and saying why, and a primary action carrying the live
+  count.
+- Payloads from before this change still parse, and still mean create — the
+  backend deploys ahead of the App Store build.
+
+### Screens
+- **Trades** gains a year filter and two "Earned · TW / Earned · US" cells
+  showing realized P/L in the selected scope.
+- **Dividends** gains market and year filters; the upcoming calendar is grouped
+  by market with a per-currency subtotal and payment count per group, because
+  there is no honest combined total across two currencies.
+- The chat history sheet is "Conversations"; the dividends button is
+  "+ Add dividend".
+
 ## 1.2.0 (build 3) — 2026-08-17
 
 Rebuilt the whole iOS UI to the `design_handoff_ios_ui/` spec.

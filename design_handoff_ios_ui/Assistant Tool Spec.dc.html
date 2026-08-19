@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+doc-page:not(:defined){visibility:hidden}
+body{margin:0}
+a{color:#5980A6}a:hover{color:#416180}
+.mono{font-family:"Roboto Mono",monospace;font-size:8.6pt;letter-spacing:-.1pt}
+.k{font-family:"Barlow";font-weight:600;font-size:7.6pt;letter-spacing:1.3pt;text-transform:uppercase;color:#5980A6}
+.h2{font-family:"Barlow Condensed";font-weight:600;font-size:19pt;color:#1D1F20;margin:0;padding-bottom:2pt;letter-spacing:-.2pt}
+.h3{font-family:"Barlow Condensed";font-weight:600;font-size:13pt;color:#1D1F20;margin:0}
+.p{font-family:"Barlow";font-size:10pt;line-height:1.5;color:#1D1F20;margin:0;text-wrap:pretty}
+.sm{font-family:"Barlow";font-size:8.8pt;line-height:1.45;color:#6E7A85;margin:0}
+.rule{height:1px;background:#E1E2E4}
+table{border-collapse:collapse;width:100%}
+th{font-family:"Barlow";font-weight:600;font-size:7.6pt;letter-spacing:.9pt;text-transform:uppercase;color:#6E7A85;text-align:left;padding:0 8pt 4pt 0;border-bottom:1px solid #E1E2E4}
+td{font-family:"Barlow";font-size:9pt;color:#1D1F20;padding:5pt 8pt 5pt 0;border-bottom:1px solid #EDEEEF;vertical-align:top;line-height:1.4}
+.card{break-inside:avoid;border:1px solid #E1E2E4;border-radius:10pt;padding:11pt 13pt;display:flex;flex-direction:column;gap:6pt}
+.new{background:#E7EDF3;color:#223649;font-family:"Barlow";font-weight:600;font-size:7.4pt;letter-spacing:.8pt;text-transform:uppercase;padding:1.5pt 6pt;border-radius:5pt}
+.keep{background:#EDEEEF;color:#4A555F;font-family:"Barlow";font-weight:600;font-size:7.4pt;letter-spacing:.8pt;text-transform:uppercase;padding:1.5pt 6pt;border-radius:5pt}
+</style>
+<script src="./doc-page.js"></script>
+</helmet>
+<doc-page margin="0.7in">
+
+<div slot="header" style="display:flex;align-items:baseline;gap:8pt;padding-bottom:5pt;border-bottom:1px solid #E1E2E4">
+  <span class="k">✦ AI Stock Studio</span>
+  <span style="flex:1"></span>
+  <span class="sm">Assistant tool surface · v2 proposal</span>
+</div>
+<div slot="footer" style="display:flex;align-items:baseline;gap:8pt;padding-top:5pt;border-top:1px solid #E1E2E4">
+  <span class="sm">backend/app/services/ai_tools.py</span>
+  <span style="flex:1"></span>
+  <span class="sm">Internal — not investment advice</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:4pt;padding-bottom:14pt">
+  <span class="k">Engineering spec</span>
+  <h1 style="font-family:'Barlow Condensed';font-weight:600;font-size:31pt;line-height:1.05;letter-spacing:-.4pt;color:#1D1F20;margin:0">Assistant tools — what to add, what to change</h1>
+  <p class="p" style="max-width:34em">Today's surface is fourteen tools: twelve reads and two writes. It answers questions well and cannot correct a single mistake. This proposes six new tools and eleven changes to the existing ones, in the order I would ship them.</p>
+</div>
+
+<div style="display:flex;gap:9pt;padding-bottom:16pt;break-inside:avoid">
+  <div style="flex:1;border:1px solid #E1E2E4;border-radius:10pt;padding:9pt 11pt">
+    <div class="sm" style="font-weight:600;letter-spacing:.7pt;text-transform:uppercase;font-size:7.4pt">Now</div>
+    <div style="font-family:'Barlow Condensed';font-weight:600;font-size:22pt;color:#1D1F20;line-height:1.1">14</div>
+    <div class="sm">12 read · 2 write</div>
+  </div>
+  <div style="flex:1;border:1px solid #E1E2E4;border-radius:10pt;padding:9pt 11pt">
+    <div class="sm" style="font-weight:600;letter-spacing:.7pt;text-transform:uppercase;font-size:7.4pt">Proposed</div>
+    <div style="font-family:'Barlow Condensed';font-weight:600;font-size:22pt;color:#1D1F20;line-height:1.1">20</div>
+    <div class="sm">14 read · 6 write</div>
+  </div>
+  <div style="flex:1;border:1px solid #E1E2E4;border-radius:10pt;padding:9pt 11pt">
+    <div class="sm" style="font-weight:600;letter-spacing:.7pt;text-transform:uppercase;font-size:7.4pt">Rounds saved</div>
+    <div style="font-family:'Barlow Condensed';font-weight:600;font-size:22pt;color:#1D1F20;line-height:1.1">↓ 4</div>
+    <div class="sm">batched quotes &amp; records</div>
+  </div>
+  <div style="flex:1;border:1px solid #E1E2E4;border-radius:10pt;padding:9pt 11pt">
+    <div class="sm" style="font-weight:600;letter-spacing:.7pt;text-transform:uppercase;font-size:7.4pt">Breaking</div>
+    <div style="font-family:'Barlow Condensed';font-weight:600;font-size:22pt;color:#1D1F20;line-height:1.1">0</div>
+    <div class="sm">additive only</div>
+  </div>
+</div>
+
+<h2 class="h2">1 · The blocking gap: records have no identity</h2>
+<div class="rule" style="margin-bottom:9pt"></div>
+<p class="p" style="max-width:34em;padding-bottom:8pt"><span style="font-weight:500">Everything else on this list is an improvement. This one is a defect.</span> <span class="mono">get_trades</span> returns type, ticker, shares, price, date, fee, market, status and notes — and no <span class="mono">id</span>. The model can read a trade and cannot name it afterwards. So the most ordinary correction in a portfolio app is unreachable:</p>
+
+<div class="card" style="background:#F7F8F9;margin-bottom:10pt">
+  <div style="font-family:'Barlow';font-size:10pt;color:#1D1F20;line-height:1.5"><span style="color:#6E7A85">User —</span> “That 2330 buy should have been 1,035, not 1,053.”</div>
+  <div class="rule"></div>
+  <div style="font-family:'Barlow';font-size:10pt;color:#1D1F20;line-height:1.5"><span style="color:#6E7A85">Assistant today —</span> reads the trade, then proposes <span class="mono">add_trade</span>, because that is the only write it has. The user now owns two buys instead of one corrected buy, and every downstream number — FIFO status, cost basis, unrealized P/L — is wrong.</div>
+</div>
+
+<p class="p" style="max-width:34em;padding-bottom:6pt">Two fixes, in this order. Both are additive.</p>
+<table style="margin-bottom:6pt">
+  <thead><tr><th style="width:31%">Change</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><span class="mono">get_trades</span> · <span class="mono">get_dividends</span><div class="sm" style="padding-top:2pt">amend</div></td><td>Add <span class="mono">id</span> to every row. One key per row; the model can then reference, and the confirm card can resolve, an exact record.</td></tr>
+    <tr><td><span class="mono">update_trade</span> · <span class="mono">delete_trade</span><div class="sm" style="padding-top:2pt">new</div></td><td>Take <span class="mono">id</span> plus only the fields that change. Emit a proposal on the existing action channel — never touch the DB — exactly as the add tools already do.</td></tr>
+    <tr><td><span class="mono">update_dividend</span> · <span class="mono">delete_dividend</span><div class="sm" style="padding-top:2pt">new</div></td><td>The same, for dividends.</td></tr>
+  </tbody>
+</table>
+<p class="sm" style="max-width:34em">The action payload grows an <span class="mono">op</span> per row — <span class="mono">"create" | "update" | "delete"</span> — defaulting to <span class="mono">create</span>, so today's <span class="mono">{"trades": [...], "dividends": [...]}</span> shape stays valid and the iOS confirm card keeps parsing old payloads.</p>
+
+<h2 class="h2" style="padding-top:18pt">2 · Six new tools</h2>
+<div class="rule" style="margin-bottom:10pt"></div>
+
+<div style="display:flex;flex-direction:column;gap:9pt">
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:7pt">
+      <span class="new">Write</span>
+      <span class="h3 mono" style="font-family:'Roboto Mono';font-size:10.5pt;font-weight:500">propose_records</span>
+      <span style="flex:1"></span>
+      <span class="sm">replaces add_trade / add_dividend</span>
+    </div>
+    <p class="p">One tool that proposes any number of records of either kind in a single call. Your action shape is already <span class="mono">{"trades": [], "dividends": []}</span> — arrays — but <span class="mono">add_trade</span> only ever fills one slot. A photo of a monthly statement with eight fills therefore costs eight calls against a six-round ceiling, and gives the user eight cards to tap.</p>
+    <div class="mono" style="background:#F7F8F9;border-radius:7pt;padding:8pt 10pt;line-height:1.55;white-space:pre-wrap">{ "trades": [ { "op": "create", "type": "buy", "ticker": "2330",
+              "shares": 100, "price": 1035, "date": "2026-08-19",
+              "fee": 148, "market": "TW", "notes": "" } ],
+  "dividends": [], "summary": "3 buys and 1 sell, Aug 2026" }</div>
+    <p class="sm">Keep <span class="mono">add_trade</span> and <span class="mono">add_dividend</span> registered for one release so a model mid-conversation doesn't break, then drop them from <span class="mono">TOOLS</span>.</p>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:7pt">
+      <span class="keep">Read</span>
+      <span class="h3 mono" style="font-family:'Roboto Mono';font-size:10.5pt;font-weight:500">get_stock_info</span>
+      <span style="flex:1"></span>
+      <span class="sm">wraps services/stock_info.py</span>
+    </div>
+    <p class="p">The assistant can fetch price history but not the fundamentals your own Stock detail screen renders — sector, P/E, yield, 52-week range, 月營收 with YoY, and the eight-quarter revenue and gross-margin table. So “is 2330's gross margin improving?” falls through to a web search when the answer is already in your database. The tool should read the same source the UI does, and return the same numbers.</p>
+    <div class="mono" style="background:#F7F8F9;border-radius:7pt;padding:8pt 10pt;line-height:1.55;white-space:pre-wrap">{ "ticker": "2330", "include": ["profile","revenue","financials"] }</div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:7pt">
+      <span class="keep">Read</span>
+      <span class="h3 mono" style="font-family:'Roboto Mono';font-size:10.5pt;font-weight:500">get_lots</span>
+      <span style="flex:1"></span>
+      <span class="sm">exposes the FIFO ledger</span>
+    </div>
+    <p class="p"><span class="mono">get_trades</span> reports a lot as open or closed but never the arithmetic underneath: which lots remain, how many shares each still holds, at what cost, and how long they have been held. Every “should I sell?” question needs that ledger, and without it the model reconstructs it from raw trades and gets partial fills wrong.</p>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:7pt">
+      <span class="keep">Read</span>
+      <span class="h3 mono" style="font-family:'Roboto Mono';font-size:10.5pt;font-weight:500">simulate_sale</span>
+      <span style="flex:1"></span>
+      <span class="sm">損益試算, server-side</span>
+    </div>
+    <p class="p">Given a ticker, share count and price, return what the sale would realize: lots consumed FIFO, gross proceeds, the 0.1425% commission and the transaction tax at the correct rate for the instrument — 0.3% for a stock, 0.1% for an ETF — and net realized P/L. This must be computed by the same code path as the app, not by the model. A number the assistant derives itself will eventually disagree with the number on screen, and the screen is the one the user trusts.</p>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:7pt">
+      <span class="keep">Read</span>
+      <span class="h3 mono" style="font-family:'Roboto Mono';font-size:10.5pt;font-weight:500">get_allocation</span>
+    </div>
+    <p class="p">Weights, not totals. <span class="mono">get_portfolio_summary</span> gives per-currency sums; concentration questions need each position's share of the market and of net worth, grouped by sector, with the top-N and the tail. This is the donut the Dashboard already draws.</p>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:7pt">
+      <span class="keep">Read</span>
+      <span class="h3 mono" style="font-family:'Roboto Mono';font-size:10.5pt;font-weight:500">get_followed_indices</span>
+    </div>
+    <p class="p">“Am I beating the market” should mean the indices this user follows, not a hard-coded benchmark. <span class="mono">get_performance</span> compares against one; the assistant currently cannot discover which ones the user actually tracks, or quote them.</p>
+  </div>
+
+</div>
+
+<h2 class="h2" style="padding-top:18pt">3 · Upgrades to the fourteen you have</h2>
+<div class="rule" style="margin-bottom:9pt"></div>
+<table>
+  <thead><tr><th style="width:25%">Tool</th><th style="width:37%">Change</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">get_quote</td><td>Accept <span class="mono">tickers: string[]</span> (cap 10); keep the single form as an alias.</td><td>Comparing five tickers costs five of six rounds today, and the loop can end before the answer does.</td></tr>
+    <tr><td class="mono">get_trades</td><td>Return <span class="mono">id</span>; add <span class="mono">year</span> and <span class="mono">type</span> filters, and <span class="mono">realized_pl</span> on closed sells.</td><td>Identity for edits; parity with the year filter the Trades screen now has; realized P/L is asked for constantly and is derivable only from the full ledger.</td></tr>
+    <tr><td class="mono">get_dividends</td><td>Return <span class="mono">id</span>; add a <span class="mono">market</span> filter.</td><td><span class="mono">get_trades</span> takes market and this doesn't — the asymmetry makes the model fetch everything and filter in its head.</td></tr>
+    <tr><td class="mono">get_portfolio_summary</td><td>Add a <span class="mono">market</span> filter and include the USD/TWD rate used.</td><td>Every combined figure depends on a rate the model otherwise has to fetch separately and may quote stale.</td></tr>
+    <tr><td class="mono">get_price_history</td><td>Accept up to 3 tickers; add <span class="mono">interval</span> (<span class="mono">1d</span> / <span class="mono">1wk</span> / <span class="mono">1mo</span>).</td><td>Relative-performance questions are inherently multi-series, and weekly bars over five years survive downsampling far better than daily.</td></tr>
+    <tr><td class="mono">search_web</td><td>Auto-append the company name for numeric TW codes.</td><td>The description asks the model to remember this; the code can guarantee it. A bare “2330” query returns noise.</td></tr>
+    <tr><td class="mono">get_dividend_calendar</td><td>Split totals per currency explicitly and label estimates as <span class="mono">estimated: true</span>.</td><td>A projection presented like a receipt is the one error in this app a user would act on. The UI now distinguishes them; the tool should too.</td></tr>
+    <tr><td class="mono">get_market_status</td><td>Include the next open and close as ISO timestamps.</td><td>“Closed” alone leads the model to guess when trading resumes, and it guesses wrong across holidays.</td></tr>
+    <tr><td class="mono">add_trade</td><td>Accept an explicit <span class="mono">market</span>.</td><td>The form on the phone requires it; the tool infers it. Inference is right until someone owns a ticker that reads as both.</td></tr>
+    <tr><td colspan="3" style="border-bottom:none;padding-top:8pt"><span style="font-weight:500;font-family:Barlow;font-size:9pt">Loop and plumbing</span></td></tr>
+    <tr><td class="mono">MAX_TOOL_ROUNDS</td><td>6 → 8, once batching lands.</td><td>A grounded multi-market answer legitimately needs summary, holdings, two histories, FX and a search.</td></tr>
+    <tr><td class="mono">_RESULT_CAP</td><td>Per-tool caps instead of one 8,000-char ceiling.</td><td>A truncated JSON series is worse than a shorter one: the model reads the fragment as the whole and reports a false trend.</td></tr>
+  </tbody>
+</table>
+
+<h2 class="h2" style="padding-top:18pt">4 · Confirm cards for the new writes</h2>
+<div class="rule" style="margin-bottom:9pt"></div>
+<p class="p" style="max-width:34em;padding-bottom:9pt">Adds already have a card. Edits and deletes need their own, because the risk is different: an add can be deleted afterwards, an overwrite cannot be recovered from chat. Three rules.</p>
+<div style="display:flex;flex-direction:column;gap:7pt">
+  <div class="card" style="flex-direction:row;align-items:baseline;gap:11pt">
+    <span class="k" style="width:5.4em;flex:none">Edit</span>
+    <p class="p" style="flex:1">Show before and after on one row, changed fields only, old value struck through. Never re-summarise the whole record — the user needs to see what moves, not re-read what doesn't.</p>
+  </div>
+  <div class="card" style="flex-direction:row;align-items:baseline;gap:11pt">
+    <span class="k" style="width:5.4em;flex:none">Delete</span>
+    <p class="p" style="flex:1">Render the record in full, and name the consequence in the button — “Delete this trade”, not “Confirm”. If deleting it changes a FIFO status elsewhere, say so above the button. Destructive confirmation uses the loss colour, and this is the one card whose action is not the default focus.</p>
+  </div>
+  <div class="card" style="flex-direction:row;align-items:baseline;gap:11pt">
+    <span class="k" style="width:5.4em;flex:none">Batch</span>
+    <p class="p" style="flex:1">Per-row include toggles, duplicates flagged against existing records, a count in the button — the Import card, reused verbatim. One tap to accept twelve rows, one tap to exclude any of them.</p>
+  </div>
+</div>
+<p class="sm" style="max-width:34em;padding-top:9pt">All four write paths keep the existing invariant, and it is worth stating plainly in the system prompt as well as the tool descriptions: <span style="font-weight:500;color:#1D1F20">the model proposes, the REST endpoint saves, and nothing is written without a tap.</span></p>
+
+<h2 class="h2" style="padding-top:18pt">5 · Order of work</h2>
+<div class="rule" style="margin-bottom:9pt"></div>
+<table>
+  <thead><tr><th style="width:16%">Step</th><th style="width:40%">Ship</th><th>Unlocks</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><span class="mono">id</span> on both read tools</td><td>Nothing on its own — the prerequisite for every write below.</td></tr>
+    <tr><td>2</td><td>update / delete × trade, dividend</td><td>Corrections. The single largest gap in the product.</td></tr>
+    <tr><td>3</td><td><span class="mono">propose_records</span> + batch card</td><td>A statement photo becomes a month of records in one tap.</td></tr>
+    <tr><td>4</td><td><span class="mono">get_stock_info</span></td><td>Fundamentals answered from your data instead of the open web.</td></tr>
+    <tr><td>5</td><td><span class="mono">get_lots</span>, <span class="mono">simulate_sale</span></td><td>Sell-side questions, with the app's own cost and tax arithmetic.</td></tr>
+    <tr><td>6</td><td>Batched quotes and history, filters, loop limits</td><td>Fewer rounds, less truncation, fewer stale rates.</td></tr>
+    <tr><td>7</td><td><span class="mono">get_allocation</span>, <span class="mono">get_followed_indices</span></td><td>Concentration and benchmark questions.</td></tr>
+  </tbody>
+</table>
+<p class="sm" style="max-width:34em;padding-top:10pt">Steps 1 and 2 are worth shipping alone. Until they land, the assistant is a reader that can add but not amend — and a tool that can only ever add is how a portfolio quietly fills with duplicates.</p>
+
+</doc-page>
+</x-dc>
+</body>
+</html>

@@ -21,11 +21,10 @@ final class AssistantViewModel: ObservableObject {
     @Published var pendingAttachment: UIImage?
     private var pendingAttachmentData: Data?
 
-    // Confirm-card flow for proposed trades/dividends: the assistant (reading
-    // either typed text or an attached image) calls add_trade/add_dividend,
-    // the server emits an "action" event, and this card lets the user review
-    // before anything is actually saved.
-    @Published var pendingImport: ParsedRecords?
+    // Confirm-card flow. A write tool never touches the database: it proposes,
+    // the server emits an "action" event, and this card is the only path from
+    // a proposal to a record. Creates, corrections and deletions all land here.
+    @Published var pendingImport: RecordProposal?
     @Published var importTradeOn: [Bool] = []
     @Published var importDividendOn: [Bool] = []
     @Published var isSubmittingImport = false
@@ -63,20 +62,21 @@ final class AssistantViewModel: ObservableObject {
         // UI-test hook: seed a parsed-import review card to screenshot the flow.
         if ProcessInfo.processInfo.environment["UITEST_CHAT_IMPORT"] == "1" {
             messages = [ChatMessage(role: "user", content: "(attached a brokerage screenshot)")]
-            pendingImport = ParsedRecords(
-                trades: [
-                    ParsedTradeRow(type: .buy, ticker: "2330", shares: 100, price: 1050,
-                                   date: "2024-11-05", fee: 50, notes: nil),
-                    ParsedTradeRow(type: .sell, ticker: "2317", shares: 500, price: 210.5,
-                                   date: "2024-11-20", fee: 45, notes: nil),
-                ],
-                dividends: [
-                    ParsedDividendRow(ticker: "0050", amount: 3200, date: "2024-12-10", notes: nil),
-                ],
-                notes: ""
-            )
-            importTradeOn = [true, true]
-            importDividendOn = [true]
+            present(RecordProposal.demoBatch)
+        }
+        // UI-test hooks for the correction and deletion cards.
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_EDIT"] == "1" {
+            messages = [ChatMessage(role: "user",
+                                    content: "That 2330 buy should have been 1,035, not 1,053.")]
+            present(RecordProposal.demoEdit)
+        }
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_LEGACY"] == "1" {
+            messages = [ChatMessage(role: "user", content: "I bought 100 of 2330 at 1050.")]
+            present(RecordProposal.demoLegacy)
+        }
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_DELETE"] == "1" {
+            messages = [ChatMessage(role: "user", content: "Delete that duplicate 2603 buy.")]
+            present(RecordProposal.demoDelete)
         }
         // UI-test hook: seed a sample formatted reply to screenshot the renderer.
         if ProcessInfo.processInfo.environment["UITEST_ASSISTANT_DEMO"] == "1" {
@@ -116,6 +116,20 @@ final class AssistantViewModel: ObservableObject {
                 """),
             ]
         }
+    }
+
+    /// Show a proposal's confirm card.
+    ///
+    /// The one way a proposal reaches the UI — the live stream and the
+    /// screenshot hooks both go through here, so a card in a screenshot is a
+    /// card the wire format actually produces. Rows the server flagged as
+    /// duplicating an existing record arrive **unticked**: a statement
+    /// photographed twice is the common case, and a silently doubled lot is
+    /// expensive to notice later.
+    func present(_ proposal: RecordProposal) {
+        pendingImport = proposal
+        importTradeOn = proposal.trades.map { $0.duplicateOf == nil }
+        importDividendOn = proposal.dividends.map { $0.duplicateOf == nil }
     }
 
     func loadStatus() async {
@@ -173,14 +187,14 @@ final class AssistantViewModel: ObservableObject {
                         guard let self, !Task.isCancelled else { return }
                         self.streamStatus = text
                     },
-                    onAction: { [weak self] records in
+                    onAction: { [weak self] proposal in
                         guard let self, !Task.isCancelled else { return }
-                        // A write tool proposed records — show the same
-                        // confirm card the image import uses. Nothing is
-                        // saved until the user taps Add.
-                        self.pendingImport = records
-                        self.importTradeOn = Array(repeating: true, count: records.trades.count)
-                        self.importDividendOn = Array(repeating: true, count: records.dividends.count)
+                        // A write tool proposed records. Nothing is saved until
+                        // the user confirms this card. Rows the server flagged
+                        // as duplicating an existing record arrive unticked —
+                        // a statement photographed twice is the common case,
+                        // and a silently doubled lot is expensive to notice.
+                        self.present(proposal)
                     },
                     onThinking: { [weak self] delta in
                         guard let self, !Task.isCancelled else { return }
@@ -312,36 +326,59 @@ final class AssistantViewModel: ObservableObject {
         pendingAttachmentData = nil
     }
 
+    /// Write the rows the user kept, each through the ordinary REST endpoint —
+    /// the same call the form sheet makes. The assistant proposes; this is the
+    /// only code that writes.
     func submitImport(store: PortfolioStore) async {
-        guard let parsed = pendingImport else { return }
+        guard let proposal = pendingImport else { return }
         isSubmittingImport = true
-        var added = (trades: 0, dividends: 0)
-        var failures = 0
-        for (i, row) in parsed.trades.enumerated()
+        var created = 0, updated = 0, deleted = 0, failures = 0
+
+        for (i, row) in proposal.trades.enumerated()
         where importTradeOn.indices.contains(i) && importTradeOn[i] {
-            let payload = TradeCreate(
-                type: row.type, ticker: row.ticker, shares: row.shares,
-                price: row.price, tradeDate: row.date, fee: row.fee ?? 0,
-                notes: row.notes, market: nil)
-            do { _ = try await APIClient.shared.createTrade(payload); added.trades += 1 }
-            catch { failures += 1 }
+            do {
+                switch row.op {
+                case .create:
+                    _ = try await APIClient.shared.createTrade(row.createPayload())
+                    created += 1
+                case .update:
+                    guard let id = row.recordID else { failures += 1; break }
+                    _ = try await APIClient.shared.updateTrade(id, row.createPayload())
+                    updated += 1
+                case .delete:
+                    guard let id = row.recordID else { failures += 1; break }
+                    try await APIClient.shared.deleteTrade(id)
+                    deleted += 1
+                }
+            } catch { failures += 1 }
         }
-        for (i, row) in parsed.dividends.enumerated()
+
+        for (i, row) in proposal.dividends.enumerated()
         where importDividendOn.indices.contains(i) && importDividendOn[i] {
-            let payload = DividendCreate(
-                ticker: row.ticker, amount: row.amount,
-                payDate: row.date, notes: row.notes, market: nil)
-            do { _ = try await APIClient.shared.createDividend(payload); added.dividends += 1 }
-            catch { failures += 1 }
+            do {
+                switch row.op {
+                case .create:
+                    _ = try await APIClient.shared.createDividend(row.createPayload())
+                    created += 1
+                case .update:
+                    guard let id = row.recordID else { failures += 1; break }
+                    _ = try await APIClient.shared.updateDividend(id, row.createPayload())
+                    updated += 1
+                case .delete:
+                    guard let id = row.recordID else { failures += 1; break }
+                    try await APIClient.shared.deleteDividend(id)
+                    deleted += 1
+                }
+            } catch { failures += 1 }
         }
+
         await store.loadAll()
 
-        var summary = "✅ Added"
         var parts: [String] = []
-        if added.trades > 0 { parts.append(" \(added.trades) trade\(added.trades == 1 ? "" : "s")") }
-        if added.dividends > 0 { parts.append(" \(added.dividends) dividend\(added.dividends == 1 ? "" : "s")") }
-        summary += parts.isEmpty ? " nothing" : parts.joined(separator: " and")
-        summary += " to your portfolio."
+        if created > 0 { parts.append("added \(created) record\(created == 1 ? "" : "s")") }
+        if updated > 0 { parts.append("updated \(updated)") }
+        if deleted > 0 { parts.append("deleted \(deleted)") }
+        var summary = parts.isEmpty ? "Nothing was changed." : "✅ " + parts.joined(separator: ", ") + "."
         if failures > 0 { summary += " ⚠️ \(failures) row\(failures == 1 ? "" : "s") failed." }
         messages.append(ChatMessage(role: "assistant", content: summary))
 
@@ -880,101 +917,411 @@ private struct PulsingCaption: View {
     }
 }
 
-/// The drafted-record card.
+/// The write card.
 ///
-/// The model can propose a trade; it cannot book one. Everything a write tool
-/// produces lands here first, itemised, with every row switchable, and reaches
-/// the database only when **Add** is tapped.
+/// The model can propose a record; it cannot book one. Everything a write tool
+/// produces lands here first and reaches the database only on confirmation —
+/// which is why the footer says so on every variant, without exception.
+///
+/// Four shapes, because the question each asks is different: "is this right?"
+/// for a new record, "is this the change you meant?" for a correction, "do you
+/// want this gone?" for a deletion, and "which of these?" for a batch.
 private struct DraftRecordsCard: View {
     @ObservedObject var vm: AssistantViewModel
     let store: PortfolioStore
+
+    private var proposal: RecordProposal { vm.pendingImport ?? RecordProposal() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            switch proposal.shape {
+            case .update: EditBody(proposal: proposal)
+            case .delete: DeleteBody(proposal: proposal)
+            case .create, .batch: BatchBody(vm: vm, proposal: proposal)
+            }
+
+            if !proposal.notes.isEmpty && proposal.notes != proposal.summary {
+                Text(proposal.notes)
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text("Nothing is saved until you confirm")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+
+            actions
+        }
+        .appCard()
+    }
+
+    // MARK: Actions
+    //
+    // The primary button states its consequence in words. "Confirm" and "OK"
+    // ask the reader to remember what they are agreeing to.
+
+    @ViewBuilder
+    private var actions: some View {
+        switch proposal.shape {
+        case .update:
+            HStack(spacing: Theme.Space.s) {
+                PrimaryButton(title: "Save change", busy: vm.isSubmittingImport) { submit() }
+                SecondaryButton(title: "Discard") { vm.cancelImport() }
+            }
+        case .delete:
+            // The one card where the destructive action is not the default
+            // focus: keeping the record sits first, and the delete names the
+            // object rather than saying "Confirm".
+            HStack(spacing: Theme.Space.s) {
+                SecondaryButton(title: "Keep it", fullWidth: true) { vm.cancelImport() }
+                DestructiveButton(title: deleteTitle, busy: vm.isSubmittingImport) { submit() }
+            }
+        case .create, .batch:
+            HStack(spacing: Theme.Space.s) {
+                PrimaryButton(title: addTitle, disabled: selectedCount == 0,
+                              busy: vm.isSubmittingImport) { submit() }
+                SecondaryButton(title: "Discard") { vm.cancelImport() }
+            }
+        }
+    }
+
+    private func submit() { Task { await vm.submitImport(store: store) } }
+
+    private var deleteTitle: String {
+        proposal.trades.isEmpty ? "Delete this dividend" : "Delete this trade"
+    }
 
     private var selectedCount: Int {
         vm.importTradeOn.filter { $0 }.count + vm.importDividendOn.filter { $0 }.count
     }
 
+    /// Carries the live count, recomputed as the toggles change.
     private var addTitle: String {
-        let trades = vm.importTradeOn.filter { $0 }.count
-        let divs = vm.importDividendOn.filter { $0 }.count
-        var parts: [String] = []
-        if trades > 0 { parts.append("\(trades) trade\(trades == 1 ? "" : "s")") }
-        if divs > 0 { parts.append("\(divs) dividend\(divs == 1 ? "" : "s")") }
-        return parts.isEmpty ? "Add" : "Add \(parts.joined(separator: " · "))"
+        let n = selectedCount
+        if n == 0 { return "Nothing selected" }
+        return proposal.count == 1 ? "Add this record" : "Add \(n) record\(n == 1 ? "" : "s")"
     }
+}
+
+/// The correction card: only the fields that move, old struck through, new
+/// beside it. Re-listing unchanged values would make the reader hunt for the
+/// edit they asked for.
+private struct EditBody: View {
+    let proposal: RecordProposal
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            HStack {
-                Text("Drafted — confirm to save").eyebrowStyle(Theme.accent)
-                Spacer(minLength: Theme.Space.s)
-            }
+            Text("Correction — confirm to save").eyebrowStyle(Theme.accent)
 
-            if let parsed = vm.pendingImport {
-                VStack(spacing: 0) {
-                    ForEach(Array(parsed.trades.enumerated()), id: \.offset) { i, row in
-                        draftRow(
-                            isOn: Binding(
-                                get: { vm.importTradeOn.indices.contains(i) ? vm.importTradeOn[i] : false },
-                                set: { if vm.importTradeOn.indices.contains(i) { vm.importTradeOn[i] = $0 } }),
-                            tag: row.type == .buy ? "BUY" : "SELL",
-                            style: row.type == .buy ? .accent : .outline,
-                            ticker: row.ticker,
-                            detail: "\(Fmt.shares(row.shares)) @ \(Fmt.number(row.price, digits: 2))"
-                                + " · \(row.date.prefix(10))"
-                                + (row.fee.map { " · fee \(Fmt.number($0, digits: 0))" } ?? ""),
-                            last: i == parsed.trades.count - 1 && parsed.dividends.isEmpty)
-                    }
-                    ForEach(Array(parsed.dividends.enumerated()), id: \.offset) { i, row in
-                        draftRow(
-                            isOn: Binding(
-                                get: { vm.importDividendOn.indices.contains(i) ? vm.importDividendOn[i] : false },
-                                set: { if vm.importDividendOn.indices.contains(i) { vm.importDividendOn[i] = $0 } }),
-                            tag: "DIV", style: .neutral,
-                            ticker: row.ticker,
-                            detail: "\(Fmt.number(row.amount, digits: 2)) · \(row.date.prefix(10))",
-                            last: i == parsed.dividends.count - 1)
-                    }
-                }
-
-                if !parsed.notes.isEmpty {
-                    Text(parsed.notes)
-                        .font(Theme.Typo.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-            }
-
-            HStack(spacing: Theme.Space.s) {
-                PrimaryButton(title: addTitle,
-                              disabled: selectedCount == 0,
-                              busy: vm.isSubmittingImport) {
-                    Task { await vm.submitImport(store: store) }
-                }
-                SecondaryButton(title: "Discard") { vm.cancelImport() }
+            if let trade = proposal.trades.first {
+                header(tag: trade.displayType == .buy ? "BUY" : "SELL",
+                       style: trade.displayType == .buy ? .accent : .outline,
+                       ticker: trade.displayTicker)
+                diff(before: trade.before, after: trade.after,
+                     currency: trade.displayMarket.currencyCode)
+            } else if let dividend = proposal.dividends.first {
+                header(tag: "DIV", style: .neutral, ticker: dividend.displayTicker)
+                diff(before: dividend.before, after: dividend.after,
+                     currency: dividend.displayMarket.currencyCode)
             }
         }
-        .appCard()
     }
 
-    private func draftRow(isOn: Binding<Bool>, tag: String, style: TagChip.Style,
-                          ticker: String, detail: String, last: Bool) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: Theme.Space.m) {
-                TagChip(text: tag, style: style, width: 46)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(ticker)
-                        .font(Theme.Typo.row)
-                        .foregroundStyle(Theme.text)
-                    Text(detail)
-                        .font(Theme.Typo.micro)
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: Theme.Space.s)
-                Toggle("", isOn: isOn).labelsHidden().tint(Theme.accent)
-            }
-            .padding(.vertical, Theme.Space.s)
-            if !last { RowDivider(inset: 0) }
+    private func header(tag: String, style: TagChip.Style, ticker: String) -> some View {
+        HStack(spacing: Theme.Space.s) {
+            TagChip(text: tag, style: style, width: 46)
+            Text(ticker)
+                .font(Theme.Typo.row)
+                .foregroundStyle(Theme.text)
+            Spacer(minLength: 0)
         }
+    }
+
+    @ViewBuilder
+    private func diff(before: [String: JSONValue]?, after: [String: JSONValue]?,
+                      currency: String) -> some View {
+        let keys = ProposalFormat.ordered((after ?? [:]).keys)
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            ForEach(keys, id: \.self) { key in
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
+                    Text(ProposalFormat.label(key))
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                    Spacer(minLength: Theme.Space.s)
+                    Text(ProposalFormat.value(before?[key], key: key, currency: currency))
+                        .font(Theme.Typo.inlineNum)
+                        .foregroundStyle(Theme.textTertiary)
+                        .strikethrough()
+                        .numeral()
+                    Text("→")
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textTertiary)
+                    Text(ProposalFormat.value(after?[key], key: key, currency: currency))
+                        .font(Theme.Typo.inlineNum)
+                        .foregroundStyle(Theme.text)
+                        .numeral()
+                }
+            }
+        }
+    }
+}
+
+/// The deletion card: the record in full, plus whatever else the deletion
+/// moves. Those consequence lines are computed by the server re-running FIFO
+/// without the row — the model never authors them.
+private struct DeleteBody: View {
+    let proposal: RecordProposal
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text("Delete — confirm to remove").eyebrowStyle(Theme.loss)
+
+            if let trade = proposal.trades.first {
+                header(tag: trade.displayType == .buy ? "BUY" : "SELL",
+                       style: trade.displayType == .buy ? .accent : .outline,
+                       ticker: trade.displayTicker)
+                detail(trade.record, keys: ["date", "shares", "price", "fee", "market"],
+                       currency: trade.displayMarket.currencyCode)
+                consequences(trade.consequences)
+            } else if let dividend = proposal.dividends.first {
+                header(tag: "DIV", style: .neutral, ticker: dividend.displayTicker)
+                detail(dividend.record, keys: ["date", "amount", "market"],
+                       currency: dividend.displayMarket.currencyCode)
+                consequences(dividend.consequences)
+            }
+        }
+    }
+
+    private func header(tag: String, style: TagChip.Style, ticker: String) -> some View {
+        HStack(spacing: Theme.Space.s) {
+            TagChip(text: tag, style: style, width: 46)
+            Text(ticker)
+                .font(Theme.Typo.row)
+                .foregroundStyle(Theme.text)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func detail(_ record: [String: JSONValue]?, keys: [String],
+                        currency: String) -> some View {
+        VStack(spacing: 0) {
+            ForEach(Array(keys.enumerated()), id: \.offset) { index, key in
+                KeyValueRow(ProposalFormat.label(key),
+                            ProposalFormat.value(record?[key], key: key, currency: currency))
+                    .padding(.vertical, 6)
+                if index < keys.count - 1 { RowDivider(inset: 0) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func consequences(_ lines: [String]) -> some View {
+        if !lines.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(lines, id: \.self) { line in
+                    Text(line)
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.loss)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Theme.Space.m)
+            .background(Theme.loss.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.inset, style: .continuous))
+        }
+    }
+}
+
+/// The batch card: one row per proposed record, each with its own switch.
+/// Rows the server flagged as duplicating an existing record arrive unticked
+/// and say why.
+private struct BatchBody: View {
+    @ObservedObject var vm: AssistantViewModel
+    let proposal: RecordProposal
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text(proposal.summary.isEmpty
+                 ? (proposal.count == 1 ? "Drafted — confirm to save"
+                                        : "Drafted \(proposal.count) records — confirm to save")
+                 : proposal.summary)
+                .eyebrowStyle(Theme.accent)
+
+            VStack(spacing: 0) {
+                ForEach(Array(proposal.trades.enumerated()), id: \.offset) { index, row in
+                    ProposalRow(
+                        tag: row.op == .delete ? "DEL" : (row.displayType == .buy ? "BUY" : "SELL"),
+                        style: row.displayType == .buy ? .accent : .outline,
+                        ticker: row.displayTicker,
+                        detail: ProposalFormat.tradeDetail(row),
+                        duplicate: row.duplicateOf != nil,
+                        duplicateDate: row.date ?? row.string("date"),
+                        isOn: binding(index, \.importTradeOn))
+                    if index < proposal.trades.count - 1 || !proposal.dividends.isEmpty {
+                        RowDivider(inset: 0)
+                    }
+                }
+                ForEach(Array(proposal.dividends.enumerated()), id: \.offset) { index, row in
+                    ProposalRow(
+                        tag: row.op == .delete ? "DEL" : "DIV",
+                        style: .neutral,
+                        ticker: row.displayTicker,
+                        detail: ProposalFormat.dividendDetail(row),
+                        duplicate: row.duplicateOf != nil,
+                        duplicateDate: row.date ?? row.string("date"),
+                        isOn: binding(index, \.importDividendOn))
+                    if index < proposal.dividends.count - 1 { RowDivider(inset: 0) }
+                }
+            }
+        }
+    }
+
+    /// Bound to the view model's include arrays, tolerating an index the
+    /// arrays haven't caught up with (a proposal replaced mid-render).
+    private func binding(_ index: Int,
+                         _ path: ReferenceWritableKeyPath<AssistantViewModel, [Bool]>) -> Binding<Bool> {
+        Binding(
+            get: { vm[keyPath: path].indices.contains(index) ? vm[keyPath: path][index] : false },
+            set: { if vm[keyPath: path].indices.contains(index) { vm[keyPath: path][index] = $0 } })
+    }
+}
+
+/// One proposed record in the batch card. Deliberately the same shape as the
+/// AI-import review row — a reader shouldn't have to learn two layouts for the
+/// same decision.
+private struct ProposalRow: View {
+    let tag: String
+    let style: TagChip.Style
+    let ticker: String
+    let detail: String
+    let duplicate: Bool
+    let duplicateDate: String?
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(spacing: Theme.Space.m) {
+            TagChip(text: tag, style: style, width: 46)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(ticker)
+                    .font(Theme.Typo.row)
+                    .foregroundStyle(Theme.text)
+                Text(detail)
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                if duplicate {
+                    Text("Possible duplicate" + (duplicateDate.map { " · \($0.prefix(10))" } ?? ""))
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.loss)
+                }
+            }
+            Spacer(minLength: Theme.Space.s)
+            Toggle("", isOn: $isOn).labelsHidden().tint(Theme.accent)
+        }
+        .padding(.vertical, Theme.Space.s)
+    }
+}
+
+/// A filled action in the loss colour — the only destructive button in the app.
+struct DestructiveButton: View {
+    let title: String
+    var busy = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if busy { ProgressView().tint(.white) }
+                else { Text(title).font(Theme.Typo.buttonSm) }
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(Theme.loss)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(busy)
+    }
+}
+
+/// Formatting for proposal payloads.
+///
+/// Every number on a write card goes through `Fmt`, so a proposed price reads
+/// exactly like the same price on the Trades screen — same minus sign, same
+/// `US$`, same digits. A card that formats its own numbers is a card that
+/// eventually disagrees with the record it is about to write.
+enum ProposalFormat {
+    /// Changed fields in the order the record form asks for them. Sorting
+    /// alphabetically put "Fee" above "Price" on a price correction, which is
+    /// the one line the reader came to check.
+    private static let fieldOrder = ["type", "ticker", "shares", "price",
+                                     "amount", "fee", "date", "market", "notes"]
+
+    static func ordered(_ keys: some Collection<String>) -> [String] {
+        keys.sorted { a, b in
+            let ia = fieldOrder.firstIndex(of: a) ?? fieldOrder.count
+            let ib = fieldOrder.firstIndex(of: b) ?? fieldOrder.count
+            return ia == ib ? a < b : ia < ib
+        }
+    }
+
+    static func label(_ key: String) -> String {
+        switch key {
+        case "type": return "Side"
+        case "ticker": return "Ticker"
+        case "shares": return "Shares"
+        case "price": return "Price"
+        case "amount": return "Amount"
+        case "date": return "Date"
+        case "fee": return "Fee"
+        case "market": return "Market"
+        case "notes": return "Notes"
+        default: return key.capitalized
+        }
+    }
+
+    static func value(_ value: JSONValue?, key: String, currency: String) -> String {
+        guard let value, let text = value.stringValue, !text.isEmpty else { return "—" }
+        switch key {
+        case "price":
+            return Fmt.number(value.doubleValue, digits: 2)
+        case "shares":
+            return value.doubleValue.map(Fmt.shares) ?? text
+        case "fee", "amount":
+            return Fmt.amount(value.doubleValue, currency: currency)
+        case "type":
+            return text.uppercased()
+        case "market":
+            return text == "US" ? "US · USD" : "Taiwan · TWD"
+        case "date":
+            return String(text.prefix(10))
+        default:
+            return text
+        }
+    }
+
+    static func tradeDetail(_ row: TradeProposal) -> String {
+        let currency = row.displayMarket.currencyCode
+        let shares = row.shares ?? row.number("shares") ?? 0
+        let price = row.price ?? row.number("price") ?? 0
+        let date = String((row.date ?? row.string("date") ?? "").prefix(10))
+        var parts = ["\(Fmt.shares(shares)) × \(Fmt.number(price, digits: 2))"]
+        if !date.isEmpty { parts.append(date) }
+        let fee = row.fee ?? row.number("fee")
+        if let fee, fee > 0 { parts.append("fee \(Fmt.amount(fee, currency: currency))") }
+        return parts.joined(separator: " · ")
+    }
+
+    static func dividendDetail(_ row: DividendProposal) -> String {
+        let currency = row.displayMarket.currencyCode
+        let amount = row.amount ?? row.number("amount") ?? 0
+        let date = String((row.date ?? row.string("date") ?? "").prefix(10))
+        var parts = [Fmt.amount(amount, currency: currency)]
+        if !date.isEmpty { parts.append(date) }
+        return parts.joined(separator: " · ")
     }
 }
 
