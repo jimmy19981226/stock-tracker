@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (your choice of **OpenAI, Gemini, or Claude**) that calls 14 typed tools over your portfolio, shows its reasoning, keeps generating in the background, and can draft trades for one-tap confirmation.
+A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (your choice of **OpenAI, Gemini, or Claude**) that calls 24 typed tools over your portfolio, shows its reasoning, keeps generating in the background, and can draft, correct or delete records for one-tap confirmation.
 
 </div>
 
@@ -18,11 +18,18 @@ A **native iOS app + responsive web dashboard + FastAPI backend** for tracking *
 &nbsp;
 <img src="docs/screenshots/ios-stock.png" width="220" alt="Stock detail with trade markers" />
 
-<img src="docs/screenshots/ios-trades.png" width="220" alt="Trade log" />
+<img src="docs/screenshots/ios-trades.png" width="220" alt="Trade log with year filter" />
 &nbsp;
-<img src="docs/screenshots/ios-assistant.png" width="220" alt="AI assistant" />
+<img src="docs/screenshots/ios-dividends.png" width="220" alt="Dividends and the ex-div calendar" />
 &nbsp;
 <img src="docs/screenshots/ios-dark.png" width="220" alt="Dark theme" />
+
+**The assistant** — answers grounded in your own records, and a confirm card for
+anything it wants to write
+
+<img src="docs/screenshots/ios-assistant.png" width="220" alt="AI assistant answer" />
+&nbsp;
+<img src="docs/screenshots/ios-confirm-card.png" width="220" alt="Delete confirm card showing FIFO consequences" />
 
 **Web dashboard** — read-only, any phone or computer over the internet
 
@@ -89,9 +96,10 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 
 ### ✦ AI assistant
 - **Choose your model** — OpenAI, Google Gemini, or Anthropic Claude, each with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server).
-- **Tool calling (14 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, live quotes for *any* ticker, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, USD/TWD, market hours, and web search. Each call shows a live status line ("Reading holdings…").
-- **Add records by chat** — "I bought 100 shares of 2330 at 1050 today" makes the assistant draft the trade into an in-chat **confirmation card**; nothing is saved until you tap Add.
-- **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and the model reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still call `add_trade`/`add_dividend` from what it reads once the market's confirmed. Works on Gemini, OpenAI, and Claude; NVIDIA NIM's free-tier models are text-only and get a polite fallback note instead of silently ignoring the photo. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
+- **Tool calling (24 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, FIFO cost lots, a sale simulation using the app's own 損益試算 arithmetic, position weights, company fundamentals (including 月營收 and quarterly margins), live quotes for up to 10 tickers at once, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, the indices *you* follow, USD/TWD, market hours, and web search. Each call shows a live status line ("Reading holdings…").
+- **It can amend, not just add** — records carry ids, so "that 2330 buy should have been 1,035" produces a **correction**, not a second buy. Corrections, deletions and multi-row imports each get their own confirm card, and a delete card states what the deletion costs — which lots re-open, whose realized P/L moves — computed server-side by re-running FIFO, never written by the model.
+- **Add records by chat** — "I bought 100 shares of 2330 at 1050 today" makes the assistant draft the trade into an in-chat **confirmation card**; nothing is saved until you confirm it. That rule holds for every write the assistant can make, without exception: a write tool returns a proposal, and the record reaches the database through the ordinary endpoint only after you tap.
+- **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and the model reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still propose the records it reads once the market's confirmed — a whole statement in one card rather than one card per row. Works on Gemini, OpenAI, and Claude; NVIDIA NIM's free-tier models are text-only and get a polite fallback note instead of silently ignoring the photo. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
 - **Visible reasoning** — Claude extended thinking and Gemini thought summaries stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle).
 - **Background generation** — replies keep generating server-side if you switch apps or lock the screen; the finished answer is waiting when you come back. The stop button cancels the server run too.
 - **Always ready** — opening the Assistant pre-warms the backend and pre-builds your portfolio context, so the first message streams immediately.
@@ -442,7 +450,7 @@ The **Assistant** tab gives natural-language Q&A over your portfolio. Pick your 
 - Every open position with **light fundamentals** (sector, P/E, EPS, market cap, 52-week range, dividend yield, beta, 1-year analyst target, earnings / ex-div dates).
 - Every trade and dividend you've recorded.
 - For tickers you mention in the question (or in recent turns): **24 months of monthly revenue with YoY %** and **8 quarters of revenue / EPS / margins**.
-- **Whatever its tools return** — 14 typed tools cover portfolio reads (summary, holdings, trades, dividends), market data (live quote for any ticker, price history, FX, market hours), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history), DuckDuckGo **web search** with self-cited sources, and two write actions (`add_trade` / `add_dividend`) that only ever *propose* records for an in-chat confirm card.
+- **Whatever its tools return** — 24 typed tools cover portfolio reads (summary, holdings, trades and dividends with ids, FIFO lots, allocation weights), market data (batched quotes, price history at daily/weekly/monthly, FX, market hours with the next open/close), company data (fundamentals, 月營收, eight quarters of margins), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history, a sale simulation), DuckDuckGo **web search** with self-cited sources, and write actions (`propose_records`, `update_*`, `delete_*`, `add_*`) that only ever *propose* records for an in-chat confirm card.
 
 This means questions like *"is 2330's gross margin improving?"* or *"compare 2330's price to its 1-year analyst target"* return tables with real numbers from your data — not generic boilerplate. Ask *"what's the latest news on 2330?"* and Gemini searches the web, writes a summary, and **inline citation chips** link each claim back to its source.
 
