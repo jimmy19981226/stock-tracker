@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (your choice of **OpenAI, Gemini, or Claude**) that calls 24 typed tools over your portfolio, shows its reasoning, keeps generating in the background, and can draft, correct or delete records for one-tap confirmation.
+A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (your choice of **OpenAI, Gemini, or Claude**) that calls 25 typed tools over your portfolio, shows its reasoning, keeps generating in the background, can draft, correct or delete records for one-tap confirmation, and renders multi-page **PDF reports** from a Word template on the server.
 
 </div>
 
@@ -24,12 +24,18 @@ A **native iOS app + responsive web dashboard + FastAPI backend** for tracking *
 &nbsp;
 <img src="docs/screenshots/ios-dark.png" width="220" alt="Dark theme" />
 
-**The assistant** — answers grounded in your own records, and a confirm card for
-anything it wants to write
+**The assistant** — answers grounded in your own records, a confirm card for
+anything it wants to write, and a PDF when the answer is too big for chat
 
 <img src="docs/screenshots/ios-assistant.png" width="220" alt="AI assistant answer" />
 &nbsp;
 <img src="docs/screenshots/ios-confirm-card.png" width="220" alt="Delete confirm card showing FIFO consequences" />
+&nbsp;
+<img src="docs/screenshots/ios-report-card.png" width="220" alt="PDF report card in chat" />
+
+**PDF reports** — your records rendered against a Word template on the server
+
+<img src="docs/screenshots/ios-report.png" width="220" alt="A rendered dividend year report" />
 
 **Web dashboard** — read-only, any phone or computer over the internet
 
@@ -96,7 +102,7 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 
 ### ✦ AI assistant
 - **Choose your model** — OpenAI, Google Gemini, or Anthropic Claude, each with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server).
-- **Tool calling (24 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, FIFO cost lots, a sale simulation using the app's own 損益試算 arithmetic, position weights, company fundamentals (including 月營收 and quarterly margins), live quotes for up to 10 tickers at once, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, the indices *you* follow, USD/TWD, market hours, and web search. Each call shows a live status line ("Reading holdings…").
+- **Tool calling (25 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, FIFO cost lots, a sale simulation using the app's own 損益試算 arithmetic, position weights, company fundamentals (including 月營收 and quarterly margins), live quotes for up to 10 tickers at once, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, the indices *you* follow, USD/TWD, market hours, web search, and a PDF report when the answer is too big for chat. Each call shows a live status line ("Reading holdings…").
 - **It can amend, not just add** — records carry ids, so "that 2330 buy should have been 1,035" produces a **correction**, not a second buy. Corrections, deletions and multi-row imports each get their own confirm card, and a delete card states what the deletion costs — which lots re-open, whose realized P/L moves — computed server-side by re-running FIFO, never written by the model.
 - **Add records by chat** — "I bought 100 shares of 2330 at 1050 today" makes the assistant draft the trade into an in-chat **confirmation card**; nothing is saved until you confirm it. That rule holds for every write the assistant can make, without exception: a write tool returns a proposal, and the record reaches the database through the ordinary endpoint only after you tap.
 - **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and the model reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still propose the records it reads once the market's confirmed — a whole statement in one card rather than one card per row. Works on Gemini, OpenAI, and Claude; NVIDIA NIM's free-tier models are text-only and get a polite fallback note instead of silently ignoring the photo. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
@@ -106,6 +112,14 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 - **Streaming replies** rendered as Markdown in the app's own reading voice — headings, bold, lists, code blocks, blockquotes, tables — with the tool lines above them and the "not investment advice" note below.
 - **Portfolio-aware** — every chat carries a snapshot of your holdings + light fundamentals; mention a ticker and its monthly revenue + quarterly margins are attached so the model answers with real numbers.
 - **Chat history** — past conversations are saved; reopen one, long-press to delete, or clear them all.
+
+### 📄 PDF reports
+- **Four reports** — dividend year (TW and US payouts split, gross → tax → net), holdings snapshot, realized P/L & tax summary, and period performance. Export one from **Settings → Reports**, or just ask the assistant for it.
+- **Layout lives in a Word template on the server**, not in Swift. The app sends a template id and a period; the backend assembles the JSON and [Adobe Document Generation](https://developer.adobe.com/document-services/apis/document-generation/) renders template + JSON → PDF. A column, a heading or the page furniture changes **without an app release**.
+- **The numbers come from the same services the screens read**, so a report can't drift from the app. Taiwan cash dividends carry the 2.11% NHI supplementary premium on each payment of NT$20,000 or more; US dividends are shown withheld at the 30% statutory rate; every conversion in a document uses one FX rate, captured at generation and printed on the cover.
+- **Cached on a key that includes a data version** — re-asking for the same report over unchanged records returns the file that already exists and costs no Document Transaction.
+- **Read it in the app** — a full-screen PDFKit viewer with a pager and a share sheet, and the file cached on disk so reopening works offline.
+- Adobe credentials live in server environment only (`ADOBE_CLIENT_ID` / `ADOBE_CLIENT_SECRET`); the app talks only to your backend. **Until they're set** — and the four `.docx` templates are dropped in `backend/app/reports/templates/` — the same payload renders locally, so the whole feature works out of the box and Settings tells you which renderer is live.
 
 ### 🛠 Trade & dividend management
 - Add, edit, and delete **trades** (buy/sell) and **dividends**, with the market as an explicit TW/US control that drives the currency, the automatic fee (TW: max(20, gross × 0.1425%); US: flat 1) and validation — a lettered symbol filed under Taiwan is rejected with a specific message rather than silently guessed
@@ -321,7 +335,9 @@ To reach the app from your phone or any device, host the two pieces — both hav
 - **Backend → [Render](https://render.com)** (Web Service). The repo ships a [`render.yaml`](render.yaml)
   blueprint — point Render at the repo and set these env vars in the dashboard:
   `DATABASE_URL` (Neon), `GOOGLE_AI_API_KEY` (optional), `GOOGLE_CLIENT_ID` (for app sign-in),
-  and optionally `QUOTE_RELAY_URL` + `QUOTE_RELAY_SECRET` for live TW quotes (see below).
+  optionally `QUOTE_RELAY_URL` + `QUOTE_RELAY_SECRET` for live TW quotes (see below),
+  and optionally `ADOBE_CLIENT_ID` + `ADOBE_CLIENT_SECRET` to render PDF reports
+  through Adobe Document Generation instead of the built-in local renderer.
 
 The iOS app points at the Render backend URL (set in the app's Settings). The free tier
 "scales to zero," so the first request after idle takes ~30–60 s to wake, then it's fast.
@@ -435,6 +451,10 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 | DELETE | /api/mobile/sessions/{token}        | release session bytes when modal closes     |
 | POST   | /api/mobile/sessions/{token}/file   | phone uploads here from the mobile page     |
 | GET    | /m/upload/{token}                   | mobile-friendly upload HTML page (rendered by phone after QR scan) |
+| POST   | /api/reports                        | start a PDF render (`template`, `period`); returns immediately, `cached: true` when the data hasn't changed |
+| GET    | /api/reports                        | the account's recent reports, the template catalogue, and which renderer is live |
+| GET    | /api/reports/{id}                   | poll a render: `pending` → `ready` \| `failed`, with pages, bytes and the FX rate used |
+| GET    | /api/reports/{id}/file              | the PDF itself |
 | GET    | /api/web/config                     | whether the read-only web dashboard is enabled (`WEB_DASHBOARD_PASSWORD` set) |
 | POST   | /api/web/login                      | exchange the dashboard password for a stateless 12h bearer token |
 | GET    | /api/web/overview · holdings · summary · earnings-history · trades · dividends | read-only data for the web dashboard, scoped to `WEB_DASHBOARD_USER_ID` (Bearer token required) |
@@ -450,7 +470,7 @@ The **Assistant** tab gives natural-language Q&A over your portfolio. Pick your 
 - Every open position with **light fundamentals** (sector, P/E, EPS, market cap, 52-week range, dividend yield, beta, 1-year analyst target, earnings / ex-div dates).
 - Every trade and dividend you've recorded.
 - For tickers you mention in the question (or in recent turns): **24 months of monthly revenue with YoY %** and **8 quarters of revenue / EPS / margins**.
-- **Whatever its tools return** — 24 typed tools cover portfolio reads (summary, holdings, trades and dividends with ids, FIFO lots, allocation weights), market data (batched quotes, price history at daily/weekly/monthly, FX, market hours with the next open/close), company data (fundamentals, 月營收, eight quarters of margins), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history, a sale simulation), DuckDuckGo **web search** with self-cited sources, and write actions (`propose_records`, `update_*`, `delete_*`, `add_*`) that only ever *propose* records for an in-chat confirm card.
+- **Whatever its tools return** — 25 typed tools cover portfolio reads (summary, holdings, trades and dividends with ids, FIFO lots, allocation weights), market data (batched quotes, price history at daily/weekly/monthly, FX, market hours with the next open/close), company data (fundamentals, 月營收, eight quarters of margins), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history, a sale simulation), DuckDuckGo **web search** with self-cited sources, write actions (`propose_records`, `update_*`, `delete_*`, `add_*`) that only ever *propose* records for an in-chat confirm card, and `generate_report`, which renders a PDF when an answer is too large or too tabular for chat.
 
 This means questions like *"is 2330's gross margin improving?"* or *"compare 2330's price to its 1-year analyst target"* return tables with real numbers from your data — not generic boilerplate. Ask *"what's the latest news on 2330?"* and Gemini searches the web, writes a summary, and **inline citation chips** link each claim back to its source.
 
