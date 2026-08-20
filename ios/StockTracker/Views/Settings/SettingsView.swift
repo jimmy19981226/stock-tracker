@@ -18,6 +18,10 @@ struct SettingsView: View {
     @State private var deviceMISUp: Bool?
     @State private var showIndices = false
     @State private var showAbout = false
+    @ObservedObject private var reports = ReportsStore.shared
+    @State private var reportTemplate = "dividend_year"
+    @State private var reportPeriod: ReportPeriod = .ytd
+    @State private var rendering = false
 
     var body: some View {
         ScrollView {
@@ -33,6 +37,7 @@ struct SettingsView: View {
                 group("AI assistant") { aiCard }
                 group("Backend") { backendCard }
                 group("Markets & indices") { marketsCard }
+                group("Reports") { reportsCard }
                 group("About") { aboutCard }
 
                 Text("AI Stock Studio · self-hosted · no analytics, no telemetry\nNot investment advice. Prices may be delayed.")
@@ -48,6 +53,7 @@ struct SettingsView: View {
         .task { await probe() }
         .onAppear { apiKey = AISettings.apiKey(for: provider) ?? "" }
         .sheet(isPresented: $showIndices) { IndexEditorView().environmentObject(store) }
+        .task { await reports.loadCatalog() }
         .fullScreenCover(isPresented: $showAbout) { AboutView { showAbout = false } }
     }
 
@@ -293,6 +299,120 @@ struct SettingsView: View {
                 .padding(.top, Theme.Space.xs)
         }
         .appCard()
+    }
+
+    // MARK: Reports
+
+    /// The layout of a report lives in a Word template on the server, so this
+    /// screen picks *which* report and *when* — never how it looks.
+    private var reportsCard: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text("Your records rendered against a Word template on the server. Layout lives in the template, numbers come from your database — change the layout without shipping an app update.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: Theme.Space.xs) {
+                ForEach(templates) { template in
+                    Button { reportTemplate = template.id } label: {
+                        templateRow(template, selected: template.id == reportTemplate)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Text("Period").statLabelStyle()
+            SegmentedControl(options: ReportPeriod.allCases.map { ($0, $0.label) },
+                             selection: $reportPeriod)
+
+            PrimaryButton(title: rendering ? "Rendering with Document Generation…"
+                                           : "Export PDF report",
+                          disabled: rendering, busy: false) {
+                Task { await exportReport() }
+            }
+
+            Text("Cached per template and period — the same report is not re-rendered twice."
+                 + (reports.renderer == "local"
+                    ? " Rendering locally: add ADOBE_CLIENT_ID and a template .docx on the server to use Document Generation."
+                    : ""))
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .appCard()
+    }
+
+    /// The server's catalogue when it has answered, and the shipped list until
+    /// then, so the screen is never empty on first paint.
+    private var templates: [ReportTemplate] {
+        reports.templates.isEmpty ? Self.fallbackTemplates : reports.templates
+    }
+
+    private static let fallbackTemplates: [ReportTemplate] = [
+        .init(id: "dividend_year", name: "Dividend year report",
+              description: "TW and US payouts split · gross → tax → net", pages: 6),
+        .init(id: "holdings_snapshot", name: "Holdings snapshot",
+              description: "Positions, cost basis, market value, unrealized P/L", pages: 4),
+        .init(id: "realized_pl", name: "Realized P/L & tax summary",
+              description: "FIFO-matched sells with holding periods", pages: 5),
+        .init(id: "period_performance", name: "Period performance",
+              description: "TWR, XIRR and benchmark comparison", pages: 3),
+    ]
+
+    private func templateRow(_ template: ReportTemplate, selected: Bool) -> some View {
+        HStack(alignment: .top, spacing: Theme.Space.m) {
+            Circle()
+                .strokeBorder(selected ? Theme.accent : Theme.line, lineWidth: 1.5)
+                .background(Circle().fill(selected ? Theme.accent : .clear).padding(4))
+                .frame(width: 15, height: 15)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(template.name)
+                    .font(Theme.Typo.row)
+                    .foregroundStyle(Theme.text)
+                Text(template.description)
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Theme.Space.s)
+            Text("\(template.pages) pp")
+                .font(Theme.Typo.microMed)
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Theme.Space.m)
+        .background(selected ? Theme.accentTint : .clear)
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous)
+                .stroke(selected ? Theme.accent : Theme.line, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous))
+        .contentShape(Rectangle())
+    }
+
+    private func exportReport() async {
+        rendering = true
+        defer { rendering = false }
+        guard let job = await reports.generate(template: reportTemplate,
+                                               period: reportPeriod.wireValue) else {
+            toasts.show("Couldn't start the report")
+            return
+        }
+        // Wait for the job the store is already polling, rather than polling a
+        // second time from here.
+        for _ in 0..<45 {
+            if let current = reports.job(job.reportID), current.status != .pending {
+                if current.status == .ready {
+                    reports.open(current)
+                } else {
+                    toasts.show(current.error ?? "Render job failed")
+                }
+                return
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
+        toasts.show("The render is taking longer than usual — check back shortly")
     }
 
     // MARK: About

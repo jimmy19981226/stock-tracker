@@ -11,6 +11,61 @@ anywhere, even for the same marketing version.
 
 ---
 
+## 1.4.0 (build 5) — 2026-08-20
+
+PDF reports, from `design_handoff_ios_ui/ADOBE_PDF_REPORTS.md`.
+
+### What it is
+Your records rendered against a Word template on the server. The app sends a
+template id and a period and gets back a PDF — so a column, a heading or the
+page furniture can change without an App Store release, which is the entire
+argument for doing it this way.
+
+### Backend
+- `POST /api/reports` starts a render and returns in ~10 ms; the app polls
+  `GET /api/reports/{id}`. `GET /api/reports/{id}/file` serves the PDF and
+  `GET /api/reports` lists the account's recent ones.
+- **Cached on a key that folds in a data version** — the newest write across
+  the account's trades and dividends — so re-asking for the same report over
+  unchanged records returns the existing file and burns no Document
+  Transaction. A failed render is never reused; that would cache the failure.
+- Four templates: dividend year, holdings snapshot, realized P/L & tax
+  summary, period performance. Data is assembled from the services the screens
+  already read — a report that computed its own cost basis would eventually
+  disagree with the Dividends screen, and the screen is what the user trusts.
+- **Two tax rules, stated once**: Taiwan's 2.11% NHI supplementary premium,
+  applied per payment of NT$20,000 or more and rounded to whole TWD so the
+  column adds up to the total printed under it; and US withholding at the 30%
+  statutory rate, since Taiwan has no treaty reducing it. Every conversion in
+  a document uses one FX rate captured at assembly and printed on the cover.
+- Adobe Document Generation is wired (`services/adobe_docgen.py`) and used the
+  moment `ADOBE_CLIENT_ID`/`ADOBE_CLIENT_SECRET` are set **and** the template
+  `.docx` is present. Credentials live in server env only; the app never talks
+  to Adobe. Until then the same payload renders locally, so every endpoint,
+  the card, the viewer and the Settings screen work end to end today.
+- `generate_report` joins the assistant's tools — for a full year of
+  dividends or a tax summary, not for an answer that fits in a sentence. The
+  model gets a one-line headline and the card, never the document.
+
+### iOS
+- **Report card** in the assistant: a real page-1 thumbnail rendered from the
+  downloaded PDF with PDFKit, the meta line, and Open. Pending, ready and
+  failed states; the poll gives up after a minute into failed, where there is
+  a Retry, because the one thing a job must not do is sit pending forever.
+- **Viewer** — full-screen PDFKit over a dark ground, with a pager, and Share
+  to AirDrop/Files/Mail. The file is cached under `Caches/Reports/` by report
+  id, so reopening one works with no network.
+- **Settings → Reports** — the four templates, a period control, and an export
+  button that says which renderer the server is actually using.
+
+### Fixed while building it
+- Three presentation modifiers on one view: SwiftUI honours one, so the report
+  viewer silently never appeared from Settings. It is presented from `RootView`
+  now — one place, and both entry points reach it.
+- `ReportJob` decoded to nothing because the shared decoder converts
+  snake_case *before* `CodingKeys` are consulted: the wire's `report_id`
+  arrives as `reportId`, which a `reportID` case does not match.
+
 ## 1.3.0 (build 4) — 2026-08-19
 
 Assistant tool surface v2, from `design_handoff_ios_ui/ASSISTANT_TOOLS.md`, plus

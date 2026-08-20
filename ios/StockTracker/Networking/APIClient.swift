@@ -259,6 +259,53 @@ final class APIClient {
         }
     }
 
+    // MARK: - PDF reports
+
+    /// Start a render. Returns immediately — the job runs on the server and
+    /// the caller polls `getReport`. A repeat request over unchanged records
+    /// comes back `cached`, pointing at the report that already exists.
+    func createReport(template: String, period: String,
+                      params: [String: String] = [:]) async throws -> ReportJob {
+        struct Body: Encodable {
+            let template: String
+            let period: String
+            let params: [String: String]
+        }
+        return try await send("/api/reports", method: "POST",
+                              body: Body(template: template, period: period, params: params))
+    }
+
+    func getReport(_ reportID: String) async throws -> ReportJob {
+        try await request("/api/reports/\(reportID)")
+    }
+
+    func listReports() async throws -> ReportCatalog {
+        try await request("/api/reports")
+    }
+
+    /// Download the PDF into the caches directory, keyed by report id, and
+    /// return the local file URL. Cached on disk so reopening a report the
+    /// user has already seen works with no network at all.
+    func downloadReport(_ reportID: String) async throws -> URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let directory = caches.appendingPathComponent("Reports", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appendingPathComponent("\(reportID).pdf")
+        if FileManager.default.fileExists(atPath: destination.path) {
+            return destination
+        }
+
+        var req = URLRequest(url: try url("/api/reports/\(reportID)/file"))
+        req.timeoutInterval = 120
+        await Self.attachAuth(&req)
+        let (data, response) = try await dataTask(req)
+        guard (200..<300).contains(response.statusCode) else {
+            throw APIError.http(response.statusCode, "Couldn't download the report")
+        }
+        try data.write(to: destination, options: .atomic)
+        return destination
+    }
+
     // MARK: - Dividend calendar & performance
 
     func getDividendCalendar() async throws -> DividendCalendar {
@@ -398,6 +445,7 @@ final class APIClient {
         onDone: @escaping @MainActor (String, [String]) -> Void,
         onStatus: @escaping @MainActor (String) -> Void = { _ in },
         onAction: @escaping @MainActor (RecordProposal) -> Void = { _ in },
+        onReport: @escaping @MainActor (ReportJob) -> Void = { _ in },
         onThinking: @escaping @MainActor (String) -> Void = { _ in }
     ) async throws {
         var req = URLRequest(url: try url("/api/ai/chat"))
@@ -468,6 +516,14 @@ final class APIClient {
                 // Tool-call progress ("Searching the web…", "Reading
                 // holdings…") so the UI isn't a silent spinner.
                 if let text = evt["text"] as? String { await onStatus(text) }
+            case "action" where evt["report"] != nil:
+                // `generate_report` — the document is already rendering, so
+                // this is a job to follow, not a proposal to confirm.
+                if let raw = evt["report"] as? [String: Any],
+                   let data = try? JSONSerialization.data(withJSONObject: raw),
+                   let job = try? decoder.decode(ReportJob.self, from: data) {
+                    await onReport(job)
+                }
             case "action":
                 // A write tool proposed records. Decoded with the *plain*
                 // decoder, not the shared snake_case one: the payload's keys

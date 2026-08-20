@@ -26,6 +26,7 @@ from .routers import (
     quotes,
     stock,
     trades,
+    reports,
     webauth,
 )
 from .services import live_quotes
@@ -120,6 +121,7 @@ app.include_router(stock.router)
 app.include_router(markets.router)
 app.include_router(quotes.router)
 app.include_router(indices.router)
+app.include_router(reports.router)
 app.include_router(mobile.router)
 app.include_router(mobile.page_router)
 app.include_router(webauth.router)

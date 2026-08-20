@@ -29,6 +29,10 @@ final class AssistantViewModel: ObservableObject {
     @Published var importDividendOn: [Bool] = []
     @Published var isSubmittingImport = false
 
+    /// Report jobs the assistant started, oldest first. The card lives in the
+    /// transcript; the polling lives in `ReportsStore`, which outlives the tab.
+    @Published var reportIDs: [String] = []
+
     private var chatId: Int?
     /// The in-flight streaming task, so a reset / teardown can cancel it and
     /// stop late onChunk/onDone callbacks from mutating a fresh transcript.
@@ -69,6 +73,19 @@ final class AssistantViewModel: ObservableObject {
             messages = [ChatMessage(role: "user",
                                     content: "That 2330 buy should have been 1,035, not 1,053.")]
             present(RecordProposal.demoEdit)
+        }
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_REPORT"] == "1" {
+            messages = [
+                ChatMessage(role: "user", content: "Give me a dividend report for this year."),
+                ChatMessage(role: "assistant",
+                            content: "Taiwan NT$86,372 net across 5 payments; US US$113.40 net across 2. The full breakdown is in the report."),
+            ]
+            Task { @MainActor in
+                if let job = await ReportsStore.shared.generate(
+                    template: "dividend_year", period: "ytd") {
+                    reportIDs = [job.reportID]
+                }
+            }
         }
         if ProcessInfo.processInfo.environment["UITEST_CHAT_LEGACY"] == "1" {
             messages = [ChatMessage(role: "user", content: "I bought 100 of 2330 at 1050.")]
@@ -195,6 +212,15 @@ final class AssistantViewModel: ObservableObject {
                         // a statement photographed twice is the common case,
                         // and a silently doubled lot is expensive to notice.
                         self.present(proposal)
+                    },
+                    onReport: { [weak self] job in
+                        guard let self, !Task.isCancelled else { return }
+                        // `generate_report` proposes nothing — the document is
+                        // already rendering. The card tracks it to ready.
+                        ReportsStore.shared.adopt(job)
+                        if !self.reportIDs.contains(job.reportID) {
+                            self.reportIDs.append(job.reportID)
+                        }
                     },
                     onThinking: { [weak self] delta in
                         guard let self, !Task.isCancelled else { return }
@@ -441,6 +467,7 @@ struct AssistantView: View {
     @ObservedObject var vm: AssistantViewModel
     @EnvironmentObject private var store: PortfolioStore
     @EnvironmentObject private var settings: AppSettings
+    @ObservedObject private var reports = ReportsStore.shared
     @State private var showHistory = false
     @State private var providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
     @State private var photoItem: PhotosPickerItem?
@@ -545,6 +572,16 @@ struct AssistantView: View {
                     // they reach the database.
                     if vm.pendingImport != nil {
                         DraftRecordsCard(vm: vm, store: store)
+                    }
+
+                    ForEach(vm.reportIDs, id: \.self) { id in
+                        if let job = reports.job(id) {
+                            ReportCardView(job: job,
+                                           onOpen: { reports.open($0) },
+                                           onRetry: { job in
+                                               Task { await reports.retry(job) }
+                                           })
+                        }
                     }
 
                     if !providerHasKey {
@@ -902,8 +939,9 @@ private struct ReasoningBlock: View {
     }
 }
 
-/// A caption that breathes while work is in flight.
-private struct PulsingCaption: View {
+/// A caption that breathes while work is in flight. Shared with the report
+/// card, which has the same job to describe.
+struct PulsingCaption: View {
     let text: String
     @State private var dim = false
 

@@ -768,6 +768,35 @@ input{font-family:"Barlow",sans-serif}
   </div>
 
   <div style="padding-bottom:18px">
+    <div style="font-family:'Barlow Condensed';font-weight:600;font-size:15px;color:var(--textStrong);padding-bottom:8px">Reports</div>
+    <div style="padding:14px;border-radius:16px;background:var(--card);box-shadow:0 1px 3px var(--shadow)">
+      <div style="font-family:Barlow;font-size:11.5px;color:var(--textSecondary);padding-bottom:10px">Your records rendered against a Word template on the server. Layout lives in the template, numbers come from your database — change the layout without shipping an app update.</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{rptTemplates}}" as="r" hint-placeholder-count="4">
+          <div onClick="{{r.pick}}" style="display:flex;gap:10px;align-items:flex-start;padding:10px;border-radius:12px;border:1px solid {{r.bd}};background:{{r.bg}};cursor:pointer">
+            <div style="width:15px;height:15px;flex:none;margin-top:1px;border-radius:50%;border:1.5px solid {{r.bd}};display:flex;align-items:center;justify-content:center">
+              <div style="width:7px;height:7px;border-radius:50%;background:{{r.dot}}"></div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-family:'Barlow Condensed';font-weight:600;font-size:15px;color:var(--text)">{{r.name}}</div>
+              <div style="font-family:Barlow;font-size:11.5px;color:var(--textSecondary);line-height:1.35">{{r.desc}}</div>
+            </div>
+            <span style="font-family:Barlow;font-weight:600;font-size:10.5px;color:var(--textTertiary);white-space:nowrap;padding-top:2px">{{r.np}} pp</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="font-family:Barlow;font-weight:600;font-size:10.5px;letter-spacing:.7px;text-transform:uppercase;color:var(--textSecondary);padding:12px 0 6px">Period</div>
+      <div style="display:flex;gap:2px;padding:2px;border-radius:10px;background:var(--track)">
+        <sc-for list="{{rptRanges}}" as="p" hint-placeholder-count="4">
+          <div onClick="{{p.set}}" style="flex:1;text-align:center;padding:4px 2px;border-radius:8px;cursor:pointer;background:{{p.bg}};font-family:Barlow;font-weight:{{p.fw}};font-size:10.5px;color:{{p.c}}">{{p.l}}</div>
+        </sc-for>
+      </div>
+      <div onClick="{{rptExport}}" style="margin-top:12px;min-height:44px;display:flex;align-items:center;justify-content:center;border-radius:12px;background:{{rptBtnBg}};color:#fff;font-family:Barlow;font-weight:500;font-size:14.5px;cursor:pointer">{{rptBtnLabel}}</div>
+      <div style="font-family:Barlow;font-weight:500;font-size:11px;color:var(--textSecondary);padding-top:8px">Cached per template and period — the same report is not re-rendered twice.</div>
+    </div>
+  </div>
+
+  <div style="padding-bottom:18px">
     <div style="font-family:'Barlow Condensed';font-weight:600;font-size:15px;color:var(--textStrong);padding-bottom:8px">About</div>
     <div style="padding:14px;border-radius:16px;background:var(--card);box-shadow:0 1px 3px var(--shadow)">
       <div style="display:flex;padding:5px 0"><span style="font-family:Barlow;font-size:12.5px;color:var(--textSecondary);flex:1">Version</span><span style="font-family:Barlow;font-weight:500;font-size:12.5px;color:var(--text)">1.2.0 (11)</span></div>
@@ -856,6 +885,46 @@ input{font-family:"Barlow",sans-serif}
         <sc-if value="{{m.added}}">
           <div style="font-family:Barlow;font-weight:500;font-size:12.5px;color:var(--gain);padding-top:10px">✓ Saved to Trades</div>
         </sc-if>
+      </div>
+    </sc-if>
+    <sc-if value="{{m.isReport}}">
+      <div style="padding:12px;border-radius:16px;background:var(--card);box-shadow:0 1px 3px var(--shadow);max-width:96%;display:flex;gap:12px">
+        <div style="position:relative;width:58px;height:76px;flex:none;border-radius:5px;overflow:hidden;background:#fff;border:1px solid var(--line)">
+          <div style="height:16px;background:var(--heroTop)"></div>
+          <div style="padding:5px;display:flex;flex-direction:column;gap:3px">
+            <div style="height:3px;width:62%;background:#C4C9CE"></div>
+            <div style="height:2px;width:88%;background:#E4E6E9"></div>
+            <div style="height:8px;background:var(--accentSoft);margin-top:3px"></div>
+            <div style="height:2px;width:92%;background:#E4E6E9"></div>
+            <div style="height:2px;width:86%;background:#E4E6E9"></div>
+            <div style="height:2px;width:90%;background:#E4E6E9"></div>
+            <div style="height:2px;width:74%;background:#E4E6E9"></div>
+          </div>
+          <sc-if value="{{m.rptGen}}">
+            <div style="position:absolute;inset:0;background:var(--card);opacity:.8;animation:st-pulse 1.2s ease-in-out infinite"></div>
+          </sc-if>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)">PDF report</div>
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:17px;color:var(--text);line-height:1.15;padding-top:2px">{{m.rptTitle}}</div>
+          <div style="font-family:Barlow;font-size:11.5px;color:var(--textSecondary);padding-top:2px">{{m.rptSub}}</div>
+          <div style="flex:1;min-height:8px"></div>
+          <sc-if value="{{m.rptGen}}">
+            <div style="font-family:Barlow;font-weight:500;font-size:12px;color:var(--textSecondary);animation:st-pulse 1.2s ease-in-out infinite">Rendering pages from the template…</div>
+          </sc-if>
+          <sc-if value="{{m.rptReady}}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-family:Barlow;font-weight:500;font-size:11px;color:var(--textSecondary);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{m.rptMeta}}</span>
+              <div onClick="{{m.rptOpen}}" style="padding:7px 14px;border-radius:10px;background:var(--accent);color:#fff;font-family:Barlow;font-weight:500;font-size:12.5px;cursor:pointer">Open</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{m.rptErr}}">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-family:Barlow;font-weight:500;font-size:11px;color:var(--redInk);flex:1">Render job failed</span>
+              <div onClick="{{m.rptRetry}}" style="padding:7px 14px;border-radius:10px;border:1px solid var(--line);font-family:Barlow;font-weight:500;font-size:12.5px;color:var(--text);cursor:pointer">Retry</div>
+            </div>
+          </sc-if>
+        </div>
       </div>
     </sc-if>
   </sc-for>
@@ -1175,6 +1244,97 @@ input{font-family:"Barlow",sans-serif}
 </div>
 </sc-if>
 
+<sc-if value="{{pdfOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:69;background:#23272B;display:flex;flex-direction:column">
+  <div style="padding:56px 14px 10px;background:rgba(18,21,24,.96);display:flex;align-items:center;gap:10px">
+    <div onClick="{{closePdf}}" style="width:30px;height:30px;flex:none;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#E6EAEE;font-family:Barlow;font-size:13px">✕</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-family:'Barlow Condensed';font-weight:600;font-size:16px;color:#F2F4F6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{pdfTitle}}</div>
+      <div style="font-family:Barlow;font-weight:500;font-size:11px;color:#98A2AC">{{pdfMeta}}</div>
+    </div>
+    <div onClick="{{sharePdf}}" style="width:30px;height:30px;flex:none;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E6EAEE" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"></path><path d="M8 8l4-4 4 4"></path><path d="M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4"></path></svg>
+    </div>
+  </div>
+  <div style="flex:1;overflow:auto;padding:16px 14px 20px">
+    <div style="background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.45);display:flex;flex-direction:column;min-height:462px">
+      <sc-if value="{{page.isCover}}" hint-placeholder-val="{{ true }}">
+        <div style="background:#1E3348;padding:24px 22px 20px">
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#9DBCD9">✦ AI Stock Studio</div>
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:27px;line-height:1.08;color:#fff;padding-top:8px">{{page.title}}</div>
+        </div>
+        <div style="padding:16px 22px">
+          <sc-for list="{{page.kv}}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid #EDEEEF">
+              <span style="font-family:Barlow;font-weight:500;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#8A939B">{{r.k}}</span>
+              <span style="flex:1"></span>
+              <span style="font-family:'Barlow Condensed';font-weight:600;font-size:14px;color:#1D1F20">{{r.v}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{page.isTable}}">
+        <div style="padding:20px 20px 0">
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#5980A6">{{pdfTitle}}</div>
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:20px;color:#1D1F20;padding-top:4px">{{page.title}}</div>
+          <div style="font-family:Barlow;font-size:10.5px;color:#8A939B;padding-top:1px">{{page.sub}}</div>
+        </div>
+        <div style="padding:12px 20px 0">
+          <div style="display:flex;gap:8px;padding-bottom:5px;border-bottom:1.2px solid #1D1F20">
+            <sc-for list="{{page.cols}}" as="c" hint-placeholder-count="6">
+              <span style="flex:{{c.w}};min-width:0;text-align:{{c.a}};font-family:Barlow;font-weight:600;font-size:8.5px;letter-spacing:.5px;text-transform:uppercase;color:#4A555F">{{c.l}}</span>
+            </sc-for>
+          </div>
+          <sc-for list="{{page.rows}}" as="r" hint-placeholder-count="6">
+            <div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid #EDEEEF">
+              <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="6">
+                <span style="flex:{{c.w}};min-width:0;text-align:{{c.a}};font-family:Barlow;font-size:10.5px;color:{{c.c}};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{c.v}}</span>
+              </sc-for>
+            </div>
+          </sc-for>
+          <sc-if value="{{page.hasTotals}}">
+            <div style="display:flex;gap:8px;padding:7px 0;border-bottom:2px solid #1D1F20;border-top:1px solid #1D1F20">
+              <sc-for list="{{page.totals.cells}}" as="c" hint-placeholder-count="6">
+                <span style="flex:{{c.w}};min-width:0;text-align:{{c.a}};font-family:'Barlow Condensed';font-weight:600;font-size:11.5px;color:#1D1F20;white-space:nowrap">{{c.v}}</span>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <div style="flex:1"></div>
+        <sc-if value="{{page.hasNote}}">
+          <div style="padding:14px 20px 0;font-family:Barlow;font-size:9.5px;line-height:1.45;color:#8A939B;text-wrap:pretty">{{page.note}}</div>
+        </sc-if>
+      </sc-if>
+      <sc-if value="{{page.isNotes}}">
+        <div style="padding:20px 20px 0">
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#5980A6">{{pdfTitle}}</div>
+          <div style="font-family:'Barlow Condensed';font-weight:600;font-size:20px;color:#1D1F20;padding-top:4px">{{page.title}}</div>
+        </div>
+        <div style="padding:12px 20px 0;display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{page.items}}" as="i" hint-placeholder-count="5">
+            <div style="font-family:Barlow;font-size:10.5px;line-height:1.5;color:#3F474E;text-wrap:pretty">{{i.t}}</div>
+          </sc-for>
+        </div>
+        <div style="flex:1"></div>
+      </sc-if>
+      <div style="padding:14px 20px 16px;display:flex;align-items:baseline;gap:8px;border-top:1px solid #EDEEEF;margin-top:14px">
+        <span style="font-family:Barlow;font-weight:500;font-size:8.5px;letter-spacing:.4px;text-transform:uppercase;color:#A7AEB5;flex:1">{{page.foot}}</span>
+        <span style="font-family:Barlow;font-weight:500;font-size:8.5px;color:#A7AEB5">Not investment advice</span>
+      </div>
+    </div>
+  </div>
+  <div style="padding:10px 14px 30px;background:rgba(18,21,24,.96);display:flex;align-items:center;gap:14px;justify-content:center">
+    <div onClick="{{pdfPrev}}" style="width:38px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;cursor:pointer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{pdfPrevC}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    </div>
+    <span style="font-family:'Barlow Condensed';font-weight:600;font-size:14px;letter-spacing:1px;color:#E6EAEE;min-width:56px;text-align:center">{{pdfPageNo}}</span>
+    <div onClick="{{pdfNext}}" style="width:38px;height:34px;border-radius:10px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;cursor:pointer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{{pdfNextC}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+    </div>
+  </div>
+</div>
+</sc-if>
+
 </div>
 </x-import>
 </div>
@@ -1277,6 +1437,7 @@ class Component extends DCLogic {
     nwPeriod:'1Y', earnedPeriod:'1Y', perfPeriod:'MAX', stockPeriod:'1Y',
     sort:'Value', benchIdx:0, marketFilter:'All', statusFilter:'All', page:0,
     idxExpanded:false, aboutOpen:false, toast:'', tickN:0, drift:{},
+    reportTpl:0, reportRange:'YTD', pdfOpen:false, pdfPage:0, pdfDoc:'dividend_year', pdfGen:false,
     appearance:'System', plConvention:'US', provider:'Claude',
     apiKey:'sk-ant-api03-x9Kd2mQ', backendUrl:'https://stock-tracker-api.onrender.com',
     showReasoning:true, bgGen:true,
@@ -1368,6 +1529,116 @@ class Component extends DCLogic {
     return {mv,cost,today,todayPct:today/(mv-today)*100,un,unPct:un/cost*100,
       realized,divs,earned:realized+divs,count:this.H.filter(x=>x.m===m).length}; }
 
+  // ---- Adobe Document Generation report templates ----
+  RPT=[
+    {id:'dividend_year',name:'Dividend year report',desc:'TW and US payouts split · gross → tax → net',np:6},
+    {id:'holdings_snapshot',name:'Holdings snapshot',desc:'Positions, cost basis, market value, unrealized P/L',np:4},
+    {id:'realized_pl',name:'Realized P/L & tax summary',desc:'FIFO-matched sells with holding periods',np:5},
+    {id:'period_performance',name:'Period performance',desc:'TWR, XIRR and benchmark comparison',np:3}
+  ];
+  rptDef(id){ return this.RPT.find(r=>r.id===id)||this.RPT[0]; }
+  cell(v,a,w,c){ return {v:String(v),a:a||'left',w:w||'1',c:c||'#1D1F20'}; }
+  reportDoc(id){
+    const def=this.rptDef(id), fx=29.45;
+    const tw=this.summary('TW'), us=this.summary('US'), nw=tw.mv+us.mv*fx;
+    const cover={kind:'cover',title:def.name,
+      kv:[['Account','jimmy@gmail.com'],['Period','Jan 1 – Aug 18, 2026'],
+        ['Base currency','TWD'],['USD/TWD used','29.4500'],
+        ['Positions',String(this.H.length)],['Investing net worth',this.bigMoney(nw,'TWD')]]};
+    const notes={kind:'notes',title:'Method & disclosures',items:[
+      'Figures are computed from your own records in this app. Market values use the last quote available at generation time; prices may be delayed.',
+      'Cross-market totals convert USD at the single rate printed on the cover — the rate captured when the report was generated, not a per-transaction rate.',
+      'Taiwan cash dividends are shown gross, then net of the 2.11% supplementary premium where the payout exceeds NT$20,000. US payouts are net of 30% treaty withholding.',
+      'Realized P/L is FIFO-matched on the server. Holding periods are calendar days between the matched buy lot and the sell.',
+      'This document reports your records and public data. It is not investment advice and is not a tax filing.']};
+    const cols=(...a)=>a.map(([l,al,w])=>({l,a:al||'left',w:w||'1'}));
+    let pages=[cover];
+    if(id==='dividend_year'){
+      const D=this.divs, twd=D.filter(d=>d.m==='TW'), usd=D.filter(d=>d.m==='US');
+      pages.push({kind:'table',title:'Taiwan cash dividends',sub:'Received · Jan 1 – Aug 18, 2026 · TWD',
+        cols:cols(['Date','left','1.35'],['Ticker','left','.85'],['Basis','left','1.15'],['Gross','right','1'],['Premium','right','.95'],['Net','right','1']),
+        rows:twd.map(d=>{ const prem=d.amt>20000?Math.round(d.amt*0.0211):0;
+          return {cells:[this.cell(d.d,'left','1.1'),this.cell(d.t,'left','.9'),
+            this.cell(d.note,'left','1.15','#6E7A85'),this.cell(this.num(d.amt,0),'right','1'),
+            this.cell(prem?'−'+this.num(prem,0):'—','right','.9','#6E7A85'),
+            this.cell(this.num(d.amt-prem,0),'right','1')]}; }),
+        totals:{cells:[this.cell('Total · '+twd.length+' payments','left','2.2'),this.cell('','left','1.15'),
+          this.cell(this.num(twd.reduce((a,d)=>a+d.amt,0),0),'right','1'),
+          this.cell('','right','.9'),
+          this.cell(this.num(twd.reduce((a,d)=>a+d.amt-(d.amt>20000?Math.round(d.amt*0.0211):0),0),0),'right','1')]},
+        note:'The 2.11% supplementary premium applies per payment above NT$20,000 and is withheld at source, so the net column is what reached the account.'});
+      pages.push({kind:'table',title:'US cash dividends',sub:'Received · Jan 1 – Aug 18, 2026 · USD',
+        cols:cols(['Date','left','1.35'],['Ticker','left','.85'],['Gross','right','1'],['Withheld 30%','right','1.15'],['Net USD','right','1'],['Net TWD','right','1']),
+        rows:usd.map(d=>{ const w=d.amt*0.3;
+          return {cells:[this.cell(d.d,'left','1.35'),this.cell(d.t,'left','.85'),
+            this.cell(this.num(d.amt,2),'right','1'),this.cell('−'+this.num(w,2),'right','1.15','#6E7A85'),
+            this.cell(this.num(d.amt-w,2),'right','1'),
+            this.cell(this.num((d.amt-w)*fx,0),'right','1')]}; }),
+        totals:{cells:[this.cell('Total · '+usd.length+' payments','left','2.2'),
+          this.cell(this.num(usd.reduce((a,d)=>a+d.amt,0),2),'right','1'),
+          this.cell('','right','1.15'),
+          this.cell(this.num(usd.reduce((a,d)=>a+d.amt*0.7,0),2),'right','1'),
+          this.cell(this.num(usd.reduce((a,d)=>a+d.amt*0.7*fx,0),0),'right','1')]},
+        note:'Withholding follows the US–TW treaty rate applied by the broker at payment.'});
+      pages.push({kind:'table',title:'Estimated forward 12 months',sub:'Declared per-share rate × shares held',
+        cols:cols(['Ticker','left','1'],['Market','left','.9'],['Next ex-date','left','1.2'],['Per share','right','.9'],['Shares','right','1'],['Est. annual','right','1.1']),
+        rows:this.UPCOMING.map(u=>{ const h=this.H.find(x=>x.t===u.t)||{sh:0};
+          return {cells:[this.cell(u.t),this.cell(u.m==='TW'?'Taiwan':'US','left','.9'),
+            this.cell(u.ex,'left','1.2','#6E7A85'),this.cell(this.num(u.per,2),'right','.9'),
+            this.cell(this.shares(h.sh),'right','1'),
+            this.cell(this.num(u.per*4*h.sh,u.m==='TW'?0:2),'right','1.1')]}; }),
+        totals:null,note:'Annualised from the next declared payout at the current share count — an estimate, not a forecast and not guidance.'});
+    } else if(id==='holdings_snapshot'){
+      ['TW','US'].forEach(mk=>{ const rows=this.H.filter(h=>h.m===mk);
+        pages.push({kind:'table',title:(mk==='TW'?'Taiwan':'US')+' positions',
+          sub:'As of Aug 18, 2026 · '+(mk==='TW'?'TWD':'USD'),
+          cols:cols(['Ticker','left','1'],['Shares','right','.9'],['Avg cost','right','1'],['Last','right','1'],['Market value','right','1.2'],['Unrealized','right','1.1']),
+          rows:rows.map(h=>{ const mt=this.metrics(h);
+            return {cells:[this.cell(h.t),this.cell(this.shares(h.sh),'right','.9'),
+              this.cell(this.num(h.avg,2),'right','1'),this.cell(this.num(h.px,2),'right','1'),
+              this.cell(this.num(h.sh*h.px,mk==='TW'?0:2),'right','1.2'),
+              this.cell(this.pct(mt.unPct,1),'right','1.1',mt.unPct>=0?'#2C6B54':'#8E4A43')]}; }),
+          totals:{cells:[this.cell('Total'),this.cell('','right','.9'),this.cell('','right','1'),this.cell('','right','1'),
+            this.cell(this.num(rows.reduce((a,h)=>a+h.sh*h.px,0),mk==='TW'?0:2),'right','1.2'),
+            this.cell('','right','1.1')]},
+          note:mk==='TW'?'Average cost includes brokerage fee and transaction tax on the buy side.':'Average cost is in USD; the cover rate converts totals into TWD.'}); });
+    } else if(id==='realized_pl'){
+      const sells=this.trades.filter(t=>t.y==='sell');
+      pages.push({kind:'table',title:'Realized gains and losses',sub:'FIFO-matched sells · Jan 1 – Aug 18, 2026',
+        cols:cols(['Date','left','1.3'],['Ticker','left','.85'],['Shares','right','.9'],['Sell price','right','1'],['Held','right','.8'],['Realized','right','1.1']),
+        rows:sells.map(t=>({cells:[this.cell(t.d,'left','1.3'),this.cell(t.t,'left','.85'),
+          this.cell(this.shares(t.sh),'right','.9'),this.cell(this.num(t.px,2),'right','1'),
+          this.cell('312 d','right','.8','#6E7A85'),
+          this.cell((t.realized>=0?'+':'')+this.num(t.realized||0,0),'right','1.1',(t.realized||0)>=0?'#2C6B54':'#8E4A43')]})),
+        totals:{cells:[this.cell('Total','left','2.15'),this.cell('','right','.9'),this.cell('','right','1'),this.cell('','right','.8'),
+          this.cell('+'+this.num(sells.reduce((a,t)=>a+(t.realized||0),0),0),'right','1.1','#2C6B54')]},
+        note:'Taiwan realized P/L is net of the 0.3% securities transaction tax and brokerage fee.'});
+    } else {
+      pages.push({kind:'table',title:'Return summary',sub:'Since inception through Aug 18, 2026',
+        cols:cols(['Measure','left','1.6'],['Portfolio','right','1'],['Benchmark','right','1'],['Spread','right','1']),
+        rows:[['Time-weighted return','+24.8%','+16.1%','+8.7 pts'],['Money-weighted (XIRR)','+21.4%','—','—'],
+          ['Taiwan sleeve','+27.2%','+16.1%','+11.1 pts'],['US sleeve','+19.6%','+14.4%','+5.2 pts'],
+          ['Dividend contribution','+3.1%','—','—']]
+          .map(r=>({cells:[this.cell(r[0],'left','1.6'),this.cell(r[1],'right','1'),
+            this.cell(r[2],'right','1','#6E7A85'),this.cell(r[3],'right','1','#2C6B54')]})),
+        totals:null,note:'TWR removes the effect of deposits and withdrawals; XIRR does not. Benchmark is 加權指數 for Taiwan and S&P 500 for the US sleeve.'});
+    }
+    pages.push(notes);
+    const n=pages.length;
+    pages=pages.map((p,i)=>({...p,
+      isCover:p.kind==='cover', isTable:p.kind==='table', isNotes:p.kind==='notes',
+      hasTotals:!!p.totals, hasNote:!!p.note, note:p.note||'',
+      kv:(p.kv||[]).map(x=>({k:x[0],v:x[1]})),
+      items:(p.items||[]).map(t=>({t})),
+      cols:p.cols||[], rows:p.rows||[], totals:p.totals||{cells:[]},
+      foot:'Generated Aug 18, 2026 14:32 · page '+(i+1)+' of '+n}));
+    return {id,name:def.name,pages,
+      meta:'PDF · '+pages.length+' pages · '+(180+pages.length*46)+' KB'};
+  }
+  openPdf(id){ this.setState({pdfOpen:true,pdfPage:0,pdfDoc:id}); }
+  finishReport(m){ setTimeout(()=>{ m.st='ready';
+    const d=this.reportDoc(m.tpl); m.meta=d.meta; this.forceUpdate(); },2400); }
+
   push(m){ this.setState(s=>({chat:[...s.chat,m]})); return m; }
   stream(msg,full,done){ const t0=Date.now();
     this.iv=setInterval(()=>{ const i=Math.round((Date.now()-t0)/1000*200);
@@ -1391,6 +1662,15 @@ class Component extends DCLogic {
         this.push({k:'draft',side:draft.side,t:draft.t,sh:draft.sh,px:draft.px,fee,
           on:true,added:false,dismissed:false});
         this.setState({generating:false}); },1300);
+      return; }
+    if(/report|pdf|報表|匯出|export|tax summary|報稅/i.test(q)){
+      setTimeout(()=>this.push({k:'tool',text:'get_dividends · 8 payments, both markets…'}),420);
+      setTimeout(()=>this.push({k:'tool',text:'generate_report · dividend_year → Document Generation'}),1050);
+      setTimeout(()=>{ const a=this.push({k:'a',text:''});
+        this.stream(a,'Eight payments across both markets this year — enough rows that a table in chat reads worse than a document. I rendered the dividend year report: Taiwan payouts gross → premium → net, the US sleeve net of 30% withholding, and a forward estimate from the declared rates.',()=>{
+          const m=this.push({k:'report',st:'gen',tpl:'dividend_year',
+            title:'Dividend year report',sub:'Jan 1 – Aug 18, 2026 · TWD base',meta:''});
+          this.finishReport(m); this.setState({generating:false}); }); },1550);
       return; }
     const isPerf=/beat|twr|xirr|benchmark|加權|perform/i.test(q);
     const isMargin=/margin|gross|2330|台積/i.test(q);
@@ -1456,6 +1736,7 @@ class Component extends DCLogic {
   get divs(){ return this.state.divs||this.DIVS; }
   renderVals(){
     const S=this.state, fx=29.45, clock=this.clock();
+    const pdf=this.reportDoc(S.pdfDoc);
     // form-sheet derived state
     const F=this.form;
     const fUpper=F.ticker.trim().toUpperCase();
@@ -2041,7 +2322,11 @@ class Component extends DCLogic {
             st:m.side==='BUY'?'Open':'Closed'});
           this.toast((m.side==='BUY'?'Buy added · lot open · ':'Sell added · FIFO matched · ')
             +(isTW?'Taiwan':'US')); },
-        discard:()=>{ m.dismissed=true; this.forceUpdate(); } })),
+        discard:()=>{ m.dismissed=true; this.forceUpdate(); },
+        isReport:m.k==='report', rptGen:m.st==='gen', rptReady:m.st==='ready', rptErr:m.st==='err',
+        rptTitle:m.title||'', rptSub:m.sub||'', rptMeta:m.meta||'',
+        rptOpen:()=>{ if(m.st!=='ready')return; this.openPdf(m.tpl); },
+        rptRetry:()=>{ m.st='gen'; this.forceUpdate(); this.finishReport(m); } })),
       chips:["How's my portfolio doing today?","Am I beating 加權指數?","Is 2330's gross margin improving?","I bought 2,000 shares of 00919 at 24.6 today"]
         .map(t=>({t,use:()=>this.setState({chatInput:t},()=>this.send())})),
       onChatInput:e=>this.setState({chatInput:e.target.value}),
@@ -2055,6 +2340,32 @@ class Component extends DCLogic {
         {t:'When is the next 00919 ex-div date?',sub:'2 messages · Aug 9',open:false}
       ].map(r=>({...r,tap:()=>{ this.setState({histOpen:false}); this.toast('Reopened conversation'); }})),
       closeHist:()=>this.setState({histOpen:false}),
+      // reports · Adobe Document Generation
+      rptTemplates:this.RPT.map((r,i)=>({...r,
+        sel:S.reportTpl===i,
+        bg:S.reportTpl===i?'var(--accentTint)':'transparent',
+        bd:S.reportTpl===i?'var(--accent)':'var(--line)',
+        dot:S.reportTpl===i?'var(--accent)':'transparent',
+        pick:()=>this.setState({reportTpl:i})})),
+      rptRanges:['YTD','2025','Last 12M','All'].map(l=>({l,
+        set:()=>this.setState({reportRange:l}),
+        bg:S.reportRange===l?'var(--card)':'transparent',
+        c:S.reportRange===l?this.TXT:this.SEC,
+        fw:S.reportRange===l?600:500})),
+      rptBtnLabel:S.pdfGen?'Rendering with Document Generation…':'Export PDF report',
+      rptBtnBg:S.pdfGen?this.TERT:this.ACC,
+      rptExport:()=>{ if(S.pdfGen)return;
+        this.setState({pdfGen:true});
+        setTimeout(()=>{ this.setState({pdfGen:false}); this.openPdf(this.RPT[this.state.reportTpl].id); },1400); },
+      pdfOpen:S.pdfOpen, closePdf:()=>this.setState({pdfOpen:false}),
+      sharePdf:()=>this.toast('Share sheet · AirDrop, Files, Mail'),
+      pdfTitle:pdf.name, pdfMeta:pdf.meta,
+      pdfPageNo:(S.pdfPage+1)+' / '+pdf.pages.length,
+      pdfPrev:()=>this.setState(s=>({pdfPage:Math.max(0,s.pdfPage-1)})),
+      pdfNext:()=>this.setState(s=>({pdfPage:Math.min(pdf.pages.length-1,s.pdfPage+1)})),
+      pdfPrevC:S.pdfPage>0?'#E6EAEE':'#555C64',
+      pdfNextC:S.pdfPage<pdf.pages.length-1?'#E6EAEE':'#555C64',
+      page:pdf.pages[Math.min(S.pdfPage,pdf.pages.length-1)],
       toast:!!S.toast, toastText:S.toast
     };
   }

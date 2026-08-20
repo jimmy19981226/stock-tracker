@@ -474,7 +474,14 @@ def _generate_run(run: _ChatRun, provider: str, api_key: str, model: str,
             elif kind == "status":
                 run.emit({"type": "status", "text": payload})
             elif kind == "action":
-                run.emit({"type": "action", "records": payload})
+                # Two shapes ride this channel. A record proposal goes out as
+                # `records` (unchanged, so an older build keeps working); a
+                # rendered report goes out as `report`, which an older build
+                # simply ignores rather than drawing an empty confirm card.
+                if isinstance(payload, dict) and "report" in payload:
+                    run.emit({"type": "action", "report": payload["report"]})
+                else:
+                    run.emit({"type": "action", "records": payload})
 
         elapsed_ms = int((time.time() - start_ts) * 1000)
         final_text = text or "(no response)"

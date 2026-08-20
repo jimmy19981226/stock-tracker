@@ -20,7 +20,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
-from ..database import Dividend, SessionLocal, Trade
+from ..database import Dividend, Report, SessionLocal, Trade
 from . import ai_providers, fx, income, markets, performance, portfolio, quotes, stock_info
 
 _TAIPEI = timezone(timedelta(hours=8))
@@ -432,6 +432,36 @@ TOOLS: list[dict] = [
             "required": ["id"],
         },
         "label": "Preparing the deletion…",
+    },
+    {
+        "name": "generate_report",
+        "description": (
+            "Render a multi-page PDF report from the user's own records when "
+            "the answer is too large or too tabular for chat — a full year of "
+            "dividends, a tax summary, a full holdings listing — or when the "
+            "user asks for a report, a PDF or an export. Do NOT use it for an "
+            "answer that fits in a sentence or a small table; answer those in "
+            "chat. The app shows a card with an Open button; do not restate "
+            "the table, and use the `headline` field for the one sentence you "
+            "write beside it."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "template": {
+                    "type": "string",
+                    "enum": ["dividend_year", "holdings_snapshot",
+                             "realized_pl", "period_performance"],
+                },
+                "period": {"type": "string", "enum": ["ytd", "last_12m", "all"]},
+                "year": {"type": "integer",
+                         "description": "Calendar year; overrides period"},
+                "ticker": {"type": "string",
+                           "description": "Only for single-stock templates"},
+            },
+            "required": ["template"],
+        },
+        "label": "Rendering the report…",
     },
     {
         "name": "add_trade",
@@ -1015,6 +1045,57 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         if not queries:
             return {"error": "No queries given"}, None
         return {"results": ai_providers.search_web(queries)}, None
+
+    if name == "generate_report":
+        from . import reports as report_service
+
+        template = str(args.get("template") or "").strip()
+        if template not in report_service.TEMPLATE_IDS:
+            return {"error": f"Unknown report template {template!r}. One of: "
+                             f"{', '.join(sorted(report_service.TEMPLATE_IDS))}"}, None
+        period = str(args.get("period") or "ytd")
+        if args.get("year"):
+            period = f"year:{int(args['year'])}"
+        params = {"ticker": str(args["ticker"]).strip().upper()} if args.get("ticker") else {}
+
+        with SessionLocal() as db:
+            version = report_service.data_version(db, user_id)
+            key = report_service.cache_key(template, period, params, version)
+            existing = (db.query(Report)
+                        .filter(Report.user_id == user_id, Report.cache_key == key,
+                                Report.status != "failed")
+                        .order_by(Report.created_at.desc())
+                        .first())
+            if existing is not None and (existing.status != "ready"
+                                         or report_service.file_path(existing.id).exists()):
+                row = existing
+            else:
+                definition = report_service.template_def(template)
+                _s, _e, label = report_service.resolve_period(period)
+                row = Report(id=report_service.new_id(), user_id=user_id,
+                             template=template, period=period,
+                             params=json.dumps(params), cache_key=key,
+                             status="pending", title=definition["name"],
+                             subtitle=f"{label} · TWD base",
+                             created_at=datetime.utcnow())
+                db.add(row)
+                db.commit()
+                report_service.start(row.id, user_id, template, period, params)
+            payload = {"report_id": row.id, "status": row.status,
+                       "template": row.template, "title": row.title,
+                       "subtitle": row.subtitle, "row_count": row.row_count,
+                       "headline": row.headline}
+
+        # The model gets the headline and nothing else of the document: it must
+        # write one honest sentence beside the card, not re-narrate a table it
+        # cannot see.
+        return {
+            **payload,
+            "note": ("The app is showing a report card with an Open button. "
+                     "Write one sentence about what the report contains — use "
+                     "`headline` if it is filled — and do not restate the "
+                     "table."),
+        }, {"report": payload}
 
     if name == "propose_records":
         return _propose_records(args, user_id, today)

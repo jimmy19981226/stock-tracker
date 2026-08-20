@@ -53,6 +53,7 @@ struct RootView: View {
     // App-scoped so an in-flight AI reply keeps streaming while the user
     // browses other tabs, and the transcript is there on return.
     @StateObject private var assistantVM = AssistantViewModel()
+    @ObservedObject private var reports = ReportsStore.shared
 
     var body: some View {
         ZStack {
@@ -113,6 +114,12 @@ struct RootView: View {
                 ToastView(text: message).padding(.bottom, 8)
             }
         }
+        // The report viewer is presented here, not from the screen that asked
+        // for it. Two screens open reports — Settings and the assistant's card
+        // — and SwiftUI honours only one presentation modifier per view, so
+        // Settings' own sheet and full-screen cover had already used up its
+        // budget and this one silently never appeared.
+        .fullScreenCover(item: $reports.viewing) { ReportViewerSheet(job: $0) }
         .task { await bootstrap() }
     }
 

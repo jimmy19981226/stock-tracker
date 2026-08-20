@@ -95,6 +95,40 @@ class Dividend(Base):
     )
 
 
+class Report(Base):
+    """A generated PDF report.
+
+    Rendering is async and cached, so a row is the job as well as the artifact:
+    it is created ``pending`` the moment the request lands, and the same row is
+    returned to any later request whose ``cache_key`` matches — the key folds in
+    a data version, so an unchanged portfolio never costs a second Document
+    Transaction. The file itself lives on disk under ``data/reports/``; only its
+    metadata is in the database.
+    """
+    __tablename__ = "reports"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    template: Mapped[str] = mapped_column(String(40), nullable=False)
+    period: Mapped[str] = mapped_column(String(20), nullable=False)
+    params: Mapped[str] = mapped_column(Text, nullable=False, server_default="{}")
+    cache_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+
+    status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="pending")
+    title: Mapped[str] = mapped_column(String(200), nullable=False, server_default="")
+    subtitle: Mapped[str] = mapped_column(String(300), nullable=False, server_default="")
+    headline: Mapped[str] = mapped_column(String(500), nullable=False, server_default="")
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    pages: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    bytes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    fx_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    renderer: Mapped[str] = mapped_column(String(20), nullable=False, server_default="")
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class Metadata(Base):
     __tablename__ = "metadata"
 

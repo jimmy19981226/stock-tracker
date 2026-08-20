@@ -14,3 +14,4 @@ google-auth>=2.30.0
 yfinance>=1.0  # >=1.0 for AsyncWebSocket (live US quote streaming)
 openpyxl>=3.1.0
 tzdata>=2024.1  # IANA timezone db for zoneinfo (market session hours)
+reportlab>=4.0  # local PDF fallback when Adobe Document Generation is unconfigured

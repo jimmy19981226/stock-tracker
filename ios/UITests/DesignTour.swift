@@ -173,6 +173,65 @@ final class DesignTour: XCTestCase {
         }
     }
 
+    /// Reports, end to end: pick a template in Settings, export, and read the
+    /// PDF the backend actually rendered.
+    func testReports() throws {
+        let app = makeApp()
+        app.launch()
+        _ = app.staticTexts["Taiwan"].firstMatch.waitForExistence(timeout: 120)
+        tab(app, "Settings")
+        sleep(3)
+
+        // Scroll until the *button* is reachable — "Reports" becomes hittable
+        // while the card below it is still off-screen.
+        // The button, not its label: a SwiftUI Button exposes itself as a
+        // button element, and the Text inside never reports hittable.
+        let export = app.buttons["Export PDF report"].firstMatch
+        var tries = 0
+        while !export.isHittable && tries < 16 {
+            app.swipeUp(); tries += 1
+        }
+        XCTAssertTrue(export.isHittable, "Never reached the export button")
+        snap(app, "90-settings-reports")
+        export.tap()
+        // The render is a couple of seconds; the viewer opens by itself.
+        sleep(14)
+        // Assert on something only the viewer has. The report title also
+        // appears in the template list behind it, and a loose "contains /"
+        // match found unrelated text — both let a broken build pass.
+        let pager = app.staticTexts.matching(
+            NSPredicate(format: "label MATCHES '[0-9]+ / [0-9]+'")).firstMatch
+        XCTAssertTrue(pager.waitForExistence(timeout: 25),
+                      "The viewer never opened")
+        snap(app, "91-report-viewer")
+        // Page through it. Tapped by label — indexing into `app.buttons` hit
+        // whatever happened to be last and silently paged nothing.
+        let next = app.buttons["Next report page"].firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 10), "No pager in the viewer")
+        next.tap()
+        sleep(2)
+        XCTAssertTrue(app.staticTexts["2 / 3"].waitForExistence(timeout: 10),
+                      "The pager didn't advance")
+        snap(app, "92-report-page2")
+    }
+
+    /// The assistant's report card, from a real render.
+    func testReportCard() throws {
+        let app = makeApp()
+        app.launchEnvironment["UITEST_CHAT_REPORT"] = "1"
+        app.launchEnvironment["UITEST_TAB"] = "assistant"
+        app.launch()
+        sleep(14)
+        XCTAssertTrue(app.staticTexts["PDF REPORT"].firstMatch.exists,
+                      "No report card in the transcript")
+        snap(app, "93-assistant-report-card")
+        let open = app.buttons["Open"].firstMatch
+        if open.waitForExistence(timeout: 15), open.isHittable {
+            open.tap(); sleep(6)
+            snap(app, "94-report-from-chat")
+        }
+    }
+
     func testTour() throws {
         let app = makeApp()
         app.launch()
