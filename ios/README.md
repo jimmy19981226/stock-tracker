@@ -51,6 +51,45 @@ xcrun simctl install "iPhone 17" "$(find ~/Library/Developer/Xcode/DerivedData/S
 xcrun simctl launch "iPhone 17" com.aistockstudio.app
 ```
 
+## AI assistant
+
+The iOS assistant uses **Gemini 3.5 Flash-Lite** only. In **Settings → AI assistant**,
+enter a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
+The key is stored in the iOS Keychain and sent per request. Existing Gemini keys
+are retained, and older provider or model preferences cannot override the model.
+
+Chat streams replies, accepts images, and keeps the existing portfolio tools and
+confirmation cards. The backend uses minimal thinking for this model. Install the
+updated `backend/requirements.txt` dependencies and redeploy the backend together
+with the app update; Gemini tool calls must retain their thought signatures and
+function-call IDs between requests.
+
+The assistant can read both markets' holdings, the full trade/dividend history
+(including notes and fees), FIFO lots, performance, followed indices, and market
+data through account-scoped tools. Record edits invalidate the assistant's cached
+snapshot immediately. History tools return consecutive pages with counts rather
+than sampling away rows. Attached images are sent to Gemini and retained in chat
+history for follow-up questions.
+
+From the repository root, run the isolated backend feature tests:
+
+```bash
+DATABASE_URL=sqlite:///:memory: PYTHONPATH=backend \
+  python3 -m unittest discover -s backend/tests -v
+```
+
+These tests replace Gemini's network transport. To verify real model replies,
+image reading, tool calls, and latency, configure `GOOGLE_AI_API_KEY` in
+`backend/.env` or the environment, then explicitly opt into the live checks:
+
+```bash
+RUN_GEMINI_LIVE_TESTS=1 DATABASE_URL=sqlite:///:memory: PYTHONPATH=backend \
+  python3 -m unittest discover -s backend/tests -p 'test_gemini_live.py' -v
+```
+
+Live checks use synthetic portfolio records in an isolated database. They do not
+change your real portfolio or read the production database.
+
 ## Structure
 
 ```

@@ -10,7 +10,6 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var baseURL = AppConfig.baseURL
-    @State private var provider = AISettings.activeProvider
     @State private var apiKey = ""
     @State private var health: String?
     @State private var checking = false
@@ -51,7 +50,7 @@ struct SettingsView: View {
         }
         .screenBackground()
         .task { await probe() }
-        .onAppear { apiKey = AISettings.apiKey(for: provider) ?? "" }
+        .onAppear { apiKey = AISettings.apiKey ?? "" }
         .sheet(isPresented: $showIndices) { IndexEditorView().environmentObject(store) }
         .task { await reports.loadCatalog() }
         .fullScreenCover(isPresented: $showAbout) { AboutView { showAbout = false } }
@@ -136,49 +135,35 @@ struct SettingsView: View {
 
     private var aiCard: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            Text("Provider — your own key, stored in the iOS Keychain and sent per request. Never stored on the server.")
+            Text("Gemini powers chat, screenshot analysis, and portfolio tools.")
                 .font(Theme.Typo.caption)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            SegmentedControl(options: AIProvider.allCases.map { ($0, $0.shortName) },
-                             selection: Binding(get: { provider },
-                                                set: { newValue in
-                                                    provider = newValue
-                                                    AISettings.activeProvider = newValue
-                                                    apiKey = AISettings.apiKey(for: newValue) ?? ""
-                                                }))
+            KeyValueRow("Model") {
+                Text(AISettings.modelLabel)
+                    .font(Theme.Typo.detailMed)
+                    .foregroundStyle(Theme.text)
+            }
+            .accessibilityIdentifier("assistant.model")
 
-            LabeledField(label: "API key · \(provider.shortName)") {
-                SecureField(provider.keyPrefixHint, text: $apiKey)
+            LabeledField(label: "Gemini API key") {
+                SecureField("AIza…", text: $apiKey)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .onChange(of: apiKey) { _, newValue in
-                        AISettings.setApiKey(newValue, for: provider)
+                        AISettings.setApiKey(newValue)
                     }
             }
 
-            Menu {
-                ForEach(provider.availableModels) { model in
-                    Button {
-                        AISettings.setModel(model.id, for: provider)
-                        selectedModel = model.id
-                    } label: {
-                        Text("\(model.label) — \(model.note)")
-                    }
-                }
-            } label: {
-                KeyValueRow("Model") {
-                    HStack(spacing: 4) {
-                        Text(currentModelLabel)
-                            .font(Theme.Typo.detailMed)
-                            .foregroundStyle(Theme.accent)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                }
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Link("Get a Gemini API key", destination: AISettings.apiKeyURL)
+                    .foregroundStyle(Theme.accent)
+                Text("Your key is stored in the iOS Keychain and sent per request. Never stored on the server.")
+                    .foregroundStyle(Theme.textSecondary)
             }
+            .font(Theme.Typo.caption)
+            .fixedSize(horizontal: false, vertical: true)
 
             toggleRow("Show reasoning while thinking",
                       isOn: Binding(get: { settings.showReasoning },
@@ -188,13 +173,6 @@ struct SettingsView: View {
                                     set: { settings.backgroundGeneration = $0 }))
         }
         .appCard()
-    }
-
-    @State private var selectedModel: String = ""
-
-    private var currentModelLabel: String {
-        let id = selectedModel.isEmpty ? AISettings.selectedModel(for: provider) : selectedModel
-        return provider.availableModels.first { $0.id == id }?.label ?? id
     }
 
     private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {

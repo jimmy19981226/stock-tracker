@@ -45,6 +45,32 @@ final class DesignTour: XCTestCase {
         return app
     }
 
+    func testGeminiSettings() throws { try inspectGeminiSettings(theme: "light") }
+    func testGeminiSettingsDark() throws { try inspectGeminiSettings(theme: "dark") }
+
+    private func inspectGeminiSettings(theme: String) throws {
+        appearance = theme
+        let app = makeApp()
+        app.launchEnvironment["UITEST_TAB"] = "settings"
+        // An existing install can still have these preferences saved.
+        app.launchArguments += ["-ai.activeProvider", "nvidia",
+                                "-ai.model.gemini", "gemini-2.5-pro"]
+        app.launch()
+        let model = app.staticTexts["Gemini 3.5 Flash-Lite"].firstMatch
+        XCTAssertTrue(model.waitForExistence(timeout: 20))
+        for _ in 0..<3 where !model.isHittable { app.swipeUp() }
+        XCTAssertTrue(model.isHittable)
+        XCTAssertEqual(app.staticTexts.matching(identifier: "Gemini 3.5 Flash-Lite").count, 1)
+        XCTAssertTrue(app.secureTextFields.firstMatch.exists)
+        XCTAssertFalse(app.buttons["OpenAI"].exists)
+        XCTAssertFalse(app.buttons["Claude"].exists)
+        XCTAssertFalse(app.buttons["NVIDIA"].exists)
+        XCTAssertFalse(app.buttons["Gemini 3.5 Flash-Lite"].exists,
+                       "The fixed model should be a fact, not a model picker")
+        snap(app, "gemini-settings-\(theme)")
+        app.terminate()
+    }
+
     /// Tap the first element that exists among `labels`; returns what matched.
     @discardableResult
     private func tapAny(_ app: XCUIApplication, _ labels: [String],

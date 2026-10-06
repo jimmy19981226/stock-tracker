@@ -615,6 +615,10 @@ def invalidate_user(user_id: str) -> None:
     from . import performance
 
     performance.invalidate_user(user_id)
+    # Lazy: the AI router imports portfolio to build its snapshots.
+    from ..routers.ai import invalidate_context
+
+    invalidate_context(user_id)
 
 
 def _window_start(period: str) -> str:

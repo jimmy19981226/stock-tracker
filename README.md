@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (your choice of **OpenAI, Gemini, or Claude**) that calls 25 typed tools over your portfolio, shows its reasoning, keeps generating in the background, can draft, correct or delete records for one-tap confirmation, and renders multi-page **PDF reports** from a Word template on the server.
+A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (**Gemini 3.5 Flash-Lite** on iOS) that calls 25 typed tools over your portfolio, shows its reasoning, keeps generating in the background, can draft, correct or delete records for one-tap confirmation, and renders multi-page **PDF reports** from a Word template on the server.
 
 </div>
 
@@ -58,7 +58,7 @@ anything it wants to write, and a PDF when the answer is too big for chat
 
 ## 📱 Native iOS app
 
-A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — five tabs (Overview · Trades · Assistant · Dividends · Settings), Swift Charts, an animated splash, Google sign-in, multi-provider AI (OpenAI / Gemini / Claude with your own key), Markdown rendering in the assistant, and per-user data scoping.
+A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — five tabs (Overview · Trades · Assistant · Dividends · Settings), Swift Charts, an animated splash, Google sign-in, Gemini 3.5 Flash-Lite with your own key, Markdown rendering in the assistant, and per-user data scoping.
 
 **The design**: a light technical ground with a steel-blue accent, Barlow Condensed numerals over Barlow body text, grouped cards with soft elevation, and exactly one dark field per screen — the net-worth hero. **Both themes ship**: Light / Dark / System, picked in Settings. Gain and loss colours are a setting too (US green-up or TW red-up), because Taiwanese boards paint a rise red — and every P&L value carries a ▲/▼ so the meaning never rests on colour alone. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md). (Screenshots at the top of this README.)
 
@@ -101,12 +101,12 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 - The backend `/detail` endpoint also serves **monthly revenue (月營收)** and **8 quarters of financials** for any ticker — used to enrich AI answers
 
 ### ✦ AI assistant
-- **Choose your model** — OpenAI, Google Gemini, or Anthropic Claude, each with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server).
+- **One Gemini model on iOS** — Gemini 3.5 Flash-Lite with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server). The existing Gemini key is retained; old provider and model selections are ignored.
 - **Tool calling (25 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, FIFO cost lots, a sale simulation using the app's own 損益試算 arithmetic, position weights, company fundamentals (including 月營收 and quarterly margins), live quotes for up to 10 tickers at once, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, the indices *you* follow, USD/TWD, market hours, web search, and a PDF report when the answer is too big for chat. Each call shows a live status line ("Reading holdings…").
 - **It can amend, not just add** — records carry ids, so "that 2330 buy should have been 1,035" produces a **correction**, not a second buy. Corrections, deletions and multi-row imports each get their own confirm card, and a delete card states what the deletion costs — which lots re-open, whose realized P/L moves — computed server-side by re-running FIFO, never written by the model.
 - **Add records by chat** — "I bought 100 shares of 2330 at 1050 today" makes the assistant draft the trade into an in-chat **confirmation card**; nothing is saved until you confirm it. That rule holds for every write the assistant can make, without exception: a write tool returns a proposal, and the record reaches the database through the ordinary endpoint only after you tap.
-- **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and the model reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still propose the records it reads once the market's confirmed — a whole statement in one card rather than one card per row. Works on Gemini, OpenAI, and Claude; NVIDIA NIM's free-tier models are text-only and get a polite fallback note instead of silently ignoring the photo. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
-- **Visible reasoning** — Claude extended thinking and Gemini thought summaries stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle).
+- **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and Gemini reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still propose the records it reads once the market's confirmed — a whole statement in one card rather than one card per row. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
+- **Visible reasoning** — Gemini thought summaries, when returned, stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle). The iOS model uses minimal thinking to prioritize responsiveness.
 - **Background generation** — replies keep generating server-side if you switch apps or lock the screen; the finished answer is waiting when you come back. The stop button cancels the server run too.
 - **Always ready** — opening the Assistant pre-warms the backend and pre-builds your portfolio context, so the first message streams immediately.
 - **Streaming replies** rendered as Markdown in the app's own reading voice — headings, bold, lists, code blocks, blockquotes, tables — with the tool lines above them and the "not investment advice" note below.
@@ -323,7 +323,7 @@ The app auto-detects it (routing through `psycopg`) and falls back to SQLite whe
 
 ### AI assistant (optional)
 
-In the app's **Settings → AI Assistant**, pick a provider (OpenAI / Gemini / Claude) and paste **your own API key** — it's stored in the iOS Keychain and sent per request.
+In the iOS app's **Settings → AI Assistant**, paste **your Gemini API key** — it's stored in the iOS Keychain and sent per request. The model is fixed to **Gemini 3.5 Flash-Lite**. Update the backend dependencies and redeploy the backend alongside the iOS update so Gemini tool calls retain their required signatures.
 
 Optionally set a server-side Gemini key so the app can use Gemini with no per-user key: copy `backend/.env.example` → `backend/.env`, add `GOOGLE_AI_API_KEY=AIza...` (free key at <https://aistudio.google.com/apikey>), and restart the backend.
 
@@ -463,7 +463,7 @@ Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on sta
 
 ## AI assistant
 
-The **Assistant** tab gives natural-language Q&A over your portfolio. Pick your provider — **OpenAI, Gemini, or Claude** — and use your own key. Gemini adds live Google-Search grounding with citations; all providers stream and render Markdown.
+The **Assistant** tab gives natural-language Q&A over your portfolio using **Gemini 3.5 Flash-Lite** and your own Gemini key. It streams Markdown replies, reads attached images, and calls portfolio and web-search tools. The backend retains its other provider adapters for API clients; the iOS app always requests this one Gemini model.
 
 ### What it knows
 
@@ -499,7 +499,7 @@ This means questions like *"is 2330's gross margin improving?"* or *"compare 233
 
 ### Privacy tradeoff
 
-When you ask a question, your portfolio JSON + ticker fundamentals are sent to your chosen provider (OpenAI / Gemini / Anthropic) for inference, using **your own key**; with Gemini it may also issue Google Search queries. Any photo you attach in the conversation is sent the same way (as an inline image, not stored by the provider beyond that call) and is replayed on later turns of the same chat so follow-up questions about it still work. Market quotes still happen on your backend. The assistant is entirely opt-in — with no provider key set it's disabled and the rest of the app works normally.
+When you ask a question in the iOS app, your portfolio JSON + ticker fundamentals are sent to Google Gemini for inference, using **your own key** or the backend's optional Gemini key. Web-search tool calls may also send search queries to DuckDuckGo. Any photo you attach is sent as an inline image and is replayed on later turns of the same chat so follow-up questions about it still work. Market quotes still happen on your backend. The assistant is entirely opt-in — with no Gemini key available it's disabled and the rest of the app works normally.
 
 > **Free tier note:** Google may use your prompts to improve their models on the free Gemini API tier. Switch to billing-enabled Vertex AI / Cloud if that's a dealbreaker.
 

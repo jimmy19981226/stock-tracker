@@ -71,7 +71,8 @@ TOOLS: list[dict] = [
             "Trade history (buys/sells), newest first, with FIFO open/closed "
             "status, the row id, and realized P/L on closed sells. Filter by "
             "ticker, market, year and/or side. Use the id to update or delete "
-            "a specific trade."
+            "a specific trade. Results are paginated: follow next_offset while "
+            "has_more is true to read older matching records."
         ),
         "parameters": {
             "type": "object",
@@ -81,6 +82,7 @@ TOOLS: list[dict] = [
                 "year": {"type": "integer"},
                 "type": {"type": "string", "enum": ["buy", "sell"]},
                 "limit": {"type": "integer", "description": "Max rows (default 20, max 100)"},
+                "offset": {"type": "integer", "description": "Rows to skip (default 0); use next_offset for the next page"},
             },
         },
         "label": "Reading trade history…",
@@ -90,7 +92,8 @@ TOOLS: list[dict] = [
         "description": (
             "Dividend payments received, newest first, with the row id. Filter "
             "by ticker, market and/or year. Use the id to update or delete a "
-            "specific dividend."
+            "specific dividend. Results are paginated: follow next_offset while "
+            "has_more is true to read older matching records."
         ),
         "parameters": {
             "type": "object",
@@ -99,6 +102,7 @@ TOOLS: list[dict] = [
                 "market": _MARKET,
                 "year": {"type": "integer"},
                 "limit": {"type": "integer", "description": "Max rows (default 20, max 100)"},
+                "offset": {"type": "integer", "description": "Rows to skip (default 0); use next_offset for the next page"},
             },
         },
         "label": "Reading dividends…",
@@ -589,6 +593,24 @@ def _dividend_fields(d: Dividend) -> dict:
             "date": d.pay_date.isoformat(), "market": d.market, "notes": d.notes}
 
 
+def _record_page(name: str, records: list, args: dict, serialize) -> dict:
+    """Fit a contiguous page to the tool budget without skipping any records."""
+    limit = max(1, min(int(args.get("limit") or 20), 100))
+    offset = max(0, int(args.get("offset") or 0))
+    # Serialize only this page even when the account has a long history.
+    page = [serialize(row) for row in records[offset:offset + limit]]
+    budget = _RESULT_CAPS.get(f"get_{name}", _RESULT_CAP)
+    while True:
+        next_offset = offset + len(page)
+        has_more = next_offset < len(records)
+        result = {name: page, "total_count": len(records), "offset": offset,
+                  "returned_count": len(page), "has_more": has_more,
+                  "next_offset": next_offset if has_more else None}
+        if len(page) <= 1 or len(json.dumps(result, ensure_ascii=False)) <= budget:
+            return result
+        page.pop()
+
+
 def _changed(stored: dict, proposed: dict) -> tuple[dict, dict]:
     """Split a proposal into the fields that actually move. A card that
     re-lists unchanged values makes the reader hunt for the edit."""
@@ -741,15 +763,16 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         market = (args.get("market") or "").upper()
         if market:
             rows = [h for h in rows if h["market"] == market]
-        keys = ("ticker", "name", "market", "shares", "avg_cost", "current_price",
+        keys = ("ticker", "name", "market", "currency", "shares", "avg_cost", "current_price",
                 "market_value", "cost_basis", "unrealized_pl", "unrealized_pl_pct",
                 "today_change", "today_change_pct")
-        return {"holdings": [{k: _round(h.get(k)) for k in keys} for h in rows]}, None
+        exact_keys = {"shares", "avg_cost", "current_price"}
+        return {"holdings": [{k: h.get(k) if k in exact_keys else _round(h.get(k))
+                              for k in keys} for h in rows]}, None
 
     if name == "get_trades":
         from ..routers.trades import _compute_statuses  # lazy: avoid import cycle
 
-        limit = max(1, min(int(args.get("limit") or 20), 100))
         with SessionLocal() as db:
             q = db.query(Trade).filter(Trade.user_id == user_id)
             if args.get("ticker"):
@@ -765,16 +788,15 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         if args.get("year"):
             year = int(args["year"])
             rows = [t for t in rows if t.trade_date.year == year]
-        out = []
-        for t in rows[:limit]:
+        def trade_row(t):
             row = {"id": t.id, **_trade_fields(t), "status": statuses.get(t.id, "open")}
             if t.type == "sell":
                 row["realized_pl"] = _round(realized.get(t.id))
-            out.append(row)
-        return {"trades": out}, None
+            return row
+
+        return _record_page("trades", rows, args, trade_row), None
 
     if name == "get_dividends":
-        limit = max(1, min(int(args.get("limit") or 20), 100))
         with SessionLocal() as db:
             q = db.query(Dividend).filter(Dividend.user_id == user_id)
             if args.get("ticker"):
@@ -784,9 +806,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
             rows = q.order_by(Dividend.pay_date.desc(), Dividend.id.desc()).all()
         if args.get("year"):
             rows = [d for d in rows if d.pay_date.year == int(args["year"])]
-        return {"dividends": [
-            {"id": d.id, **_dividend_fields(d)} for d in rows[:limit]
-        ]}, None
+        return _record_page("dividends", rows, args,
+                            lambda d: {"id": d.id, **_dividend_fields(d)}), None
 
     if name == "get_quote":
         tickers = _tickers_arg(args, 10)
@@ -1498,8 +1519,8 @@ _RESULT_CAPS = {
 # mid-array is worse than sending less of it: the model reads the fragment as
 # the whole series and reports a trend that isn't there.
 _SERIES_PATHS = (
-    ("points",), ("bars",), ("series", "bars"), ("lots",), ("trades",),
-    ("dividends",), ("performance", "portfolio_series"),
+    ("points",), ("bars",), ("series", "bars"), ("lots",),
+    ("performance", "portfolio_series"),
     ("performance", "benchmark", "series"),
 )
 
@@ -1752,15 +1773,23 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
             max_output_tokens=1500,
             tools=[types.Tool(function_declarations=gemini_declarations(types))],
         )
+        thinking = {}
+        if model == "gemini-3.5-flash-lite":
+            # Keep ordinary iOS chat responsive instead of spending its
+            # output budget on lengthy reasoning before the first reply.
+            thinking["thinking_level"] = types.ThinkingLevel.MINIMAL
         if with_thoughts:
             # Thought summaries stream the model's reasoning for the app's
             # collapsible "Thinking" section.
-            kwargs["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
+            thinking["include_thoughts"] = True
+        if thinking:
+            kwargs["thinking_config"] = types.ThinkingConfig(**thinking)
         return types.GenerateContentConfig(**kwargs)
 
     with_thoughts = True
     for _ in range(MAX_TOOL_ROUNDS):
         fcalls = []
+        model_parts = []
         emitted_any = False
         try:
             stream = client.models.generate_content_stream(
@@ -1770,6 +1799,10 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
                 for cand in getattr(chunk, "candidates", None) or []:
                     content = getattr(cand, "content", None)
                     for part in (getattr(content, "parts", None) or []):
+                        # Replay the original parts, including Gemini 3's
+                        # thought signatures and function-call IDs. Rebuilding
+                        # just the calls strips metadata needed by the next turn.
+                        model_parts.append(part)
                         fc = getattr(part, "function_call", None)
                         if fc is not None and fc.name:
                             fcalls.append(fc)
@@ -1790,7 +1823,7 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
         if not fcalls:
             return
         contents.append(types.Content(
-            role="model", parts=[types.Part(function_call=fc) for fc in fcalls]))
+            role="model", parts=model_parts))
         resp_parts = []
         for fc in fcalls:
             yield ("status", status_label(fc.name))
@@ -1799,7 +1832,8 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
                 yield ("action", action)
             # Gemini takes the dict directly, so thin it here rather than
             # relying on the JSON cap the other two loops apply.
-            resp_parts.append(types.Part.from_function_response(
+            resp_parts.append(types.Part(function_response=types.FunctionResponse(
                 name=fc.name,
-                response={"result": _thin(result, _RESULT_CAPS.get(fc.name, _RESULT_CAP))}))
+                id=fc.id,
+                response={"result": _thin(result, _RESULT_CAPS.get(fc.name, _RESULT_CAP))})))
         contents.append(types.Content(role="user", parts=resp_parts))

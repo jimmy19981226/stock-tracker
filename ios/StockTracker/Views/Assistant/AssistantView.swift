@@ -341,7 +341,11 @@ final class AssistantViewModel: ObservableObject {
         let maxDim: CGFloat = 2200
         let scale = min(1, maxDim / max(img.size.width, img.size.height))
         let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: target)
+        let format = UIGraphicsImageRendererFormat()
+        // The limit is in image pixels, independent of the phone's 2x/3x
+        // display scale. The default renderer would enlarge the upload again.
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
         let resized = renderer.image { _ in img.draw(in: CGRect(origin: .zero, size: target)) }
         pendingAttachment = resized
         pendingAttachmentData = resized.jpegData(compressionQuality: 0.8) ?? rawData
@@ -469,10 +473,9 @@ struct AssistantView: View {
     @EnvironmentObject private var settings: AppSettings
     @ObservedObject private var reports = ReportsStore.shared
     @State private var showHistory = false
-    @State private var providerHasKey = AISettings.hasKey(for: AISettings.activeProvider)
+    @State private var providerHasKey = AISettings.hasKey
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
-    @State private var activeProvider = AISettings.activeProvider
 
     var body: some View {
         VStack(spacing: 0) {
@@ -495,8 +498,7 @@ struct AssistantView: View {
         }
         .task { await vm.loadStatus() }
         .onAppear {
-            activeProvider = AISettings.activeProvider
-            providerHasKey = AISettings.hasKey(for: activeProvider)
+            providerHasKey = AISettings.hasKey
             // Wake a cold backend and pre-build the chat context while the user
             // is still reading, so the first send streams immediately.
             Task { await APIClient.shared.prewarmAI() }
@@ -514,7 +516,7 @@ struct AssistantView: View {
                 .font(Theme.Typo.headingLg)
                 .foregroundStyle(Theme.text)
             Spacer(minLength: Theme.Space.xs)
-            TagChip(text: activeProvider.shortName, style: .accent)
+            TagChip(text: AISettings.providerName, style: .accent)
             IconButton(symbol: "square.and.pencil") { vm.reset() }
                 .disabled(vm.messages.isEmpty && vm.streamingText.isEmpty)
                 .accessibilityLabel("New chat")
@@ -682,7 +684,7 @@ struct AssistantView: View {
                 .background(Theme.accentTint)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.pill, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text("Add your \(activeProvider.shortName) key")
+                Text("Add your Gemini key")
                     .font(Theme.Typo.detailMed)
                     .foregroundStyle(Theme.text)
                 Text("Settings → AI assistant. The assistant can't reply without it.")

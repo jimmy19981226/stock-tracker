@@ -389,13 +389,23 @@ _runs_lock = threading.Lock()
 _CTX_TTL_SECONDS = 120.0
 _ctx_cache: dict[tuple[str, tuple], tuple[float, str]] = {}
 _ctx_lock = threading.Lock()
+_ctx_revisions: dict[str, int] = {}
 _prewarm_inflight: set[str] = set()
+
+
+def invalidate_context(user_id: str) -> None:
+    """Refresh the assistant after a record is added, edited, or deleted."""
+    with _ctx_lock:
+        _ctx_revisions[user_id] = _ctx_revisions.get(user_id, 0) + 1
+        for key in [key for key in _ctx_cache if key[0] == user_id]:
+            _ctx_cache.pop(key, None)
 
 
 def _context_cached(user_id: str, focus_tickers: list[str]) -> str:
     key = (user_id, tuple(focus_tickers))
     now = time.time()
     with _ctx_lock:
+        revision = _ctx_revisions.get(user_id, 0)
         hit = _ctx_cache.get(key)
         if hit and now - hit[0] < _CTX_TTL_SECONDS:
             return hit[1]
@@ -406,7 +416,10 @@ def _context_cached(user_id: str, focus_tickers: list[str]) -> str:
         # A degraded context beats a failed chat — tools can fill the gaps.
         return "{}"
     with _ctx_lock:
-        _ctx_cache[key] = (time.time(), ctx)
+        # An edit can finish while prewarming is still fetching fundamentals.
+        # Do not put the obsolete snapshot back into the cache after that edit.
+        if revision == _ctx_revisions.get(user_id, 0):
+            _ctx_cache[key] = (time.time(), ctx)
         for k in [k for k, (at, _) in _ctx_cache.items()
                   if time.time() - at > _CTX_TTL_SECONDS]:
             _ctx_cache.pop(k, None)
@@ -982,7 +995,7 @@ def _derive_title(first_user_msg: str) -> str:
 
 def _system_prompt(context_json: str) -> str:
     return (
-        "You are a portfolio analysis assistant for a Taiwan stock tracker.\n"
+        "You are a portfolio analysis assistant for a Taiwan and US stock tracker.\n"
         "Your primary source is the JSON in the CONTEXT block (the user's local\n"
         "portfolio data). You ALSO have TOOLS — call them whenever you need data\n"
         "beyond the snapshot: live quotes for ANY ticker, price history,\n"
@@ -993,6 +1006,9 @@ def _system_prompt(context_json: str) -> str:
         "Tool rules:\n"
         "- Prefer CONTEXT for what it already answers; call tools for the rest.\n"
         "  Never guess numbers a tool can fetch.\n"
+        "- get_trades / get_dividends return contiguous pages. Check total_count\n"
+        "  and has_more; use next_offset with the same filters to read older rows.\n"
+        "  Never treat one page as the user's entire history.\n"
         "- search_web: use for recent news, earnings/dividend announcements,\n"
         "  filings, sector trends, analyst views. Cite sources inline as\n"
         "  markdown links and end with a short '**Sources:**' list of the URLs\n"
@@ -1002,17 +1018,24 @@ def _system_prompt(context_json: str) -> str:
         "  confirmation card — tell the user to review it and tap Add. NEVER\n"
         "  claim a record was saved; the user saves it from the card.\n"
         "\n"
-        "Image rules (the user may attach a photo of a stock chart, quote,\n"
-        "position, or trade confirmation):\n"
-        "- First work out which market it's about: Taiwan-listed (numeric ticker\n"
+        "Image rules:\n"
+        "- Answer the user's question about the attached image: read visible text,\n"
+        "  tables, charts, and other visible content. Say when a detail is blurry\n"
+        "  or unreadable; never invent missing text or numbers. Use portfolio\n"
+        "  tools when asked to compare an image with the user's app records.\n"
+        "- For stock charts, quotes, positions, or trade confirmations, work out\n"
+        "  the market when needed: Taiwan-listed (numeric ticker\n"
         "  like 2330, NT$/TWD amounts, a Chinese company name, or a TW broker\n"
         "  app like Fubon/Cathay/元大/國泰) vs US-listed (letter ticker like AAPL,\n"
         "  US$/USD amounts, or a US broker app like Robinhood/Schwab/Fidelity).\n"
-        "- If the image and conversation don't make the market clear (e.g. a\n"
+        "- If interpreting financial figures or proposing records requires a\n"
+        "  market/currency and the image and conversation don't make it clear (a\n"
         "  bare ticker or number with no currency/company/broker context, or a\n"
         "  company that's cross-listed in both), STOP and ASK the user which\n"
         "  market/currency it is — do not guess, and do not call add_trade or\n"
         "  add_dividend until they've confirmed.\n"
+        "  A general image description or transcription does not require\n"
+        "  market confirmation; answer it without blocking on that question.\n"
         "- Once the market is clear, treat figures in that market's currency and\n"
         "  proceed normally (including offering to log a trade/dividend if the\n"
         "  user asks and the image gives you the needed numbers).\n"
@@ -1030,6 +1053,7 @@ def _system_prompt(context_json: str) -> str:
         "  available, e.g. `2330 (台積電)`.\n"
         "- Be concise and factual. Use bullet points or short tables for multi-row\n"
         "  answers. Round NT$ amounts to whole dollars unless precision matters.\n"
+        "  Show full numbers with currency labels; do not abbreviate with k/M/B.\n"
         "- `total_value` is current market value (總現值). `unrealized_pl` is NET\n"
         "  of estimated exit costs (fees/tax), matching 損益試算 in TW broker apps —\n"
         "  it is NOT a plain price × shares − cost figure.\n"
@@ -1242,6 +1266,8 @@ def _build_context(db: Session, user_id: str, focus_tickers: list[str] | None = 
         "focus": focus_payload,
         "trades": [
             {
+                "id": t.id,
+                "market": t.market,
                 "date": t.trade_date.isoformat(),
                 "type": t.type,
                 "ticker": t.ticker,
@@ -1254,6 +1280,8 @@ def _build_context(db: Session, user_id: str, focus_tickers: list[str] | None = 
         ],
         "dividends": [
             {
+                "id": d.id,
+                "market": d.market,
                 "date": d.pay_date.isoformat(),
                 "ticker": d.ticker,
                 "amount": d.amount,
