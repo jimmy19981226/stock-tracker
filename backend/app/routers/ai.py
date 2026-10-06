@@ -439,13 +439,30 @@ def prewarm_ai(user: str = Depends(get_current_user)):
 
     def _work():
         try:
-            _context_cached(user, [])
+            _chat_context(user)
         finally:
             with _ctx_lock:
                 _prewarm_inflight.discard(user)
 
     threading.Thread(target=_work, daemon=True).start()
     return None
+
+
+def _chat_context(user_id: str) -> str:
+    """Cheap ledger index: no quote/fundamental requests on the answer path."""
+    try:
+        with SessionLocal() as db:
+            trades = db.query(Trade).filter(Trade.user_id == user_id)
+            dividends = db.query(Dividend).filter(Dividend.user_id == user_id)
+            symbols = set(trades.with_entities(Trade.market, Trade.ticker).distinct().all())
+            symbols.update(dividends.with_entities(Dividend.market, Dividend.ticker).distinct().all())
+            return json.dumps({"snapshot_mode": "account_index",
+                               "available_markets": sorted({market for market, _ in symbols if market}),
+                               "tickers": sorted({ticker for _, ticker in symbols}),
+                               "record_counts": {"trades": trades.count(), "dividends": dividends.count()},
+                               "note": "Retrieve numeric facts and current prices with tools."}, ensure_ascii=False)
+    except Exception:
+        return "{}"
 
 
 def _persist_assistant(chat_id: int, content: str) -> None:
@@ -471,7 +488,9 @@ def _generate_run(run: _ChatRun, provider: str, api_key: str, model: str,
     try:
         run.emit({"type": "init", "chat_id": run.chat_id, "title": run.title})
         run.emit({"type": "status", "text": "Thinking…"})
-        system_prompt = _system_prompt(_context_cached(user_id, focus_tickers))
+        # Tool-first chat starts without fetching quotes/fundamentals for every
+        # holding. Detailed facts are loaded only when the question needs them.
+        system_prompt = _system_prompt(_chat_context(user_id), checked_answers=provider == "gemini")
         for kind, payload in ai_tools.run_tool_loop(
             provider, api_key, model, system_prompt, history_msgs, user_id
         ):
@@ -497,7 +516,7 @@ def _generate_run(run: _ChatRun, provider: str, api_key: str, model: str,
                     run.emit({"type": "action", "records": payload})
 
         elapsed_ms = int((time.time() - start_ts) * 1000)
-        final_text = text or "(no response)"
+        final_text = text or "I could not finish the answer. Please try again or narrow the question."
         if run.cancelled:
             final_text = final_text.rstrip() + "\n\n_(stopped)_"
         meta_header = json.dumps(
@@ -993,9 +1012,19 @@ def _derive_title(first_user_msg: str) -> str:
     return cleaned[: MAX_TITLE_LEN - 1].rstrip() + "…"
 
 
-def _system_prompt(context_json: str) -> str:
+def _system_prompt(context_json: str, *, checked_answers: bool = True) -> str:
+    checked_rule = (
+        "- Finish quantitative portfolio answers with answer_with_data. Facts must\n"
+        "  reference _evidence.source_id and scalar dot paths from tool results.\n"
+        "  The server copies exact values; do not calculate them yourself or put\n"
+        "  numeric literals in the qualitative explanation. Include currencies\n"
+        "  and requested/actual valuation dates. For JSON use the user's field names\n"
+        "  (including dotted names for nested objects) and format=json.\n"
+        "  Null means unavailable, not zero. Tool errors cannot supply facts.\n"
+    ) if checked_answers else ""
     return (
         "You are a portfolio analysis assistant for a Taiwan and US stock tracker.\n"
+        "You can also answer general questions and explain financial concepts and app features.\n"
         f"Today's date is {date.today().isoformat()}.\n"
         "Your primary source is the JSON in the CONTEXT block (the user's local\n"
         "portfolio data). You ALSO have TOOLS — call them whenever you need data\n"
@@ -1005,8 +1034,21 @@ def _system_prompt(context_json: str) -> str:
         "trade/dividend lists, and search_web for anything time-sensitive.\n"
         "\n"
         "Tool rules:\n"
-        "- Prefer CONTEXT for what it already answers; call tools for the rest.\n"
+        "- CONTEXT may be a lightweight account index, not a financial snapshot.\n"
+        "  General explanations do not need portfolio tools. For personal numeric\n"
+        "  facts, retrieve the relevant data using tools.\n"
         "  Never guess numbers a tool can fetch.\n"
+        "- For dates like last month or this year use resolve_date_range or the\n"
+        "  tool's period filter. Record date filters are inclusive; performance\n"
+        "  is measured between opening and closing valuations.\n"
+        "- Use get_record_summary for totals/counts of trades, dividends, fees\n"
+        "  or cash earned. It covers every matching record, not just one page.\n"
+        "  cash_earned is realized P/L plus paid dividends, not total investment return.\n"
+        "- Use compare_performance to compare windows; TWR change is in percentage\n"
+        "  points. Use get_performance_attribution for why/which stocks drove a\n"
+        "  change. Explain contributions separately from returns and check\n"
+        "  reconciled before citing contributor amounts. No invented FX attribution.\n"
+        f"{checked_rule}"
         "- For performance over a time window, call get_performance. Current\n"
         "  summary totals are all-time figures, not that window's returns.\n"
         "  For the last two weeks use period=2w (14 calendar days). For explicit\n"

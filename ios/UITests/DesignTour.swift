@@ -48,6 +48,36 @@ final class DesignTour: XCTestCase {
     func testGeminiSettings() throws { try inspectGeminiSettings(theme: "light") }
     func testGeminiSettingsDark() throws { try inspectGeminiSettings(theme: "dark") }
 
+    /// Opt-in end-to-end inspection against the synthetic local Gemini fixture.
+    @MainActor
+    func testLiveCheckedPerformanceReply() async throws {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:8107/api/ai/status")!)
+        request.timeoutInterval = 2
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let status = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              status["configured"] as? Bool == true else {
+            throw XCTSkip("Start the synthetic local Gemini fixture to run this live inspection")
+        }
+        let app = makeApp()
+        app.launchArguments = ["-api.baseURL", "http://127.0.0.1:8107", "-appearance", "light"]
+        app.launchEnvironment["UITEST_TAB"] = "assistant"
+        app.launch()
+        let composer = app.descendants(matching: .any)["assistantComposer"].firstMatch
+        XCTAssertTrue(composer.waitForExistence(timeout: 20))
+        composer.tap()
+        composer.typeText("How is my US portfolio performance over the last two weeks? Show a short table with currency, profit, TWR, opening date and closing date.")
+        app.buttons["assistantSend"].tap()
+        let profit = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "202.5")).firstMatch
+        XCTAssertTrue(profit.waitForExistence(timeout: 60), "No checked profit arrived")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "USD")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "2026-09-22")).firstMatch.exists)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "2026-10-06")).firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["Add your Gemini key"].exists,
+                       "A configured server key must not trigger the missing-key banner")
+        snap(app, "gemini-checked-performance")
+        app.terminate()
+    }
+
     private func inspectGeminiSettings(theme: String) throws {
         appearance = theme
         let app = makeApp()

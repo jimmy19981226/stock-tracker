@@ -2,7 +2,7 @@
 
 # ✦ AI Stock Studio
 
-A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (**Gemini 3.5 Flash-Lite** on iOS) that calls 25 typed tools over your portfolio, shows its reasoning, keeps generating in the background, can draft, correct or delete records for one-tap confirmation, and renders multi-page **PDF reports** from a Word template on the server.
+A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (**Gemini 3.5 Flash-Lite** on iOS) that calls 30 typed tools over your portfolio, shows its reasoning, keeps generating in the background, can draft, correct or delete records for one-tap confirmation, and renders multi-page **PDF reports** from a Word template on the server.
 
 </div>
 
@@ -471,7 +471,7 @@ The **Assistant** tab gives natural-language Q&A over your portfolio using **Gem
 - Every open position with **light fundamentals** (sector, P/E, EPS, market cap, 52-week range, dividend yield, beta, 1-year analyst target, earnings / ex-div dates).
 - Every trade and dividend you've recorded.
 - For tickers you mention in the question (or in recent turns): **24 months of monthly revenue with YoY %** and **8 quarters of revenue / EPS / margins**.
-- **Whatever its tools return** — 25 typed tools cover portfolio reads (summary, holdings, trades and dividends with ids, FIFO lots, allocation weights), market data (batched quotes, price history at daily/weekly/monthly, FX, market hours with the next open/close), company data (fundamentals, 月營收, eight quarters of margins), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history, a sale simulation), DuckDuckGo **web search** with self-cited sources, write actions (`propose_records`, `update_*`, `delete_*`, `add_*`) that only ever *propose* records for an in-chat confirm card, and `generate_report`, which renders a PDF when an answer is too large or too tabular for chat.
+- **Whatever its tools return** — 30 typed tools cover portfolio reads (summary, holdings, trades and dividends with ids, FIFO lots, allocation weights), market data (batched quotes, price history at daily/weekly/monthly, FX, market hours with the next open/close), company data (fundamentals, 月營收, eight quarters of margins), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history, a sale simulation), dated record totals, performance comparisons and attribution, checked answer rendering, DuckDuckGo **web search** with self-cited sources, write actions (`propose_records`, `update_*`, `delete_*`, `add_*`) that only ever *propose* records for an in-chat confirm card, and `generate_report`, which renders a PDF when an answer is too large or too tabular for chat.
 
 This means questions like *"is 2330's gross margin improving?"* or *"compare 2330's price to its 1-year analyst target"* return tables with real numbers from your data — not generic boilerplate. Ask *"what's the latest news on 2330?"* and Gemini searches the web, writes a summary, and **inline citation chips** link each claim back to its source.
 
@@ -480,6 +480,8 @@ This means questions like *"is 2330's gross margin improving?"* or *"compare 233
 - The backend streams Server-Sent Events: `init` → `status` (tool progress) / `thinking` (reasoning deltas) / `chunk` (answer tokens) / `action` (proposed records) → `done`. It routes by `X-AI-Provider` / `X-AI-Key`; Gemini can fall back to the server's `GOOGLE_AI_API_KEY`.
 - Generation runs in a **detached server-side worker** — if the app is backgrounded or loses the stream, the reply still completes and persists; the app recovers it automatically on return. `POST /api/ai/chats/{id}/stop` cancels the run.
 - The iOS app consumes the stream with `URLSession.bytes`, renders partial **Markdown** live, streams reasoning into a collapsible section, and turns `action` events into the same confirm card the image import uses.
+- Gemini chat starts with a lightweight, account-scoped ledger index and retrieves detailed facts through tools when needed. Independent reads run concurrently and repeated successful reads are reused within that answer. Quantitative answers reference tool values through `answer_with_data`; the server renders the figures, currencies and dates into Markdown tables or requested JSON. Service failures and the eight-round limit return available data instead of an empty response.
+- Trade/dividend reads accept inclusive date filters. `get_record_summary` computes complete totals beyond page limits using the full FIFO cost ledger; currencies remain separate. `compare_performance` handles rolling and calendar comparisons. `get_performance_attribution` separates contributions, net sales, recorded fees, dividends and per-stock gains, checks them against portfolio P/L, and withholds inconsistent contributor amounts. Historical FX attribution is not included.
 
 ### Persistent chat history
 

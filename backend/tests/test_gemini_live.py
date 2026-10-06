@@ -14,9 +14,9 @@ from unittest.mock import patch
 from dotenv import dotenv_values
 
 from app.routers import ai
-from app.services import ai_tools
-from test_ai_features import AIFeatureFixture
-from test_performance import PerformanceFixture
+from app.services import ai_analytics, ai_answers, ai_tools
+from test_ai_features import AIFeatureFixture, USER
+from test_performance import FixedDate, PerformanceFixture
 
 
 @skipUnless(os.environ.get("RUN_GEMINI_LIVE_TESTS") == "1",
@@ -28,6 +28,26 @@ class GeminiLiveFeatureTests(AIFeatureFixture):
         self.api_key = os.environ.get("GOOGLE_AI_API_KEY") or config.get("GOOGLE_AI_API_KEY")
         if not self.api_key:
             self.fail("Configure GOOGLE_AI_API_KEY locally before running live tests")
+        self.stack.enter_context(patch.object(ai_analytics, "date", FixedDate))
+
+    def test_live_complete_filtered_totals_and_checked_answer(self):
+        from datetime import date
+        from app.database import Dividend
+
+        with self.sessions() as db:
+            db.add_all([Dividend(user_id=USER, ticker="AAPL", market="US", amount=0.1,
+                                 pay_date=date(2026, 9, 15)) for _ in range(137)])
+            db.commit()
+        with patch.object(ai_tools, "execute", wraps=ai_tools.execute) as executed, \
+             patch.object(ai_answers, "render", wraps=ai_answers.render) as checked:
+            events = self.chat("What dividends did I receive last month in US dollars? Give the total and count, "
+                               "including all payments. Reply only as JSON with amount, count, currency, start_date and end_date.")
+        self.assertIn("get_record_summary", {c.args[0] for c in executed.call_args_list})
+        self.assertTrue(checked.called)
+        answer = json.loads(ai._META_HEADER_RE.sub("", events[-1]["content"]))
+        self.assertEqual(answer, {"amount": 13.7, "count": 137, "currency": "USD",
+                                  "start_date": "2026-09-01", "end_date": "2026-09-30"})
+        print(f"Live Gemini complete dated dividend summary: {events[-1]['duration_ms']} ms")
 
     def test_live_portfolio_tools_return_the_accounts_actual_values(self):
         with patch.object(ai_tools, "execute", wraps=ai_tools.execute) as executed:
@@ -75,6 +95,31 @@ class GeminiLivePerformanceTests(PerformanceFixture):
         self.api_key = os.environ.get("GOOGLE_AI_API_KEY") or config.get("GOOGLE_AI_API_KEY")
         if not self.api_key:
             self.fail("Configure GOOGLE_AI_API_KEY locally before running live tests")
+        self.stack.enter_context(patch.object(ai_analytics, "date", FixedDate))
+
+    def test_live_period_comparison_uses_backend_difference(self):
+        with patch.object(ai_tools, "execute", wraps=ai_tools.execute) as executed, \
+             patch.object(ai_answers, "render", wraps=ai_answers.render) as checked:
+            events = self.chat("How did my US portfolio do in the past fortnight versus the fortnight before it? "
+                               "Reply only as JSON with current_profit, previous_profit, profit_change, "
+                               "twr_change_percentage_points and currency.")
+        self.assertIn("compare_performance", {c.args[0] for c in executed.call_args_list})
+        self.assertTrue(checked.called)
+        self.assertEqual(self.answer_json(events), {"current_profit": 202.5, "previous_profit": 1012.5,
+                                                    "profit_change": -810.0, "twr_change_percentage_points": -90.0,
+                                                    "currency": "USD"})
+        print(f"Live Gemini period comparison: {events[-1]['duration_ms']} ms")
+
+    def test_live_performance_explanation_uses_reconciled_contributors(self):
+        with patch.object(ai_tools, "execute", wraps=ai_tools.execute) as executed, \
+             patch.object(ai_answers, "render", wraps=ai_answers.render) as checked:
+            events = self.chat("Which stocks caused my US portfolio's profit over these two weeks? "
+                               "Reply only as JSON with ticker, profit, fees, dividends, reconciled and currency.")
+        self.assertIn("get_performance_attribution", {c.args[0] for c in executed.call_args_list})
+        self.assertTrue(checked.called)
+        self.assertEqual(self.answer_json(events), {"ticker": "AAPL", "profit": 202.5, "fees": 0,
+                                                    "dividends": 0, "reconciled": True, "currency": "USD"})
+        print(f"Live Gemini performance attribution: {events[-1]['duration_ms']} ms")
 
     def answer_json(self, events):
         answer = ai._META_HEADER_RE.sub("", events[-1]["content"])

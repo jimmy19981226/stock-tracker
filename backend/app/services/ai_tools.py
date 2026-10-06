@@ -16,19 +16,27 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
 from ..database import Dividend, Report, SessionLocal, Trade
-from . import ai_providers, fx, income, markets, performance, portfolio, quotes, stock_info
+from . import ai_analytics, ai_answers, ai_providers, fx, income, markets, performance, portfolio, quotes, stock_info
 
 _TAIPEI = timezone(timedelta(hours=8))
 
 _MARKET = {"type": "string", "enum": ["TW", "US"]}
 _PERIOD = {"type": "string",
            "enum": ["5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"]}
-_PERFORMANCE_PERIOD = {"type": "string", "enum": ["2w", *_PERIOD["enum"]],
+_DATA_PERIOD = {"type": "string", "enum": ["all_time", "7d", "2w", "1mo", "3mo", "6mo", "1y",
+                                          "this_month", "last_month", "this_year", "last_year", "ytd"]}
+_DATE_FILTERS = {
+    "period": _DATA_PERIOD,
+    "start_date": {"type": "string", "description": "YYYY-MM-DD, inclusive record date; overrides period"},
+    "end_date": {"type": "string", "description": "YYYY-MM-DD, inclusive; defaults to today"},
+}
+_PERFORMANCE_PERIOD = {"type": "string", "enum": ["2w", "7d", "this_month", "last_month", "this_year", "last_year", *_PERIOD["enum"]],
                        "description": "Use 2w for the last two weeks (14 calendar days)."}
 
 # name, description, parameters (JSON schema), label (status text shown in-app
@@ -72,7 +80,7 @@ TOOLS: list[dict] = [
         "description": (
             "Trade history (buys/sells), newest first, with FIFO open/closed "
             "status, the row id, and realized P/L on closed sells. Filter by "
-            "ticker, market, year and/or side. Use the id to update or delete "
+            "ticker, market, year, inclusive start_date/end_date, period and/or side. Use the id to update or delete "
             "a specific trade. Results are paginated: follow next_offset while "
             "has_more is true to read older matching records."
         ),
@@ -83,6 +91,7 @@ TOOLS: list[dict] = [
                 "market": _MARKET,
                 "year": {"type": "integer"},
                 "type": {"type": "string", "enum": ["buy", "sell"]},
+                **_DATE_FILTERS,
                 "limit": {"type": "integer", "description": "Max rows (default 20, max 100)"},
                 "offset": {"type": "integer", "description": "Rows to skip (default 0); use next_offset for the next page"},
             },
@@ -93,7 +102,7 @@ TOOLS: list[dict] = [
         "name": "get_dividends",
         "description": (
             "Dividend payments received, newest first, with the row id. Filter "
-            "by ticker, market and/or year. Use the id to update or delete a "
+            "by ticker, market, year, inclusive start_date/end_date or period. Use the id to update or delete a "
             "specific dividend. Results are paginated: follow next_offset while "
             "has_more is true to read older matching records."
         ),
@@ -103,6 +112,7 @@ TOOLS: list[dict] = [
                 "ticker": {"type": "string"},
                 "market": _MARKET,
                 "year": {"type": "integer"},
+                **_DATE_FILTERS,
                 "limit": {"type": "integer", "description": "Max rows (default 20, max 100)"},
                 "offset": {"type": "integer", "description": "Rows to skip (default 0); use next_offset for the next page"},
             },
@@ -174,6 +184,52 @@ TOOLS: list[dict] = [
         "label": "Computing performance…",
     },
     {
+        "name": "resolve_date_range",
+        "description": "Normalize rolling/calendar periods to exact dates. Records include both dates; performance uses opening close to closing close, so last_month opens on the previous month's last day. Use today's date from this tool for relative questions.",
+        "parameters": {"type": "object", "properties": {**_DATE_FILTERS,
+                       "kind": {"type": "string", "enum": ["records", "performance"]}}},
+        "label": "Checking dates…",
+    },
+    {
+        "name": "get_record_summary",
+        "description": "Exact totals over ALL matching trade/dividend records, even beyond page limits. Includes paid dividends, fees, buy costs, net sale proceeds, FIFO realized P/L and cash_earned (realized P/L + dividends). Group by ticker, month or market; totals always include every matching record and keep currencies separate. Use for totals/counts instead of summing pages. Cash earned excludes unrealized gains; use get_performance for portfolio returns.",
+        "parameters": {"type": "object", "properties": {**_DATE_FILTERS, "ticker": {"type": "string"},
+                       "market": _MARKET, "year": {"type": "integer"},
+                       "type": {"type": "string", "enum": ["buy", "sell"]},
+                       "record_type": {"type": "string", "enum": ["all", "trades", "dividends"]},
+                       "group_by": {"type": "string", "enum": ["ticker", "month", "market"]},
+                       "offset": {"type": "integer"}, "limit": {"type": "integer"}}},
+        "label": "Calculating complete record totals…",
+    },
+    {
+        "name": "compare_performance",
+        "description": "Compare portfolio returns with the preceding window or explicit previous dates. Rolling periods compare equal duration; calendar month/year periods compare the previous calendar period (to-date when applicable). Returns both dated reports, net profit change and TWR difference in percentage points. Missing data never becomes zero. Call separately for each market.",
+        "parameters": {"type": "object", "properties": {"market": _MARKET, "period": _PERFORMANCE_PERIOD,
+                       "start_date": {"type": "string"}, "end_date": {"type": "string"},
+                       "previous_start_date": {"type": "string"}, "previous_end_date": {"type": "string"}},
+                       "required": ["market"]},
+        "label": "Comparing performance periods…",
+    },
+    {
+        "name": "get_performance_attribution",
+        "description": "Explain why portfolio value/profit changed: complete per-ticker contributions, gross trading/price P/L, recorded fees, paid dividends, buy/sale cash flows, opening/closing values and actual price dates. Contributors are checked against portfolio net P/L. Keep currencies separate; no historical FX attribution. Missing/inconsistent prices are reported. Call for why/which stocks drove performance questions.",
+        "parameters": {"type": "object", "properties": {"market": _MARKET, "period": _PERFORMANCE_PERIOD,
+                       "start_date": {"type": "string"}, "end_date": {"type": "string"}}, "required": ["market"]},
+        "label": "Checking performance contributors…",
+    },
+    {
+        "name": "answer_with_data",
+        "description": "Finish a quantitative answer with server-checked facts copied directly from prior tool results. Each fact references the source_id in _evidence and a dot path (e.g. performance.period_pl or totals.0.dividends). name is the answer field/label; dotted names create nested JSON. Do not supply or compute values. Include currency and requested/actual dates for money/performance. Explanation is qualitative only: no numeric literals. Choose json when the user requests JSON. This tool immediately sends the final answer.",
+        "parameters": {"type": "object", "properties": {
+            "format": {"type": "string", "enum": ["table", "json"]},
+            "explanation": {"type": "string", "description": "Optional qualitative explanation without numeric literals"},
+            "facts": {"type": "array", "items": {"type": "object", "properties": {
+                "name": {"type": "string"}, "source_id": {"type": "integer"},
+                "path": {"type": "string", "description": "Dot-separated object keys/array indexes; scalar values only"}},
+                "required": ["name", "source_id", "path"]}}}, "required": ["facts"]},
+        "label": "Checking answer figures…",
+    },
+    {
         "name": "get_dividend_calendar",
         "description": (
             "Projected annual dividend income, 12-month forward payment "
@@ -199,7 +255,7 @@ TOOLS: list[dict] = [
         "description": (
             "Fundamentals for any ticker from this app's own data: sector, "
             "market cap, P/E, forward P/E, EPS, yield, beta, P/B, average "
-            "volume, 52-week range; optionally 12 months of Taiwan monthly "
+            "volume, 52-week range; optionally 24 months of Taiwan monthly "
             "revenue (月營收) with YoY, and 8 quarters of revenue, EPS and "
             "gross/operating margin. Prefer this over search_web for anything "
             "about a company's numbers."
@@ -783,40 +839,35 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         from ..routers.trades import _compute_statuses  # lazy: avoid import cycle
 
         with SessionLocal() as db:
-            q = db.query(Trade).filter(Trade.user_id == user_id)
-            if args.get("ticker"):
-                q = q.filter(Trade.ticker == str(args["ticker"]).strip().upper())
-            if args.get("market"):
-                q = q.filter(Trade.market == str(args["market"]).upper())
-            if args.get("type"):
-                q = q.filter(Trade.type == str(args["type"]).lower())
-            rows = q.order_by(Trade.trade_date.desc(), Trade.id.desc()).all()
+            rows, bounds = ai_analytics.filtered_records(db, user_id, Trade, args)
             all_rows = db.query(Trade).filter(Trade.user_id == user_id).all()
             statuses = _compute_statuses(all_rows)
             realized = _realized_by_sell(all_rows)
-        if args.get("year"):
-            year = int(args["year"])
-            rows = [t for t in rows if t.trade_date.year == year]
         def trade_row(t):
             row = {"id": t.id, **_trade_fields(t), "status": statuses.get(t.id, "open")}
             if t.type == "sell":
                 row["realized_pl"] = _round(realized.get(t.id))
             return row
 
-        return _record_page("trades", rows, args, trade_row), None
+        return {**_record_page("trades", rows, args, trade_row), "date_range": bounds}, None
 
     if name == "get_dividends":
         with SessionLocal() as db:
-            q = db.query(Dividend).filter(Dividend.user_id == user_id)
-            if args.get("ticker"):
-                q = q.filter(Dividend.ticker == str(args["ticker"]).strip().upper())
-            if args.get("market"):
-                q = q.filter(Dividend.market == str(args["market"]).upper())
-            rows = q.order_by(Dividend.pay_date.desc(), Dividend.id.desc()).all()
-        if args.get("year"):
-            rows = [d for d in rows if d.pay_date.year == int(args["year"])]
-        return _record_page("dividends", rows, args,
-                            lambda d: {"id": d.id, **_dividend_fields(d)}), None
+            rows, bounds = ai_analytics.filtered_records(db, user_id, Dividend, args)
+        return {**_record_page("dividends", rows, args,
+                              lambda d: {"id": d.id, **_dividend_fields(d)}), "date_range": bounds}, None
+
+    if name == "resolve_date_range":
+        return ai_analytics.date_range(args.get("period") or "all_time", kind=args.get("kind") or "records",
+                                       start_date=args.get("start_date"), end_date=args.get("end_date")), None
+
+    if name in {"get_record_summary", "compare_performance", "get_performance_attribution"}:
+        with SessionLocal() as db:
+            if name == "get_record_summary":
+                return ai_analytics.record_summary(db, user_id, args, _realized_by_sell), None
+            if name == "compare_performance":
+                return ai_analytics.compare_performance(db, user_id, args), None
+            return ai_analytics.performance_attribution(db, user_id, args), None
 
     if name == "get_quote":
         tickers = _tickers_arg(args, 10)
@@ -864,6 +915,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         market = (args.get("market") or "TW").upper()
         period = args.get("period") or "1y"
         with SessionLocal() as db:
+            if period not in performance.PERIODS:
+                return {"performance": ai_analytics.performance_report(db, user_id, {**args, "market": market})}, None
             return {"performance": performance.build_performance(
                 db, user_id, market=market, period=period,
                 start_date=args.get("start_date"), end_date=args.get("end_date"))}, None
@@ -904,8 +957,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
                     "target_mean_price", "ex_dividend_date")
             out["profile"] = {k: _round(f.get(k)) for k in keys}
         if "revenue" in include:
-            rev = stock_info.get_monthly_revenue(ticker, months=12) or []
-            out["monthly_revenue"] = rev[-12:]
+            rev = stock_info.get_monthly_revenue(ticker, months=24) or []
+            out["monthly_revenue"] = rev[-24:]
             if not rev:
                 out["monthly_revenue_note"] = "月營收 is published for TW-listed companies only."
         if "financials" in include:
@@ -1474,7 +1527,7 @@ def openai_tools() -> list[dict]:
         {"type": "function",
          "function": {"name": t["name"], "description": t["description"],
                       "parameters": t["parameters"]}}
-        for t in TOOLS
+        for t in TOOLS if t["name"] != "answer_with_data"
     ]
 
 
@@ -1482,7 +1535,7 @@ def claude_tools() -> list[dict]:
     return [
         {"name": t["name"], "description": t["description"],
          "input_schema": t["parameters"]}
-        for t in TOOLS
+        for t in TOOLS if t["name"] != "answer_with_data"
     ]
 
 
@@ -1523,6 +1576,9 @@ _RESULT_CAPS = {
     "get_stock_info": 10000,
     "get_lots": 10000,
     "get_trades": 10000,
+    "get_record_summary": 14000,
+    "compare_performance": 14000,
+    "get_performance_attribution": 16000,
 }
 
 # Series a long result can be thinned by, rather than cut. Truncating JSON
@@ -1532,6 +1588,8 @@ _SERIES_PATHS = (
     ("points",), ("bars",), ("series", "bars"), ("lots",),
     ("performance", "portfolio_series"),
     ("performance", "benchmark", "series"),
+    ("current", "portfolio_series"), ("current", "benchmark", "series"),
+    ("previous", "portfolio_series"), ("previous", "benchmark", "series"),
 )
 
 
@@ -1550,7 +1608,11 @@ def _thin(result: dict, budget: int) -> dict:
                     longest, holder, key = len(value), container, k
         if holder is None or longest <= 4:
             break
-        holder[key] = holder[key][:: 2] or holder[key][:1]
+        previous = holder[key]
+        holder[key] = previous[::2]
+        if (len(previous) - 1) % 2:
+            holder[key].append(previous[-1])
+        out["_sampling"] = {"sampled": True, "note": "Some detail arrays are sampled; scalar totals remain complete. Never sum sampled rows."}
     return out
 
 
@@ -1754,13 +1816,23 @@ def _claude_loop(api_key: str, model: str, system_prompt: str,
 
 def _gemini_loop(api_key: str, model: str, system_prompt: str,
                  history, user_id: str):
-    """Gemini function calling. Note: Gemini cannot mix google_search with
-    function declarations in one request, so web needs go through the
-    search_web tool here."""
+    """Signed tool calls, bounded retries, parallel reads and checked answers.
+
+    Web research uses our custom search tool; enabling native grounding also
+    requires validating the selected model/API's tool combination and pricing.
+    """
     from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=api_key, http_options=types.HttpOptions(
+        timeout=30000, retry_options=types.HttpRetryOptions(attempts=2, initial_delay=0.5, max_delay=2)))
+    sources: dict[int, dict] = {}
+    read_cache: dict[str, tuple[dict, dict | None]] = {}
+    read_tools = {t["name"] for t in TOOLS if t["name"].startswith("get_")} | {
+        "resolve_date_range", "compare_performance", "search_web", "simulate_sale"}
+    quantitative_tools = read_tools - {"resolve_date_range", "search_web", "get_market_status"}
+    verification_only = False
+    latest_question = next((content for role, content, _, _ in reversed(history) if role == "user"), "")
 
     def _parts(content: str, image: bytes | None, mime: str | None):
         parts = []
@@ -1777,12 +1849,21 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
     ]
 
     def _config(with_thoughts: bool):
+        declarations = gemini_declarations(types)
+        requested_fields = ai_answers.requested_json_fields(latest_question)
+        if requested_fields:
+            answer_tool = next(d for d in declarations if d.name == "answer_with_data")
+            answer_tool.parameters.properties["facts"].items.properties["name"].enum = requested_fields
+            answer_tool.parameters.properties["format"].enum = ["json"]
         kwargs = dict(
             system_instruction=system_prompt,
             temperature=0.4,
-            max_output_tokens=1500,
-            tools=[types.Tool(function_declarations=gemini_declarations(types))],
+            max_output_tokens=4096 if sources else 1500,
+            tools=[types.Tool(function_declarations=declarations)],
         )
+        if verification_only:
+            kwargs["tool_config"] = types.ToolConfig(function_calling_config=types.FunctionCallingConfig(
+                mode="ANY", allowed_function_names=["answer_with_data"]))
         thinking = {}
         if model == "gemini-3.5-flash-lite":
             # Keep ordinary iOS chat responsive instead of spending its
@@ -1800,6 +1881,7 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
     for _ in range(MAX_TOOL_ROUNDS):
         fcalls = []
         model_parts = []
+        answer_parts = []
         emitted_any = False
         try:
             stream = client.models.generate_content_stream(
@@ -1820,30 +1902,84 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
                             emitted_any = True
                             if getattr(part, "thought", False):
                                 yield ("thinking", part.text)
+                            elif sources:
+                                # Check a numeric final reply before exposing it.
+                                answer_parts.append(part.text)
                             else:
                                 yield ("chunk", part.text)
-        except Exception:
+        except Exception as exc:
             # Models without thinking support can reject the config — retry
             # this round once without thought summaries, then stay off.
-            if not with_thoughts or emitted_any or fcalls:
-                raise
-            with_thoughts = False
-            continue
+            if with_thoughts and not emitted_any and not fcalls and isinstance(exc, ValueError):
+                with_thoughts = False
+                continue
+            code = getattr(exc, "code", None)
+            logging.getLogger(__name__).warning("Gemini request failed: %s, status=%s", type(exc).__name__, code)
+            reason = "Gemini's usage limit was reached. Please try again shortly." if code == 429 else "The AI service could not finish the analysis."
+            yield ("chunk", ai_answers.fallback(sources, reason))
+            return
 
         if not fcalls:
+            final = "".join(answer_parts)
+            needs_check = any(s["_evidence"]["tool"] in quantitative_tools and "error" not in s
+                              for s in sources.values()) and bool(re.search(r"\d", final))
+            if needs_check and not verification_only:
+                contents.append(types.Content(role="model", parts=model_parts))
+                contents.append(types.Content(role="user", parts=[types.Part(text=(
+                    "Finish this numeric answer using answer_with_data. Copy scalar facts from "
+                    "_evidence.source_id and dot paths. Preserve the user's requested JSON field names "
+                    "when applicable. Put currency and actual dates in the facts. Do not write unchecked numbers."))]))
+                verification_only = True
+                continue
+            if needs_check or not (final or emitted_any):
+                yield ("chunk", ai_answers.fallback(sources, "I could not finish a checked answer."))
+            else:
+                for text in answer_parts:
+                    yield ("chunk", text)
             return
         contents.append(types.Content(
             role="model", parts=model_parts))
         resp_parts = []
         for fc in fcalls:
             yield ("status", status_label(fc.name))
-            result, action = execute(fc.name, dict(fc.args or {}), user_id)
-            if action:
-                yield ("action", action)
-            # Gemini takes the dict directly, so thin it here rather than
-            # relying on the JSON cap the other two loops apply.
-            resp_parts.append(types.Part(function_response=types.FunctionResponse(
-                name=fc.name,
-                id=fc.id,
-                response={"result": _thin(result, _RESULT_CAPS.get(fc.name, _RESULT_CAP))})))
+        # Independent reads each open their own account-scoped DB session.
+        # Writes/proposals and final-answer rendering stay on this thread.
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            pending = {}
+            planned = [(fc, ai_analytics.align_relative_window(fc.name, dict(fc.args or {}), latest_question)) for fc in fcalls]
+            for fc, args in planned:
+                cache_key = json.dumps([fc.name, args], sort_keys=True)
+                if fc.name in read_tools and cache_key not in read_cache:
+                    if cache_key not in pending:
+                        pending[cache_key] = executor.submit(execute, fc.name, args, user_id)
+            for fc, args in planned:
+                if fc.name == "answer_with_data":
+                    try:
+                        answer = ai_answers.render(args, sources, latest_question)
+                    except (ValueError, IndexError, TypeError, KeyError) as exc:
+                        result, action = {"error": str(exc), "retry": "Correct the source references and call answer_with_data again."}, None
+                        verification_only = False
+                    else:
+                        yield ("chunk", answer)
+                        return
+                elif fc.name in read_tools:
+                    cache_key = json.dumps([fc.name, args], sort_keys=True)
+                    result, action = read_cache.get(cache_key) or pending[cache_key].result()
+                    if "error" not in result:
+                        read_cache[cache_key] = (result, action)
+                else:
+                    result, action = execute(fc.name, args, user_id)
+                if action:
+                    yield ("action", action)
+                source_id = len(sources) + 1
+                result = {**result, "_evidence": {"source_id": source_id, "tool": fc.name,
+                          "filters": args,
+                          "retrieved_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")}}
+                visible = _thin(result, _RESULT_CAPS.get(fc.name, _RESULT_CAP))
+                # A path must reference exactly the array/index the model saw.
+                sources[source_id] = visible
+                resp_parts.append(types.Part(function_response=types.FunctionResponse(
+                    name=fc.name, id=fc.id,
+                    response={"result": visible})))
         contents.append(types.Content(role="user", parts=resp_parts))
+    yield ("chunk", ai_answers.fallback(sources, "I reached the analysis limit before completing the answer."))

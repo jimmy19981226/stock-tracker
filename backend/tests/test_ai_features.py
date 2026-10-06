@@ -8,6 +8,8 @@ import json
 from contextlib import ExitStack
 from copy import deepcopy
 from datetime import date
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
@@ -17,7 +19,6 @@ from fastapi.testclient import TestClient
 from google.genai import types
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.auth import get_current_user
 from app.database import Base, ChatMessage, Dividend, Trade, get_db
@@ -43,7 +44,11 @@ class AIFeatureFixture(TestCase):
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
-        self.engine = create_engine("sqlite://", poolclass=StaticPool,
+        # Distinct connections mirror production concurrent reads. StaticPool's
+        # single sqlite connection is not safe for simultaneous transactions.
+        temporary = TemporaryDirectory(prefix="stock-agent-test-")
+        self.addCleanup(temporary.cleanup)
+        self.engine = create_engine(f"sqlite:///{Path(temporary.name) / 'test.db'}",
                                     connect_args={"check_same_thread": False})
         self.addCleanup(self.engine.dispose)
         Base.metadata.create_all(self.engine)
@@ -153,6 +158,14 @@ class AIFeatureFixture(TestCase):
 
 
 class AIFeatureTests(AIFeatureFixture):
+    def test_general_question_does_not_fetch_portfolio_prices_or_fundamentals(self):
+        requests = self.fake_gemini([[model_chunk(types.Part(text="A dividend is a payment to shareholders."))]])
+        self.chat("What is a dividend?")
+        ai.quotes.get_quote.assert_not_called()
+        ai.stock_info.get_fundamentals.assert_not_called()
+        self.assertIn("account_index", requests[0]["config"].system_instruction)
+        self.assertNotIn("FOREIGN_RECORD", requests[0]["config"].system_instruction)
+
     def test_snapshot_includes_both_markets_all_history_and_precise_fields(self):
         context = self.snapshot()
         self.assertEqual({r["id"] for r in context["trades"]}, set(self.trade_ids))

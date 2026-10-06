@@ -497,6 +497,9 @@ struct AssistantView: View {
             }
         }
         .task { await vm.loadStatus() }
+        .onChange(of: vm.isStreaming) { _, streaming in
+            if streaming { inputFocused = false }
+        }
         .onAppear {
             providerHasKey = AISettings.hasKey
             // Wake a cold backend and pre-build the chat context while the user
@@ -586,7 +589,7 @@ struct AssistantView: View {
                         }
                     }
 
-                    if !providerHasKey {
+                    if !providerHasKey && vm.status?.configured == false {
                         noKeyBanner
                     }
                     if let error = vm.error {
@@ -745,6 +748,7 @@ struct AssistantView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button,
                                                 style: .continuous))
                     .onSubmit { vm.send() }
+                    .accessibilityIdentifier("assistantComposer")
 
                 Button {
                     if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
@@ -759,6 +763,8 @@ struct AssistantView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!vm.isStreaming && !vm.canSend)
+                .accessibilityLabel(vm.isStreaming ? "Stop response" : "Send message")
+                .accessibilityIdentifier("assistantSend")
             }
         }
         .padding(.horizontal, Theme.Space.screenH)

@@ -71,6 +71,14 @@ snapshot immediately. History tools return consecutive pages with counts rather
 than sampling away rows. Attached images are sent to Gemini and retained in chat
 history for follow-up questions.
 
+The agent also supports inclusive date filters, complete record totals grouped
+by ticker/month/market, calendar or rolling performance comparisons, and per-stock
+profit attribution that reconciles with portfolio returns. Quantitative Gemini
+answers use source references: the server copies values into tables or JSON,
+keeping full numbers, currencies and valuation dates. Missing data stays unavailable.
+Chat starts with a small account index, runs independent reads concurrently, and
+returns available data if the service fails or the tool-round limit is reached.
+
 From the repository root, run the isolated backend feature tests:
 
 ```bash
