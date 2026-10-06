@@ -35,7 +35,6 @@ struct DashboardView: View {
         }
         .screenBackground()
         .refreshable { await store.loadAll() }
-        .onAppear { store.startPolling(market: market) }
     }
 
     // MARK: Header
@@ -235,10 +234,14 @@ struct DashboardView: View {
     private var holdingsSection: some View {
         let sorted = holdings.sorted(by: sort.areInOrder)
         return VStack(alignment: .leading, spacing: Theme.Space.s) {
-            SectionLabel("Holdings · \(holdings.count) · \(Fmt.amount(marketValue, currency: currency))") {
+            SectionLabel("Holdings · \(holdings.count)") {
                 SegmentedControl(options: HoldingSort.allCases.map { ($0, $0.rawValue) },
                                  selection: $sort, fill: false, compact: true)
             }
+            Text("Market value \(Fmt.amount(marketValue, currency: currency))")
+                .font(Theme.Typo.detailMed)
+                .foregroundStyle(Theme.textSecondary)
+                .numeral()
 
             if sorted.isEmpty {
                 EmptyState(icon: "tray", title: "No positions",
@@ -246,16 +249,6 @@ struct DashboardView: View {
                     .appCard()
             } else {
                 VStack(spacing: 0) {
-                    HStack(spacing: Theme.Space.s) {
-                        Text("Ticker").frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Price").frame(width: 74, alignment: .trailing)
-                        Text("Unrealized").frame(width: 82, alignment: .trailing)
-                    }
-                    .statLabelStyle(small: true)
-                    .padding(.horizontal, Theme.Space.l)
-                    .padding(.vertical, Theme.Space.s)
-                    RowDivider(inset: 0)
-
                     ForEach(Array(sorted.enumerated()), id: \.element.id) { index, h in
                         Button { onOpen(h.ticker) } label: {
                             HoldingRow(holding: h,
@@ -282,51 +275,59 @@ struct DashboardView: View {
     }
 }
 
-/// One position. Three columns: what it is, what it costs now, what it has
-/// made — plus a 3pt weight bar that says how much of the market it is
-/// without spending a fourth column on the number.
+/// One position with its quote above two full-width financial figures.
+/// Each amount gets half the row rather than a narrow fixed-width column.
 private struct HoldingRow: View {
     let holding: Holding
     let name: String
     let weight: Double
 
     var body: some View {
-        HStack(alignment: .center, spacing: Theme.Space.s) {
-            VStack(alignment: .leading, spacing: 2) {
-                TickerLine(ticker: holding.ticker, name: name)
-                Text(subtitle)
-                    .font(Theme.Typo.micro)
-                    .foregroundStyle(Theme.textSecondary)
-                    .numeral(0.85)
-                WeightBar(fraction: weight).padding(.top, 2)
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            HStack(alignment: .top, spacing: Theme.Space.s) {
+                VStack(alignment: .leading, spacing: 3) {
+                    TickerLine(ticker: holding.ticker, name: name)
+                    Text(subtitle)
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.textSecondary)
+                        .numeral(0.85)
+                    WeightBar(fraction: weight).padding(.top, 2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(Fmt.price(holding.currentPrice, currency: holding.currency))
+                        .font(Theme.Typo.rowSm)
+                        .foregroundStyle(Theme.text)
+                        .numeral()
+                        .rollingNumber(holding.currentPrice)
+                    MovePct(pct: holding.todayChangePct)
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(Fmt.number(holding.currentPrice, digits: 2))
-                    .font(Theme.Typo.rowSm)
-                    .foregroundStyle(Theme.text)
-                    .numeral()
-                    .rollingNumber(holding.currentPrice)
-                MovePct(pct: holding.todayChangePct)
-                Text(Fmt.compactMoney(holding.marketValue, currency: holding.currency))
-                    .font(Theme.Typo.micro)
-                    .foregroundStyle(Theme.textSecondary)
-                    .numeral()
-            }
-            .frame(width: 74, alignment: .trailing)
+            HStack(alignment: .top, spacing: Theme.Space.m) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Market value").statLabelStyle(small: true)
+                    Text(Fmt.amount(holding.marketValue, currency: holding.currency))
+                        .font(Theme.Typo.rowSm)
+                        .foregroundStyle(Theme.text)
+                        .numeral()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(Fmt.signedCompact(holding.unrealizedPl, currency: holding.currency))
-                    .font(Theme.Typo.rowSm)
-                    .numeral()
-                    .rollingNumber(holding.unrealizedPl)
-                Text(Fmt.pct(holding.unrealizedPlPct, digits: 1))
-                    .font(Theme.Typo.micro)
-                    .numeral()
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("Unrealized P/L").statLabelStyle(small: true)
+                    Text(Fmt.signedAmount(holding.unrealizedPl, currency: holding.currency))
+                        .font(Theme.Typo.rowSm)
+                        .foregroundStyle(Theme.pl(holding.unrealizedPl))
+                        .numeral()
+                        .rollingNumber(holding.unrealizedPl)
+                    Text(Fmt.pct(holding.unrealizedPlPct, digits: 1))
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.pl(holding.unrealizedPl))
+                        .numeral()
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .foregroundStyle(Theme.pl(holding.unrealizedPl))
-            .frame(width: 82, alignment: .trailing)
         }
         .padding(.horizontal, Theme.Space.l)
         .padding(.vertical, 11)

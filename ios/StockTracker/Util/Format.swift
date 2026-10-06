@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Formatting helpers mirroring the web app's format.ts so figures read the
+/// Formatting helpers mirroring the web app's format.js so figures read the
 /// same across platforms (NT$ / US$, signed percentages, em-dash for nil).
 ///
 /// Two conventions the design fixes and nothing may deviate from:
@@ -18,21 +18,23 @@ enum Fmt {
     }
 
     static func money(_ value: Double?, currency: String, digits: Int = 2) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
+        guard let v = value, v.isFinite else { return "—" }
         let sign = v < 0 ? minus : ""
         return "\(sign)\(symbol(currency))\(number(abs(v), digits: digits))"
     }
 
     static func number(_ value: Double?, digits: Int = 2) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
+        guard let v = value, v.isFinite else { return "—" }
         let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US")
         f.numberStyle = .decimal
+        f.minusSign = minus
         f.minimumFractionDigits = digits
         f.maximumFractionDigits = digits
         return f.string(from: NSNumber(value: v)) ?? "—"
     }
 
-    /// Compact share count: integers show no decimals, fractional shares keep them.
+    /// Full share count: integers show no decimals, fractional shares keep them.
     static func shares(_ value: Double) -> String {
         if value == value.rounded() { return number(value, digits: 0) }
         return number(value, digits: 4)
@@ -42,78 +44,41 @@ enum Fmt {
     /// distinguishes them deliberately, so pass `digits` rather than rounding
     /// a return to look like a tick.
     static func pct(_ value: Double?, digits: Int = 2) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
+        guard let v = value, v.isFinite else { return "—" }
         let sign = v > 0 ? "+" : v < 0 ? minus : ""
         return "\(sign)\(String(format: "%.\(digits)f", Swift.abs(v)))%"
     }
 
     static func signedMoney(_ value: Double?, currency: String, digits: Int = 2) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
+        guard let v = value, v.isFinite else { return "—" }
         let sign = v > 0 ? "+" : ""
         return "\(sign)\(money(v, currency: currency, digits: digits))"
     }
 
-    /// `+NT$1.2M` / `−US$42.0K` — a signed, compacted amount. What every stat
-    /// strip and holdings row uses, because a seven-figure P&L in full spends
-    /// the whole column saying nothing.
-    static func signedCompact(_ value: Double?, currency: String) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
-        let body = compactMoney(Swift.abs(v), currency: currency)
-        return (v < 0 ? minus : "+") + body
-    }
-
     // MARK: - Amounts vs prices
     //
-    // A money *amount* (P&L, cost basis, dividends received, a portfolio total)
-    // and a *price* are different kinds of number and should not be formatted
-    // the same way. "NT$3,807,168.00" spends four characters saying nothing —
-    // TWD has no practical subunit, and cents on a seven-figure P&L are noise.
-    // A price, on the other hand, is quoted with real precision (NT$1,150.50)
-    // and must keep it. Use `amount`/`signedAmount` for the former, `price` for
-    // the latter, and neither defaults to the old blanket 2 digits.
+    // Amounts use whole NT dollars and US dollars with cents. Quoted prices
+    // retain two decimals. The size of a value never changes its precision,
+    // and financial figures are always shown in full with grouping separators.
 
     /// Digits an *amount* should carry in this currency.
-    private static func amountDigits(_ value: Double, currency: String) -> Int {
-        if currency == "TWD" { return 0 }
-        // USD keeps cents only while they're still legible; past a thousand
-        // they're noise on a P&L line.
-        return Swift.abs(value) >= 1000 ? 0 : 2
+    private static func amountDigits(currency: String) -> Int {
+        currency == "TWD" ? 0 : 2
     }
 
     /// A money amount — totals, P&L, dividends, cost basis.
     static func amount(_ value: Double?, currency: String) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
-        return money(v, currency: currency, digits: amountDigits(v, currency: currency))
+        money(value, currency: currency, digits: amountDigits(currency: currency))
     }
 
     /// A money amount with an explicit `+` when positive.
     static func signedAmount(_ value: Double?, currency: String) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
-        return signedMoney(v, currency: currency, digits: amountDigits(v, currency: currency))
+        signedMoney(value, currency: currency, digits: amountDigits(currency: currency))
     }
 
     /// A quoted price — keeps the precision the market trades it at.
     static func price(_ value: Double?, currency: String) -> String {
         money(value, currency: currency, digits: 2)
-    }
-
-    /// Compact money for a chart's value scale: NT$6.9M, $505K. An axis has to
-    /// stay narrow or it crowds the plot — full precision belongs in the scrub
-    /// tip, not on the rail.
-    static func compactMoney(_ value: Double?, currency: String) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
-        let sign = v < 0 ? minus : ""
-        let a = Swift.abs(v)
-        let (div, suffix): (Double, String) =
-            a >= 1e9 ? (1e9, "B") : a >= 1e6 ? (1e6, "M") : a >= 1e3 ? (1e3, "K") : (1, "")
-        let scaled = a / div
-        let digits = suffix.isEmpty ? 0 : (scaled < 10 ? 1 : 0)
-        return "\(sign)\(symbol(currency))\(String(format: "%.\(digits)f", scaled))\(suffix)"
-    }
-
-    /// Big "net worth" style number — thousands separators, no decimals.
-    static func bigMoney(_ value: Double?, currency: String) -> String {
-        money(value, currency: currency, digits: 0)
     }
 
     /// "Mar 4, 2025" from an ISO yyyy-MM-dd (or full timestamp) string.
@@ -127,20 +92,6 @@ enum Fmt {
         let out = DateFormatter()
         out.dateFormat = "MMM d, yyyy"
         return out.string(from: date)
-    }
-
-    /// Abbreviate large counts (market cap, volume): 1.2B, 340M, 12K.
-    static func compact(_ value: Double?) -> String {
-        guard let v = value, !v.isNaN else { return "—" }
-        let abs = Swift.abs(v)
-        let sign = v < 0 ? minus : ""
-        switch abs {
-        case 1e12...: return "\(sign)\(String(format: "%.2f", abs / 1e12))T"
-        case 1e9...: return "\(sign)\(String(format: "%.2f", abs / 1e9))B"
-        case 1e6...: return "\(sign)\(String(format: "%.2f", abs / 1e6))M"
-        case 1e3...: return "\(sign)\(String(format: "%.1f", abs / 1e3))K"
-        default: return number(v, digits: 0)
-        }
     }
 
     /// Anchor for a time-axis label so edge labels tuck inward: a tick at the

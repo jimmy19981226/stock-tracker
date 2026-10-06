@@ -170,6 +170,7 @@ struct QuoteTick {
     let prevClose: Double?
     let change: Double?
     let changePct: Double?
+    var timestamp: Date? = nil
 }
 
 // MARK: - Dividend calendar (除權息行事曆 + projected income)

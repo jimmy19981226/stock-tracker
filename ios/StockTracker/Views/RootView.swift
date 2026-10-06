@@ -121,6 +121,7 @@ struct RootView: View {
         // budget and this one silently never appeared.
         .fullScreenCover(item: $reports.viewing) { ReportViewerSheet(job: $0) }
         .task { await bootstrap() }
+        .onDisappear { store.stopPolling() }
     }
 
     /// Overview → market dashboard → stock detail. Modelled as state rather
@@ -148,7 +149,8 @@ struct RootView: View {
         async let markets: Void = store.loadMarkets()
         async let all: Void = store.loadAll()
         _ = await (markets, all)
-        store.startPolling(market: .TW)
+        guard !Task.isCancelled else { return }
+        store.startPolling()
 
         let env = ProcessInfo.processInfo.environment
         if let raw = env["UITEST_TAB"], let t = AppTab(rawValue: raw) { tab = t }

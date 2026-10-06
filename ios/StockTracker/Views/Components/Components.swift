@@ -213,7 +213,6 @@ struct PLValue: View {
     var currency: String = ""
     var font: Font = Theme.Typo.row
     var pctDigits: Int = 1
-    var compact: Bool = false
     var showTriangle: Bool = false
 
     var body: some View {
@@ -224,8 +223,7 @@ struct PLValue: View {
                     .font(.system(size: 8, weight: .black))
             }
             if let value {
-                Text(compact ? Fmt.signedCompact(value, currency: currency)
-                             : Fmt.signedAmount(value, currency: currency))
+                Text(Fmt.signedAmount(value, currency: currency))
                     .font(font)
             }
             if let pct {
@@ -300,7 +298,7 @@ private struct StatCard: ViewModifier {
     }
 }
 
-/// A column of the hero's stat strip — smaller, and on the dark field.
+/// A cell of the hero's stat grid, on the dark field.
 struct HeroStat: View {
     let label: String
     let value: String
@@ -319,7 +317,7 @@ struct HeroStat: View {
             Text(value)
                 .font(Theme.Typo.heroStat)
                 .foregroundStyle(valueColor)
-                .numeral(0.6)
+                .numeral(0.8)
             Text(sub.isEmpty ? " " : sub)
                 .font(Theme.Typo.nano)
                 .foregroundStyle(Theme.heroLabel)
@@ -591,7 +589,7 @@ struct BarRow: View {
 // MARK: - Charts
 
 /// The app's line + area chart, in the one treatment every screen shares:
-/// three hairline gridlines, compact value labels on one edge, an end-point
+/// three hairline gridlines, full value labels on one edge, an end-point
 /// dot, and from/Today captions under the plot.
 ///
 /// A chart always carries its own value scale — if the only way to read a
@@ -651,7 +649,7 @@ struct SeriesChart: View {
                     AxisGridLine().foregroundStyle(Theme.line)
                     AxisValueLabel {
                         if let v = mark.as(Double.self) {
-                            Text(Fmt.compactMoney(v, currency: currency))
+                            Text(Fmt.amount(v, currency: currency))
                                 .font(Theme.Typo.axis)
                                 .foregroundStyle(Theme.textSecondary)
                         }

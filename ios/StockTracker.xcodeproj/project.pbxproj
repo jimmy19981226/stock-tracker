@@ -51,6 +51,7 @@
 		D78FEB5E77F1F4CA9A8CE0AC /* DesignTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A7E7BCA5F1381655138CE5D /* DesignTour.swift */; };
 		E2D5EA21AF4D64EFD0F2C7AF /* MISQuotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C9250130334BCF77C5C7FBE /* MISQuotes.swift */; };
 		E544DCDB26A60AD254055D4C /* OFL-Barlow.txt in Resources */ = {isa = PBXBuildFile; fileRef = B0759A43A10E9DE1D6D9F2C1 /* OFL-Barlow.txt */; };
+		E5F8CBEC80B716EE92A84CC2 /* QuoteRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF1CCA516C49E549853349A /* QuoteRefreshTests.swift */; };
 		E61F09BB594BB5C6C8C98675 /* AuthTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B510C92B73EC980E35D9A9E /* AuthTokenProvider.swift */; };
 		E9E5DED70BACAEC0F876505D /* DividendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665969461AD6B11CA8AF0BDD /* DividendsView.swift */; };
 		EFD5B333FA05AF8B1D3169D1 /* SortSwitchDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */; };
@@ -60,6 +61,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		3A9EAF3D6572EE0DAAFD8471 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F503EC97B55632E0CBFD05A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F5B94C36DA159648E0039B8A;
+			remoteInfo = StockTracker;
+		};
 		80A9C61BEC56A772E33C3378 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = F503EC97B55632E0CBFD05A0 /* Project object */;
@@ -109,11 +117,13 @@
 		897C748387A57D55B4A9F2BA /* BarlowCondensed-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BarlowCondensed-Medium.ttf"; sourceTree = "<group>"; };
 		8E07083760E1F523D22588D9 /* TradesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradesView.swift; sourceTree = "<group>"; };
 		909BC2824E181539870CAA3A /* DiskCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskCache.swift; sourceTree = "<group>"; };
+		95DCC3C17D6940297E8BEE33 /* StockTrackerTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = StockTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9B3957E199E657F9473F04E9 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		AD801CCBCEDE8D882EB1B547 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
 		AF6D6FE634A2B9D311BC20E3 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		B0759A43A10E9DE1D6D9F2C1 /* OFL-Barlow.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-Barlow.txt"; sourceTree = "<group>"; };
 		B354FDD67A5319E6EF7E52A6 /* GoogleAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuth.swift; sourceTree = "<group>"; };
+		BCF1CCA516C49E549853349A /* QuoteRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRefreshTests.swift; sourceTree = "<group>"; };
 		C021FDD1797D256D9AADF6D7 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		C2F24BCFB79D6C6444CBC4D6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D446C2919059548F0C1B63DE /* FIFO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FIFO.swift; sourceTree = "<group>"; };
@@ -257,6 +267,7 @@
 			isa = PBXGroup;
 			children = (
 				AE21C951AB82F7346F69197A /* StockTracker */,
+				B141E310A8F375EAD50FD7FC /* Tests */,
 				B65751E96F957EFFBB7AB888 /* UITests */,
 				72C7EA295FBD4DB15EDF2CA2 /* Products */,
 			);
@@ -279,6 +290,7 @@
 			isa = PBXGroup;
 			children = (
 				592A352FEAEAEBCD762E4C67 /* StockTracker.app */,
+				95DCC3C17D6940297E8BEE33 /* StockTrackerTests.xctest */,
 				189F0861420DA62D321AD57A /* StockTrackerUITests.xctest */,
 			);
 			name = Products;
@@ -341,6 +353,14 @@
 			path = StockTracker;
 			sourceTree = "<group>";
 		};
+		B141E310A8F375EAD50FD7FC /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				BCF1CCA516C49E549853349A /* QuoteRefreshTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
 		B65751E96F957EFFBB7AB888 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -396,6 +416,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		226D5A75F5B7ED32549C7CEA /* StockTrackerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7415A4271135E717F0EF9FD5 /* Build configuration list for PBXNativeTarget "StockTrackerTests" */;
+			buildPhases = (
+				D01B92F5CE815E79224FAD82 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				7CCB5303E75449A821C53F0F /* PBXTargetDependency */,
+			);
+			name = StockTrackerTests;
+			packageProductDependencies = (
+			);
+			productName = StockTrackerTests;
+			productReference = 95DCC3C17D6940297E8BEE33 /* StockTrackerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		3DF9D4461BD1D4F02F3E3FC4 /* StockTrackerUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C9EA1B52C65CEE13FAAA7DB3 /* Build configuration list for PBXNativeTarget "StockTrackerUITests" */;
@@ -441,6 +479,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					226D5A75F5B7ED32549C7CEA = {
+						DevelopmentTeam = D77DF52MVG;
+						ProvisioningStyle = Automatic;
+					};
 					3DF9D4461BD1D4F02F3E3FC4 = {
 						DevelopmentTeam = D77DF52MVG;
 						ProvisioningStyle = Automatic;
@@ -467,6 +509,7 @@
 			projectRoot = "";
 			targets = (
 				F5B94C36DA159648E0039B8A /* StockTracker */,
+				226D5A75F5B7ED32549C7CEA /* StockTrackerTests */,
 				3DF9D4461BD1D4F02F3E3FC4 /* StockTrackerUITests */,
 			);
 		};
@@ -547,6 +590,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D01B92F5CE815E79224FAD82 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E5F8CBEC80B716EE92A84CC2 /* QuoteRefreshTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -554,6 +605,11 @@
 			isa = PBXTargetDependency;
 			target = F5B94C36DA159648E0039B8A /* StockTracker */;
 			targetProxy = 80A9C61BEC56A772E33C3378 /* PBXContainerItemProxy */;
+		};
+		7CCB5303E75449A821C53F0F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F5B94C36DA159648E0039B8A /* StockTracker */;
+			targetProxy = 3A9EAF3D6572EE0DAAFD8471 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -576,6 +632,24 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1842CA68EBEE1DA676D0FBBB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StockTracker.app/StockTracker";
 			};
 			name = Debug;
 		};
@@ -724,6 +798,24 @@
 			};
 			name = Release;
 		};
+		B94ED47596D45B74928C0AAB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StockTracker.app/StockTracker";
+			};
+			name = Release;
+		};
 		CEB46734BC205F1A8F4BFF64 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -766,6 +858,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		7415A4271135E717F0EF9FD5 /* Build configuration list for PBXNativeTarget "StockTrackerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1842CA68EBEE1DA676D0FBBB /* Debug */,
+				B94ED47596D45B74928C0AAB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		B5D5F580862875EA382AFA74 /* Build configuration list for PBXProject "StockTracker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

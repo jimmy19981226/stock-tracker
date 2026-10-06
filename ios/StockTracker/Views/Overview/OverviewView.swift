@@ -9,9 +9,8 @@ struct OverviewView: View {
     @EnvironmentObject private var store: PortfolioStore
     let onOpenMarket: (MarketCode) -> Void
 
-    // Seeded from the disk cache so the hero number shows instantly on launch.
-    @State private var overview: PortfolioOverview? =
-        DiskCache.load(PortfolioOverview.self, name: "overview")
+    // Hero and market cards read the same published quote snapshot.
+    private var overview: PortfolioOverview? { store.overview }
     @State private var period: ValuePeriod = .year
     @State private var series: [SeriesChart.Point] = []
 
@@ -53,16 +52,6 @@ struct OverviewView: View {
         .screenBackground()
         .refreshable { await reload() }
         .task(id: period) { await loadSeries() }
-        .task {
-            await loadOverview()
-            while !Task.isCancelled {
-                let open = store.isOpen(.TW) || store.isOpen(.US)
-                try? await Task.sleep(nanoseconds: (open ? 5 : 60) * 1_000_000_000)
-                if Task.isCancelled { break }
-                await store.refreshQuietly()
-                await loadOverview()
-            }
-        }
     }
 
     // MARK: Header
@@ -134,14 +123,7 @@ struct OverviewView: View {
 
     private func reload() async {
         await store.loadAll()
-        await loadOverview()
         await loadSeries()
-    }
-
-    private func loadOverview() async {
-        guard let o = try? await APIClient.shared.getOverview() else { return }
-        overview = o
-        DiskCache.save(o, as: "overview")
     }
 
     /// The combined curve: each market's daily value, the US leg converted at
@@ -190,7 +172,7 @@ struct OverviewView: View {
 // MARK: - Hero
 
 /// The one dark field: the combined net worth, what it's worth in USD, and a
-/// four-column strip of the figures that explain it.
+/// two-column grid of the figures that explain it.
 private struct NetWorthHero: View {
     let overview: PortfolioOverview?
     let clock: String
@@ -217,9 +199,7 @@ private struct NetWorthHero: View {
         return today / (total - today) * 100
     }
 
-    /// The stat strip is quoted in USD while the headline stays in NT$: the
-    /// figures are small enough that a single hard currency reads faster than
-    /// four seven-digit TWD numbers, and the two markets are already summed.
+    /// The stat grid is quoted in USD while the headline stays in NT$.
     /// Every combined figure is computed in TWD, so this is the one conversion.
     /// Without a rate there is nothing honest to show, so it returns nil and
     /// the cell renders an em-dash.
@@ -234,19 +214,20 @@ private struct NetWorthHero: View {
                 .eyebrowStyle(Theme.heroLabel)
                 .padding(.bottom, 4)
 
-            Text(Fmt.bigMoney(overview?.combined.twd, currency: "TWD"))
+            Text(Fmt.amount(overview?.combined.twd, currency: "TWD"))
                 .font(Theme.Typo.hero)
                 .tracking(-0.4)
                 .foregroundStyle(Theme.heroText)
                 .numeral(0.5)
                 .rollingNumber(overview?.combined.twd)
 
-            HStack(spacing: Theme.Space.xs) {
-                Text("≈ \(Fmt.bigMoney(overview?.combined.usd, currency: "USD"))")
-                Text("·")
-                Text("USD/TWD \(Fmt.number(fx, digits: 2))")
-                Text("·")
-                Text(clock)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("≈ \(Fmt.amount(overview?.combined.usd, currency: "USD"))")
+                HStack(spacing: Theme.Space.xs) {
+                    Text("USD/TWD \(Fmt.number(overview?.fx.usdTwd, digits: 2))")
+                    Text("·")
+                    Text(clock)
+                }
             }
             .font(Theme.Typo.detail)
             .foregroundStyle(Theme.heroLabel)
@@ -256,28 +237,30 @@ private struct NetWorthHero: View {
             Rectangle().fill(Theme.heroRule).frame(height: 1)
                 .padding(.top, Theme.Space.xl)
 
-            HStack(alignment: .top, spacing: Theme.Space.s) {
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
+                                GridItem(.flexible(), alignment: .leading)],
+                      alignment: .leading, spacing: Theme.Space.l) {
                 HeroStat(label: "Today",
-                         value: Fmt.signedCompact(usd(today), currency: "USD"),
+                         value: Fmt.signedAmount(usd(today), currency: "USD"),
                          sub: Fmt.pct(todayPct),
                          valueColor: Theme.pl(today))
                 HeroStat(label: "Unrealized",
-                         value: Fmt.signedCompact(usd(unrealized), currency: "USD"),
+                         value: Fmt.signedAmount(usd(unrealized), currency: "USD"),
                          valueColor: Theme.pl(unrealized))
                 HeroStat(label: "Realized + div",
-                         value: Fmt.signedCompact(usd(earned), currency: "USD"),
+                         value: Fmt.signedAmount(usd(earned), currency: "USD"),
                          valueColor: Theme.pl(earned))
                 HeroStat(label: "Total return",
-                         value: Fmt.signedCompact(usd(totalReturn), currency: "USD"),
+                         value: Fmt.signedAmount(usd(totalReturn), currency: "USD"),
                          sub: totalReturn != nil
-                             ? "≈ " + Fmt.signedCompact(totalReturn, currency: "TWD") : "")
+                             ? "≈ " + Fmt.signedAmount(totalReturn, currency: "TWD") : "")
             }
             .padding(.top, Theme.Space.l)
         }
         .heroCard(padding: 20)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Investing net worth")
-        .accessibilityValue(Fmt.bigMoney(overview?.combined.twd, currency: "TWD"))
+        .accessibilityValue(Fmt.amount(overview?.combined.twd, currency: "TWD"))
     }
 }
 
@@ -317,7 +300,7 @@ private struct MarketCard: View {
             .padding(.bottom, Theme.Space.s)
 
             HStack(alignment: .lastTextBaseline, spacing: Theme.Space.s) {
-                Text(Fmt.money(summary?.totalValue, currency: currency, digits: 0))
+                Text(Fmt.amount(summary?.totalValue, currency: currency))
                     .font(Theme.Typo.section)
                     .foregroundStyle(Theme.text)
                     .numeral(0.6)

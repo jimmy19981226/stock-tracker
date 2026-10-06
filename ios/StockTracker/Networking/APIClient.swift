@@ -381,7 +381,10 @@ final class APIClient {
                 price: price,
                 prevClose: evt["prev_close"] as? Double,
                 change: evt["change"] as? Double,
-                changePct: evt["change_pct"] as? Double
+                changePct: evt["change_pct"] as? Double,
+                timestamp: (evt["ts"] as? Double).flatMap {
+                    $0.isFinite ? Date(timeIntervalSince1970: $0) : nil
+                }
             )
         }
 

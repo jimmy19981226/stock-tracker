@@ -437,7 +437,8 @@ private struct FiftyTwoWeekBar: View {
 
 // MARK: - Stats grid
 
-/// Nine cells, three across. An ETF's nine are not a company's nine — a P/E on
+/// Nine cells, two across to leave room for full market caps and volumes.
+/// An ETF's nine are not a company's nine — a P/E on
 /// a broad-market fund is noise, and its AUM and expense ratio are what a
 /// holder actually checks.
 private struct StatsGrid: View {
@@ -452,7 +453,7 @@ private struct StatsGrid: View {
             ("Day range", dayRange),
         ]
         if let cap = f.marketCap {
-            out.append(("Mkt cap", Fmt.symbol(f.currency ?? "") + Fmt.compact(cap)))
+            out.append(("Mkt cap", Fmt.symbol(f.currency ?? "") + Fmt.number(cap, digits: 0)))
         }
         if let pe = f.pe { out.append(("P/E", Fmt.number(pe))) }
         if let eps = f.eps { out.append(("EPS ttm", Fmt.number(eps))) }
@@ -463,7 +464,7 @@ private struct StatsGrid: View {
             out.append(("vs now", Fmt.pct((t - p) / p * 100, digits: 1)))
         }
         if let pb = f.priceToBook, out.count < 9 { out.append(("P/B", Fmt.number(pb))) }
-        if let v = f.averageVolume, out.count < 9 { out.append(("Avg vol", Fmt.compact(v))) }
+        if let v = f.averageVolume, out.count < 9 { out.append(("Avg vol", Fmt.number(v, digits: 0))) }
         if let ex = f.exDividendDate, out.count < 9 { out.append(("Next ex-div", Fmt.prettyDate(ex))) }
         if let yoc = yieldOnCost, out.count < 9 {
             out.append(("Yield on cost", Fmt.pct(yoc, digits: 1).replacingOccurrences(of: "+", with: "")))
@@ -477,7 +478,7 @@ private struct StatsGrid: View {
     }
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Space.s), count: 3),
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Space.s), count: 2),
                   spacing: Theme.Space.s) {
             ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
                 VStack(alignment: .leading, spacing: 0) {
@@ -485,7 +486,7 @@ private struct StatsGrid: View {
                     Text(cell.1)
                         .font(Theme.Typo.row)
                         .foregroundStyle(Theme.text)
-                        .numeral(0.6)
+                        .numeral(0.8)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 11)
@@ -518,21 +519,23 @@ private struct RevenueCard: View {
 
             if let latest = months.last {
                 Rectangle().fill(Theme.line).frame(height: 1)
-                HStack {
-                    Text("Latest \(latest.month)")
-                        .font(Theme.Typo.detail)
-                        .foregroundStyle(Theme.textSecondary)
-                    Spacer()
-                    HStack(spacing: 5) {
-                        Text(Fmt.compactMoney(latest.revenue, currency: currency))
-                            .foregroundStyle(Theme.text)
+                VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                    HStack {
+                        Text("Latest \(latest.month)")
+                            .font(Theme.Typo.detail)
+                            .foregroundStyle(Theme.textSecondary)
+                        Spacer()
                         if let yoy = latest.yoyPct {
                             Text("YoY \(Fmt.pct(yoy, digits: 1))")
+                                .font(Theme.Typo.inlineNum)
                                 .foregroundStyle(Theme.pl(yoy))
+                                .numeral()
                         }
                     }
-                    .font(Theme.Typo.inlineNum)
-                    .numeral()
+                    Text(Fmt.amount(latest.revenue, currency: currency))
+                        .font(Theme.Typo.row)
+                        .foregroundStyle(Theme.text)
+                        .numeral()
                 }
             }
         }
@@ -566,37 +569,41 @@ private struct FinancialsCard: View {
                 .font(Theme.Typo.row)
                 .foregroundStyle(Theme.text)
 
-            HStack(spacing: Theme.Space.xs) {
-                Text("Quarter").frame(maxWidth: .infinity, alignment: .leading)
-                Text("Revenue").frame(maxWidth: .infinity, alignment: .trailing)
-                Text("EPS").frame(width: 46, alignment: .trailing)
-                Text("Gross").frame(width: 52, alignment: .trailing)
-                Text("Op.").frame(width: 46, alignment: .trailing)
-            }
-            .statLabelStyle(small: true)
-            .padding(.bottom, 2)
+            ScrollView(.horizontal) {
+                VStack(spacing: Theme.Space.xs) {
+                    HStack(spacing: Theme.Space.s) {
+                        Text("Quarter").frame(width: 78, alignment: .leading)
+                        Text("Revenue").frame(width: 180, alignment: .trailing)
+                        Text("EPS").frame(width: 46, alignment: .trailing)
+                        Text("Gross").frame(width: 52, alignment: .trailing)
+                        Text("Op.").frame(width: 46, alignment: .trailing)
+                    }
+                    .statLabelStyle(small: true)
+                    .padding(.bottom, 2)
 
-            ForEach(Array(rows.enumerated()), id: \.element.id) { index, q in
-                let improving = index > 0 && (q.grossMargin ?? 0) > (rows[index - 1].grossMargin ?? 0)
-                HStack(spacing: Theme.Space.xs) {
-                    Text(Self.quarterLabel(q.quarter))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .foregroundStyle(Theme.textStrong)
-                    Text(Fmt.compact(q.revenue))
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                    Text(Fmt.number(q.epsDiluted))
-                        .frame(width: 46, alignment: .trailing)
-                    Text(pct(q.grossMargin) + (improving ? " ▲" : ""))
-                        .frame(width: 52, alignment: .trailing)
-                        .foregroundStyle(improving ? Theme.gain : Theme.text)
-                    Text(pct(q.operatingMargin))
-                        .frame(width: 46, alignment: .trailing)
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, q in
+                        let improving = index > 0 && (q.grossMargin ?? 0) > (rows[index - 1].grossMargin ?? 0)
+                        HStack(spacing: Theme.Space.s) {
+                            Text(Self.quarterLabel(q.quarter))
+                                .frame(width: 78, alignment: .leading)
+                                .foregroundStyle(Theme.textStrong)
+                            Text(Fmt.number(q.revenue, digits: 0))
+                                .frame(width: 180, alignment: .trailing)
+                            Text(Fmt.number(q.epsDiluted))
+                                .frame(width: 46, alignment: .trailing)
+                            Text(pct(q.grossMargin) + (improving ? " ▲" : ""))
+                                .frame(width: 52, alignment: .trailing)
+                                .foregroundStyle(improving ? Theme.gain : Theme.text)
+                            Text(pct(q.operatingMargin))
+                                .frame(width: 46, alignment: .trailing)
+                        }
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.text)
+                        .numeral()
+                        .padding(.vertical, 5)
+                        if index < rows.count - 1 { RowDivider(inset: 0) }
+                    }
                 }
-                .font(Theme.Typo.caption)
-                .foregroundStyle(Theme.text)
-                .numeral()
-                .padding(.vertical, 5)
-                if index < rows.count - 1 { RowDivider(inset: 0) }
             }
         }
         .appCard()
