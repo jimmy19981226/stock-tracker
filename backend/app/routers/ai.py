@@ -21,7 +21,7 @@ import os
 import re
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
@@ -996,6 +996,7 @@ def _derive_title(first_user_msg: str) -> str:
 def _system_prompt(context_json: str) -> str:
     return (
         "You are a portfolio analysis assistant for a Taiwan and US stock tracker.\n"
+        f"Today's date is {date.today().isoformat()}.\n"
         "Your primary source is the JSON in the CONTEXT block (the user's local\n"
         "portfolio data). You ALSO have TOOLS — call them whenever you need data\n"
         "beyond the snapshot: live quotes for ANY ticker, price history,\n"
@@ -1006,6 +1007,17 @@ def _system_prompt(context_json: str) -> str:
         "Tool rules:\n"
         "- Prefer CONTEXT for what it already answers; call tools for the rest.\n"
         "  Never guess numbers a tool can fetch.\n"
+        "- For performance over a time window, call get_performance. Current\n"
+        "  summary totals are all-time figures, not that window's returns.\n"
+        "  For the last two weeks use period=2w (14 calendar days). For explicit\n"
+        "  dates provide both start_date and end_date. If no market is specified,\n"
+        "  check each market with recorded trades and report their own currencies.\n"
+        "  State the returned start_date/end_date (weekends use a preceding close).\n"
+        "  For short windows report period_pl and twr_pct; xirr_pct is annualized,\n"
+        "  not the return earned during that window.\n"
+        "  If a market has missing history, explain its reason and still report\n"
+        "  any other market's available results. Never substitute a different\n"
+        "  period, zero returns, or current unrealized P/L for missing performance.\n"
         "- get_trades / get_dividends return contiguous pages. Check total_count\n"
         "  and has_more; use next_offset with the same filters to read older rows.\n"
         "  Never treat one page as the user's entire history.\n"

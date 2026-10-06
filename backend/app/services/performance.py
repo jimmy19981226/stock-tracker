@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Iterable
 
 import time
@@ -114,11 +114,9 @@ def benchmark_name(symbol: str) -> str:
     quote = quotes.get_quote(symbol)
     return quotes.display_name(symbol, fallback=(quote.name if quote else "")) or symbol
 
-# The first build triggers the full value-history sweep (one yfinance "max"
-# fetch per ticker ever traded) — minutes on a throttled cloud IP. Cache the
-# finished report per (user, market, period) so only the first hit pays.
+# Cache a report's exact bounds, so a rolling window advances each day.
 _CACHE_TTL = 900.0
-_cache: dict[tuple[str, str, str], tuple[float, dict]] = {}
+_cache: dict[tuple, tuple[float, dict]] = {}
 _cache_lock = Lock()
 
 
@@ -181,17 +179,47 @@ def invalidate_user(user_id: str) -> None:
             _cache.pop(key, None)
 
 
-def build_performance(db: Session, user_id: str, market: str, period: str) -> dict:
+PERIODS = {"5d", "2w", "14d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"}
+
+
+def _resolve_window(period: str, start_date: str | None = None,
+                    end_date: str | None = None) -> tuple[date | None, date]:
+    today = date.today()
+    if start_date is not None or end_date is not None:
+        if not start_date or not end_date:
+            raise ValueError("Provide both start_date and end_date (YYYY-MM-DD).")
+        try:
+            start, end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Dates must use YYYY-MM-DD.") from exc
+        if start >= end:
+            raise ValueError("start_date must be before end_date.")
+        if end > today:
+            raise ValueError("end_date cannot be in the future.")
+        return start, end
+    if period not in PERIODS:
+        raise ValueError(f"Unsupported performance period: {period}. Use 2w for the last 14 days.")
+    start = None if period == "max" else date.fromisoformat(portfolio._window_start(period))
+    return start, today
+
+
+def build_performance(db: Session, user_id: str, market: str, period: str = "1y", *,
+                      start_date: str | None = None, end_date: str | None = None) -> dict:
+    market = market.upper()
+    if market not in DEFAULT_BENCHMARKS:
+        raise ValueError(f"Unknown market: {market}")
+    start, end = _resolve_window(period, start_date, end_date)
+    period = "custom" if start_date is not None else ("2w" if period == "14d" else period)
     bench_symbol = get_benchmarks(db, user_id).get(market, DEFAULT_BENCHMARKS["US"])
     # The benchmark is part of the cache identity: two symbols produce two
     # different reports for the same (user, market, period).
-    key = (user_id, market, period, bench_symbol)
+    key = (user_id, market, period, bench_symbol, start, end)
     now = time.time()
     with _cache_lock:
         hit = _cache.get(key)
         if hit and now - hit[0] < _CACHE_TTL:
             return hit[1]
-    result = _build(db, user_id, market, period, bench_symbol)
+    result = _build(db, user_id, market, period, bench_symbol, start, end)
     # Never cache an empty report — that's a failed value-history build
     # (throttled Yahoo), not a fact.
     if result["portfolio_series"]:
@@ -201,12 +229,17 @@ def build_performance(db: Session, user_id: str, market: str, period: str) -> di
 
 
 def _build(db: Session, user_id: str, market: str, period: str,
-           bench_symbol: str) -> dict:
+           bench_symbol: str, start: date | None, end: date) -> dict:
     bench_name = benchmark_name(bench_symbol)
     empty = {
         "market": market,
         "currency": quotes.currency_of(market),
         "period": period,
+        "requested_start_date": start.isoformat() if start else None,
+        "requested_end_date": end.isoformat(),
+        "start_date": None,
+        "end_date": None,
+        "status": "history_unavailable",
         "twr_pct": None,
         "twr_annualized_pct": None,
         "xirr_pct": None,
@@ -217,37 +250,57 @@ def _build(db: Session, user_id: str, market: str, period: str,
         "monthly": [],
     }
 
-    series = portfolio.build_value_history(db, user_id, market, "max")
-    if len(series) < 2:
-        return empty
-
     trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     dividends = db.query(Dividend).filter(Dividend.user_id == user_id).all()
+    mtrades = [t for t in trades if (t.market or quotes.market_of(t.ticker)) == market
+               and t.trade_date <= end]
+    if not mtrades:
+        return {**empty, "status": "no_positions", "reason": "No trades recorded in this market."}
+    try:
+        series = (portfolio.build_value_history_range(db, user_id, market, start, end)
+                  if start else portfolio.build_value_history(db, user_id, market, "max"))
+    except portfolio.HistoryUnavailable as exc:
+        return {**empty, "reason": str(exc)}
+    series = [p for p in series if p["date"] <= end.isoformat()]
+    if not series:
+        return {**empty, "status": "no_positions" if start else "history_unavailable",
+                "reason": "No portfolio value history available for the requested dates."}
     fin, fout = _daily_flows(trades, dividends, market)
 
-    start_iso = portfolio._window_start(period)
-    window = [p for p in series if p["date"] >= start_iso]
-    if len(window) < 2:
-        window = series[-2:]
-    # Base = last value before the window (so the first windowed day's move
-    # counts); if the portfolio started inside the window, its first day is
-    # the base instead.
-    before = [p for p in series if p["date"] < window[0]["date"]]
-    base = before[-1] if before else window[0]
-    days_in_window = window[1:] if base is window[0] else window
+    # Two weeks means opening value at the close 14 calendar days ago, not
+    # all-time performance or the last two available points. A weekend or
+    # holiday uses the preceding close, whose actual date is reported.
+    before = [p for p in series if start and p["date"] <= start.isoformat()]
+    if before:
+        base = before[-1]
+    elif start and not any(t.trade_date <= start for t in mtrades):
+        base = {"date": start.isoformat(), "total": 0.0}
+    else:
+        base = series[0]
+    days_in_window = [p for p in series if p["date"] > base["date"]]
+    if not days_in_window:
+        return {**empty, "status": "insufficient_history",
+                "reason": "Opening and closing valuations are unavailable for this window."}
+    window = days_in_window
 
     # --- TWR: chain daily returns with flows neutralized ------------------
     twr = 1.0
     prev = base["total"]
+    prev_date = base["date"]
     curve: list[dict] = [{"date": base["date"], "pct": 0.0}]
     for p in days_in_window:
         d = p["date"]
-        denom = prev + fin.get(d, 0.0)
+        # Records can be dated on weekends/holidays. Include all cash flows
+        # since the preceding valuation rather than losing those payments.
+        incoming = sum(v for day, v in fin.items() if prev_date < day <= d)
+        outgoing = sum(v for day, v in fout.items() if prev_date < day <= d)
+        denom = prev + incoming
         if denom > 1e-9:
-            r = (p["total"] + fout.get(d, 0.0)) / denom - 1.0
+            r = (p["total"] + outgoing) / denom - 1.0
             twr *= 1.0 + r
         curve.append({"date": d, "pct": round((twr - 1.0) * 100, 3)})
         prev = p["total"]
+        prev_date = d
 
     twr_pct = (twr - 1.0) * 100
     d0 = datetime.strptime(base["date"], "%Y-%m-%d").date()
@@ -259,10 +312,11 @@ def _build(db: Session, user_id: str, market: str, period: str,
 
     # --- XIRR over the same window ----------------------------------------
     xflows: list[tuple[date, float]] = []
-    if before:  # opening position counts as buying the portfolio at the start
+    if base["total"] > 0:  # opening position is bought at its opening valuation
         xflows.append((d0, -base["total"]))
-    for p in days_in_window:
-        d = p["date"]
+    for d in sorted(set(fin) | set(fout)):
+        if not base["date"] < d <= window[-1]["date"]:
+            continue
         net = fout.get(d, 0.0) - fin.get(d, 0.0)
         if abs(net) > 1e-9:
             xflows.append((datetime.strptime(d, "%Y-%m-%d").date(), net))
@@ -276,12 +330,17 @@ def _build(db: Session, user_id: str, market: str, period: str,
     period_pl = window[-1]["total"] - base["total"] - contrib + taken
 
     # --- Benchmark, normalized to the portfolio window's first day ---------
-    bars = stock_info.get_history(bench_symbol, "max")
-    bbars = [b for b in bars if b["date"] >= base["date"] and b.get("close")]
+    bars = stock_info.get_history(bench_symbol,
+                                  start_date=(d0 - timedelta(days=14)).isoformat(),
+                                  end_date=d1.isoformat())
+    bbars = [b for b in bars if b["date"] <= d1.isoformat() and b.get("close")]
+    bbase = [b for b in bbars if b["date"] <= base["date"]]
     bench_series: list[dict] = []
     bench_return = None
-    if len(bbars) >= 2:
-        b0 = bbars[0]["close"]
+    if bbase:
+        bbars = [bbase[-1]] + [b for b in bbars if b["date"] > base["date"]]
+    if bbase and len(bbars) >= 2:
+        b0 = bbase[-1]["close"]
         bench_series = [
             {"date": b["date"], "pct": round((b["close"] / b0 - 1.0) * 100, 3)}
             for b in bbars
@@ -328,6 +387,15 @@ def _build(db: Session, user_id: str, market: str, period: str,
         "market": market,
         "currency": quotes.currency_of(market),
         "period": period,
+        "requested_start_date": start.isoformat() if start else None,
+        "requested_end_date": end.isoformat(),
+        "start_date": d0.isoformat(),
+        "end_date": d1.isoformat(),
+        "status": "ok",
+        "opening_value": base["total"],
+        "closing_value": window[-1]["total"],
+        "contributions": round(contrib, 2),
+        "withdrawals": round(taken, 2),
         "twr_pct": round(twr_pct, 2),
         "twr_annualized_pct": round(twr_annualized, 2) if twr_annualized is not None else None,
         "xirr_pct": round(xirr * 100, 2) if xirr is not None else None,

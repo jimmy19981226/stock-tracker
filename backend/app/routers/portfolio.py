@@ -84,14 +84,18 @@ def get_value_history(
 def get_performance(
     market: str = Query("TW", pattern="^(TW|US)$"),
     period: str = Query("1y"),
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     db: Session = Depends(get_db),
     user: str = Depends(get_current_user),
 ):
     """TWR / XIRR / benchmark comparison / monthly P&L for one market.
     See services/performance.py."""
-    if period not in _VALUE_PERIODS:
-        period = "1y"
-    return performance.build_performance(db, user, market=market, period=period)
+    try:
+        return performance.build_performance(db, user, market=market, period=period,
+                                             start_date=start_date, end_date=end_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 class BenchmarkUpdate(BaseModel):

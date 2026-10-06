@@ -624,7 +624,7 @@ def invalidate_user(user_id: str) -> None:
 def _window_start(period: str) -> str:
     """First charted day for a period tab (ISO), used to slice the full
     series. MAX keeps everything."""
-    days = {"5d": 7, "1mo": 32, "3mo": 93, "6mo": 184,
+    days = {"5d": 7, "2w": 14, "14d": 14, "1mo": 32, "3mo": 93, "6mo": 184,
             "1y": 366, "2y": 731, "5y": 1827}
     if period == "ytd":
         return date(date.today().year, 1, 1).isoformat()
@@ -670,7 +670,24 @@ def build_value_history(
     return [p for p in full if p["date"] >= start]
 
 
-def _build_full_value_series(db: Session, user_id: str, market: str) -> list[dict]:
+class HistoryUnavailable(ValueError):
+    """A portfolio cannot be valued completely for the requested dates."""
+
+
+def build_value_history_range(db: Session, user_id: str, market: str,
+                              start_date: date, end_date: date) -> list[dict]:
+    """Replay all trades, but fetch only prices around the requested window.
+
+    The preceding two weeks supply an opening close for weekends/holidays.
+    Closed positions from before the window require no network request.
+    """
+    return _build_full_value_series(db, user_id, market,
+                                   start_date=start_date, end_date=end_date)
+
+
+def _build_full_value_series(db: Session, user_id: str, market: str, *,
+                             start_date: date | None = None,
+                             end_date: date | None = None) -> list[dict]:
     """The whole net-worth curve, first held day → today.
 
     For each ticker ever traded in the market, shares held on each day are
@@ -686,6 +703,7 @@ def _build_full_value_series(db: Session, user_id: str, market: str) -> list[dic
     trades = db.query(Trade).filter(Trade.user_id == user_id).all()
     mtrades = [
         t for t in trades if (t.market or quotes.market_of(t.ticker)) == market
+        and (end_date is None or t.trade_date <= end_date)
     ]
     if not mtrades:
         return []
@@ -697,12 +715,42 @@ def _build_full_value_series(db: Session, user_id: str, market: str) -> list[dic
             (t.trade_date, t.shares if t.type == "buy" else -t.shares)
         )
 
+    if start_date is not None:
+        deltas = {
+            ticker: rows for ticker, rows in deltas.items()
+            if sum(amount for d, amount in rows if d <= start_date) > 1e-9
+            or any(d > start_date for d, _ in rows)
+        }
+        if not deltas:
+            return []
+
+    def history(ticker):
+        if start_date is None:
+            return stock_info.get_history(ticker, "max")
+        return stock_info.get_history(
+            ticker, start_date=(start_date - timedelta(days=14)).isoformat(),
+            end_date=end_date.isoformat())
+
     # Daily closes per ticker, fetched concurrently (each call is cached with
     # a 30-minute TTL in stock_info, so repeat builds are cheap).
     with ThreadPoolExecutor(max_workers=8) as ex:
         hist = dict(
-            zip(deltas, ex.map(lambda tk: stock_info.get_history(tk, "max"), deltas))
+            zip(deltas, ex.map(history, deltas))
         )
+
+    if start_date is not None:
+        missing = []
+        for ticker, rows in deltas.items():
+            held_at_start = sum(amount for d, amount in rows if d <= start_date)
+            buys = [d for d, amount in rows if d > start_date and amount > 0]
+            if held_at_start <= 1e-9 and not buys:
+                raise HistoryUnavailable("Trade history cannot establish a position for " + ticker)
+            anchor = start_date if held_at_start > 1e-9 else min(buys)
+            if not any(b["date"] <= anchor.isoformat() and b.get("close")
+                       for b in hist[ticker]):
+                missing.append(ticker)
+        if missing:
+            raise HistoryUnavailable("Historical opening prices unavailable for " + ", ".join(missing))
 
     # Union of bar dates across the market's tickers, as ISO strings, starting
     # at this market's first trade — with period=max the bars reach back to
@@ -712,6 +760,8 @@ def _build_full_value_series(db: Session, user_id: str, market: str) -> list[dic
         d
         for d in {b["date"] for bars in hist.values() for b in bars}
         if d >= first_trade
+        and (start_date is None or d >= (start_date - timedelta(days=14)).isoformat())
+        and (end_date is None or d <= end_date.isoformat())
     )
     if not dates:
         return []
@@ -735,4 +785,8 @@ def _build_full_value_series(db: Session, user_id: str, market: str) -> list[dic
 
     out = [{"date": d, "total": round(totals[d], 2)} for d in dates]
     first = next((i for i, row in enumerate(out) if row["total"] > 0), None)
+    # Keep the zero opening balance when a position was first bought inside
+    # a bounded window, so its initial purchase/fees remain in performance.
+    if start_date is not None:
+        return out
     return out[first:] if first is not None else []

@@ -17,7 +17,7 @@ import json
 import time
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from threading import Lock
 from typing import Any
 
@@ -30,7 +30,7 @@ _HISTORY_NEG_TTL = 300.0       # empty/failed history: retry after 5 minutes
 _FINANCIALS_TTL = 6 * 3600.0   # 6 hours — month/quarter data updates rarely
 
 _fundamentals_cache: dict[str, tuple[float, dict]] = {}
-_history_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
+_history_cache: dict[tuple, tuple[float, list[dict]]] = {}
 _monthly_revenue_cache: dict[str, tuple[float, list[dict]]] = {}
 _quarterly_financials_cache: dict[str, tuple[float, list[dict]]] = {}
 _lock = Lock()
@@ -197,18 +197,20 @@ def _history_symbol_candidates(sym: str) -> list[str]:
     return out
 
 
-def get_history(ticker: str, period: str = "1y") -> list[dict]:
+def get_history(ticker: str, period: str = "1y", *,
+                start_date: str | None = None, end_date: str | None = None) -> list[dict]:
     """Daily OHLCV bars for the requested period.
 
     period: yfinance shorthand — ``1mo``, ``3mo``, ``6mo``, ``1y``, ``2y``,
     ``5y``, ``max``. Returned as a list of
     ``{date, open, high, low, close, volume}`` dicts, oldest first.
+    Explicit dates override period; both bounds are inclusive to callers.
     """
     import yfinance as yf
 
     now = time.time()
     sym = resolve_symbol(ticker)
-    key = (sym, period)
+    key = (sym, period, start_date, end_date)
     with _lock:
         cached = _history_cache.get(key)
         if cached:
@@ -220,9 +222,17 @@ def get_history(ticker: str, period: str = "1y") -> list[dict]:
                 return cached[1]
 
     df = None
+    request = {"period": period, "auto_adjust": False, "timeout": 8}
+    if start_date or end_date:
+        request["period"] = None
+        if start_date:
+            request["start"] = start_date
+        if end_date:
+            # Yahoo's end is exclusive; our performance window includes it.
+            request["end"] = (date.fromisoformat(end_date) + timedelta(days=1)).isoformat()
     for candidate in _history_symbol_candidates(sym):
         try:
-            df = yf.Ticker(candidate).history(period=period, auto_adjust=False)
+            df = yf.Ticker(candidate).history(**request)
         except Exception:
             df = None
         if df is not None and not df.empty:

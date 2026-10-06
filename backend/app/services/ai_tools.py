@@ -28,6 +28,8 @@ _TAIPEI = timezone(timedelta(hours=8))
 _MARKET = {"type": "string", "enum": ["TW", "US"]}
 _PERIOD = {"type": "string",
            "enum": ["5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"]}
+_PERFORMANCE_PERIOD = {"type": "string", "enum": ["2w", *_PERIOD["enum"]],
+                       "description": "Use 2w for the last two weeks (14 calendar days)."}
 
 # name, description, parameters (JSON schema), label (status text shown in-app
 # while the tool runs).
@@ -155,11 +157,18 @@ TOOLS: list[dict] = [
         "description": (
             "Performance metrics for one market's portfolio over a period: "
             "time-weighted return (TWR), money-weighted return (XIRR), "
-            "benchmark comparison, monthly P&L."
+            "benchmark comparison, monthly P&L, exact opening/closing dates "
+            "and cash flows. Use period=2w for the last two weeks. For other "
+            "specific dates, provide both start_date and end_date; they "
+            "override period. Missing historical prices are reported explicitly."
         ),
         "parameters": {
             "type": "object",
-            "properties": {"market": _MARKET, "period": _PERIOD},
+            "properties": {
+                "market": _MARKET, "period": _PERFORMANCE_PERIOD,
+                "start_date": {"type": "string", "description": "Opening date, YYYY-MM-DD; requires end_date"},
+                "end_date": {"type": "string", "description": "Closing date inclusive, YYYY-MM-DD; requires start_date"},
+            },
             "required": ["market"],
         },
         "label": "Computing performance…",
@@ -856,7 +865,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         period = args.get("period") or "1y"
         with SessionLocal() as db:
             return {"performance": performance.build_performance(
-                db, user_id, market=market, period=period)}, None
+                db, user_id, market=market, period=period,
+                start_date=args.get("start_date"), end_date=args.get("end_date"))}, None
 
     if name == "get_dividend_calendar":
         with SessionLocal() as db:
