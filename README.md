@@ -18,9 +18,9 @@ Track Taiwan and US equities through a native iOS app and a responsive web dashb
 ## Product tour
 
 <p align="center">
-  <img src="docs/screenshots/ios-overview.png" width="220" alt="iOS overview combining Taiwan and US portfolio values" />
-  <img src="docs/screenshots/ios-assistant.png" width="220" alt="Portfolio assistant answering a question using account data" />
-  <img src="docs/screenshots/ios-confirm-card.png" width="220" alt="Review card requiring confirmation before a proposed record change" />
+  <img src="docs/screenshots/ios-overview.png" width="30%" alt="iOS overview combining Taiwan and US portfolio values" />
+  <img src="docs/screenshots/ios-assistant.png" width="30%" alt="Portfolio assistant answering a question using account data" />
+  <img src="docs/screenshots/ios-confirm-card.png" width="30%" alt="Review card requiring confirmation before a proposed record change" />
 </p>
 <p align="center"><em>Track a portfolio → ask a question → review a proposed change.</em></p>
 
@@ -40,7 +40,7 @@ AI Stock Studio brings holdings, trades, dividends, market data, and AI assistan
 ## AI architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
     I[SwiftUI app] --> A[FastAPI chat and SSE]
     W[Read-only React dashboard] --> R[Scoped web API]
     A <--> L[LLM provider]
