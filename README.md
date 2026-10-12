@@ -24,6 +24,8 @@ Track Taiwan and US equities through a native iOS app and a responsive web dashb
 </p>
 <p align="center"><em>Track a portfolio → ask a question → review a proposed change.</em></p>
 
+**Team project.** AI Stock Studio was developed collaboratively. This repository presents the shared system, with implementation credit belonging to its contributors.
+
 AI Stock Studio brings holdings, trades, dividends, market data, and AI assistance into one self-hosted application. The engineering focus is keeping financial calculations in application services while allowing a language model to query those services and explain their results.
 
 | Capability | Implementation |
