@@ -40,7 +40,7 @@ To use a **local dev backend** instead (e.g. to test code changes):
    set the backend URL to `http://127.0.0.1:8011` (simulator) — or your Mac's
    LAN IP on a physical device, with the server started using `--host 0.0.0.0`.
 
-See `docs/SELF_HOSTING_WINDOWS.md` for running your own always-on backend.
+See [`docs/SELF_HOSTING_WINDOWS.md`](../docs/SELF_HOSTING_WINDOWS.md) for running your own always-on backend.
 
 Or build + launch from the command line:
 

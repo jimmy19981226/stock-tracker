@@ -13,7 +13,7 @@ prices. It is strictly **read-only** — nothing here can edit your data.
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev          # http://localhost:5173
 ```
 

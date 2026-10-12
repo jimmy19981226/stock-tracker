@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import re
 import time
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -62,6 +63,10 @@ def _mint_token() -> tuple[str, int]:
 
 
 def _token_valid(token: str) -> bool:
+    # Reject non-ASCII and non-canonical input before hashing. Python accepts
+    # Unicode digits in int(), while HMAC payloads and digests are ASCII.
+    if not isinstance(token, str) or not re.fullmatch(r"[0-9]{1,12}\.[0-9a-f]{64}", token):
+        return False
     try:
         expiry_str, sig = token.split(".", 1)
         expiry = int(expiry_str)
@@ -105,7 +110,7 @@ def web_login(body: LoginBody):
             detail="Web dashboard is not enabled (WEB_DASHBOARD_PASSWORD unset).",
         )
     # Constant-time compare so a wrong password can't be timed character by char.
-    if not hmac.compare_digest(body.password or "", expected):
+    if not hmac.compare_digest(body.password.encode("utf-8"), expected.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Incorrect password.")
     token, ttl = _mint_token()
     return {"token": token, "expires_in": ttl}

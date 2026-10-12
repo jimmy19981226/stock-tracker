@@ -1,522 +1,143 @@
 <div align="center">
 
-# ✦ AI Stock Studio
+# AI Stock Studio
 
-A **native iOS app + responsive web dashboard + FastAPI backend** for tracking **Taiwan + US** stock portfolios — live prices, broker-matching P/L, per-stock fundamentals, a **combined net-worth overview** across both markets (NT$ and US$), a Home Screen **widget**, and a **tool-using AI assistant** (**Gemini 3.5 Flash-Lite** on iOS) that calls 30 typed tools over your portfolio, shows its reasoning, keeps generating in the background, can draft, correct or delete records for one-tap confirmation, and renders multi-page **PDF reports** from a Word template on the server.
+**A portfolio-aware AI assistant backed by real account calculations.**
 
-</div>
+Track Taiwan and US equities through a native iOS app and a responsive web dashboard, with a shared FastAPI backend for portfolio accounting, market data, and agent tools.
 
-**Three ways in, one backend:** a native SwiftUI **iPhone app** (with a Home Screen widget), a read-only **web dashboard** for any phone or computer over the internet, and the **FastAPI** backend they both talk to.
+[![CI](https://github.com/jimmy19981226/stock-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/jimmy19981226/stock-tracker/actions/workflows/ci.yml)
+![Backend](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)
+![iOS](https://img.shields.io/badge/iOS-SwiftUI-F05138?logo=swift&logoColor=white)
+![Web](https://img.shields.io/badge/Web-React-149ECA?logo=react&logoColor=white)
 
-<div align="center">
-
-**iOS app** — light and dark, following the system or your own choice
-
-<img src="docs/screenshots/ios-overview.png" width="220" alt="Combined net-worth overview" />
-&nbsp;
-<img src="docs/screenshots/ios-dashboard.png" width="220" alt="Market dashboard" />
-&nbsp;
-<img src="docs/screenshots/ios-stock.png" width="220" alt="Stock detail with trade markers" />
-
-<img src="docs/screenshots/ios-trades.png" width="220" alt="Trade log with year filter" />
-&nbsp;
-<img src="docs/screenshots/ios-dividends.png" width="220" alt="Dividends and the ex-div calendar" />
-&nbsp;
-<img src="docs/screenshots/ios-dark.png" width="220" alt="Dark theme" />
-
-**The assistant** — answers grounded in your own records, a confirm card for
-anything it wants to write, and a PDF when the answer is too big for chat
-
-<img src="docs/screenshots/ios-assistant.png" width="220" alt="AI assistant answer" />
-&nbsp;
-<img src="docs/screenshots/ios-confirm-card.png" width="220" alt="Delete confirm card showing FIFO consequences" />
-&nbsp;
-<img src="docs/screenshots/ios-report-card.png" width="220" alt="PDF report card in chat" />
-
-**PDF reports** — your records rendered against a Word template on the server
-
-<img src="docs/screenshots/ios-report.png" width="220" alt="A rendered dividend year report" />
-
-**Web dashboard** — read-only, any phone or computer over the internet
-
-<img src="docs/screenshots/web-dashboard.png" width="540" alt="Responsive web dashboard" />
-
-**Home Screen widget** — net worth + today's P&L (small &amp; medium)
-
-<img src="docs/screenshots/ios-widget.png" width="560" alt="Home Screen widget" />
+[Product tour](#product-tour) · [AI architecture](#ai-architecture) · [Run locally](#run-locally) · [Tests](#verification) · [Documentation](#documentation)
 
 </div>
 
-> Built because every off-the-shelf portfolio tracker either ignores
-> dividends, charges money, or sends your trade history to a third party.
-> The backend runs anywhere (your machine, or a free Render + Neon deploy),
-> stores everything in SQLite or your own Neon Postgres, and only pulls public
-> market data — TWSE MIS for Taiwan, Yahoo for US — with no broker login. The AI
-> assistant is opt-in and gated by your own provider key.
+## Product tour
 
----
+<p align="center">
+  <img src="docs/screenshots/ios-overview.png" width="220" alt="iOS overview combining Taiwan and US portfolio values" />
+  <img src="docs/screenshots/ios-assistant.png" width="220" alt="Portfolio assistant answering a question using account data" />
+  <img src="docs/screenshots/ios-confirm-card.png" width="220" alt="Review card requiring confirmation before a proposed record change" />
+</p>
+<p align="center"><em>Track a portfolio → ask a question → review a proposed change.</em></p>
 
-## 📱 Native iOS app
+AI Stock Studio brings holdings, trades, dividends, market data, and AI assistance into one self-hosted application. The engineering focus is keeping financial calculations in application services while allowing a language model to query those services and explain their results.
 
-A native **SwiftUI** iPhone app (in [`ios/`](ios/)) talks to the same FastAPI backend — five tabs (Overview · Trades · Assistant · Dividends · Settings), Swift Charts, an animated splash, Google sign-in, Gemini 3.5 Flash-Lite with your own key, Markdown rendering in the assistant, and per-user data scoping.
+| Capability | Implementation |
+| :--- | :--- |
+| **Grounded assistance** | Typed portfolio tools, account-scoped reads, complete filtered totals, and checks on supported numeric answers |
+| **Controlled record changes** | The assistant drafts an action; the iOS app requires confirmation before submitting the write |
+| **Two-market accounting** | Taiwan/US holdings, FIFO cost basis, realized/unrealized P&L, dividends, and currency conversion |
+| **Time-aware analysis** | Dated performance windows, benchmark comparisons, and explicit handling of unavailable history |
+| **Multiple clients** | SwiftUI app, WidgetKit snapshot, and a read-only React dashboard |
+| **Report generation** | Shared calculation services feed local PDF rendering or optional Adobe document templates |
 
-**The design**: a light technical ground with a steel-blue accent, Barlow Condensed numerals over Barlow body text, grouped cards with soft elevation, and exactly one dark field per screen — the net-worth hero. **Both themes ship**: Light / Dark / System, picked in Settings. Gain and loss colours are a setting too (US green-up or TW red-up), because Taiwanese boards paint a rise red — and every P&L value carries a ▲/▼ so the meaning never rests on colour alone. Build the sideloadable `.ipa` with [`ios/rebuild-ipa.sh`](ios/rebuild-ipa.sh) and install it permanently via SideStore — see the [install guide](ios/INSTALL_ON_IPHONE.md). (Screenshots at the top of this README.)
+[Explore all features](docs/FEATURES.md) · [See the screenshot gallery](docs/GALLERY.md)
 
-## 📲 Home Screen widget
-
-A **WidgetKit** Home Screen widget (in [`ios/StockTrackerWidget/`](ios/StockTrackerWidget/)) shows your **combined net worth** and **today's gain/loss** at a glance, with a 🇹🇼 / 🇺🇸 split on the medium size. It works in **Smart Stacks**. The app writes a snapshot to a shared **App Group** (`group.com.aistockstudio.app`) on every overview refresh, so the widget renders instantly with no networking or auth of its own.
-
-## 🌐 Web dashboard (mobile + desktop)
-
-A responsive **read-only** web dashboard (in [`frontend/`](frontend/), React + Vite) lets you check the portfolio from any phone or computer over the internet — net worth, an interactive **net-worth history chart** with period tabs (1M · 3M · 6M · YTD · 1Y · MAX, both markets combined in NT$), an interactive total-earned chart, separate **Taiwan and US holdings cards**, and live prices. Access is gated by a single shared password (`WEB_DASHBOARD_PASSWORD`); it reads the scope set by `WEB_DASHBOARD_USER_ID` (default `legacy`). Deploy it to **Vercel** pointing at your Render backend — see [`frontend/README.md`](frontend/README.md).
-
----
-
-## What's inside
-
-### 🌏 Multi-market overview (TW + US)
-- **Two portfolios, one app** — Taiwan (TWD) and US (USD) holdings each get their own dashboard, while Trades and Dividends are single screens across both markets with a TW/US filter. Market is auto-detected from the ticker format (numeric → TW, letters → US) and is always an explicit, overridable control on the record form.
-- **Overview landing page** — a TW card and a US card showing each market's value, total P/L, and today's move. Tap a card to enter that portfolio; the back button returns you to the overview.
-- **Combined net worth** — both portfolios summed into a single figure shown in **both NT$ and US$**, with the live USD↔TWD rate. The number flashes green/red as it ticks.
-- **Combined unrealized P&L** — the Overview also shows unrealized P&L alone (open positions' gain/loss, US converted to NT$ at the live rate) alongside the all-in Total Return figure, so you can see them separately.
-- **Color-coded P&L** — gains render green, losses red, across the net worth, market cards, summary, and every holding.
-- **US pre-market / after-hours status** — the US market card shows "Pre-Market" / "After Hours" during NYSE/Nasdaq's real extended sessions (an amber dot, distinct from the green "Market open"), instead of collapsing straight to "Market closed". Taiwan cash equities have no analogous evening session, so the TW card stays open/closed only.
-- **DB-driven market config** — trading hours, holidays, currency, and timezone for each market live in the database (`markets` + `market_holidays` tables), not hardcoded, so the open/closed status is correct per market and editable without a redeploy.
-
-### 📊 Live portfolio dashboard
-- Hero **Total Earned** card (realized + dividends) with gradient styling
-- **Total Return** card — realized + dividends + unrealized, your all-in profit
-- Per-currency summary grid: market value, unrealized P/L, realized P/L, dividends, and today's move (accent-colored)
-- Unrealized P/L is **net of estimated exit costs** (sell commission + transaction tax), so it matches your broker's 損益試算 / 獲利率 rather than the gross gain
-- **Cumulative earnings chart** (Swift Charts) stacking realized P/L + dividends
-- **Performance card** — time-weighted return, annualized, and the gap against the market's benchmark index, with the two curves overlaid and twelve months of P&L underneath. Tap the benchmark name to compare against a different index.
-- **Holdings list** — each position with shares, avg cost, live price, today's move, market value and unrealized P&L, plus a weight bar showing its share of the market; sortable by value, today's move, or gain %
-
-Holdings/summary refresh while a portfolio is on screen — every 5 s while that market is open, 60 s otherwise.
-
-### 🔎 Per-stock detail (tap any holding)
-- **Live quote header** + key stats: previous close, day range, market cap, P/E, EPS, beta, dividend yield, a visual **52-week range bar**, **1-year analyst target**
-- **Your position card**: shares, avg cost, market value, realized + unrealized + dividends + total return (and %)
-- **Price-history chart** (1M / 3M / 6M / 1Y / 2Y / 5Y / All) with your buys, sells, and dividends overlaid as markers
-- The backend `/detail` endpoint also serves **monthly revenue (月營收)** and **8 quarters of financials** for any ticker — used to enrich AI answers
-
-### ✦ AI assistant
-- **One Gemini model on iOS** — Gemini 3.5 Flash-Lite with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server). The existing Gemini key is retained; old provider and model selections are ignored.
-- **Tool calling (25 tools)** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, FIFO cost lots, a sale simulation using the app's own 損益試算 arithmetic, position weights, company fundamentals (including 月營收 and quarterly margins), live quotes for up to 10 tickers at once, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, the indices *you* follow, USD/TWD, market hours, web search, and a PDF report when the answer is too big for chat. Each call shows a live status line ("Reading holdings…").
-- **Dated performance questions** — “How is my performance over these two weeks?” uses a 14-calendar-day window (`2w`) for every market with recorded trades. Custom start/end dates are also supported. Opening/closing values, buys, net sale proceeds, fees and paid dividends determine the period's profit; all-time gains are not substituted. The response identifies actual valuation dates and unavailable historical prices. Short windows fetch only the required price range and skip positions closed before it.
-- **It can amend, not just add** — records carry ids, so "that 2330 buy should have been 1,035" produces a **correction**, not a second buy. Corrections, deletions and multi-row imports each get their own confirm card, and a delete card states what the deletion costs — which lots re-open, whose realized P/L moves — computed server-side by re-running FIFO, never written by the model.
-- **Add records by chat** — "I bought 100 shares of 2330 at 1050 today" makes the assistant draft the trade into an in-chat **confirmation card**; nothing is saved until you confirm it. That rule holds for every write the assistant can make, without exception: a write tool returns a proposal, and the record reaches the database through the ordinary endpoint only after you tap.
-- **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and Gemini reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still propose the records it reads once the market's confirmed — a whole statement in one card rather than one card per row. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
-- **Visible reasoning** — Gemini thought summaries, when returned, stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle). The iOS model uses minimal thinking to prioritize responsiveness.
-- **Background generation** — replies keep generating server-side if you switch apps or lock the screen; the finished answer is waiting when you come back. The stop button cancels the server run too.
-- **Always ready** — opening the Assistant pre-warms the backend and pre-builds your portfolio context, so the first message streams immediately.
-- **Streaming replies** rendered as Markdown in the app's own reading voice — headings, bold, lists, code blocks, blockquotes, tables — with the tool lines above them and the "not investment advice" note below.
-- **Portfolio-aware** — every chat carries a snapshot of your holdings + light fundamentals; mention a ticker and its monthly revenue + quarterly margins are attached so the model answers with real numbers.
-- **Chat history** — past conversations are saved; reopen one, long-press to delete, or clear them all.
-
-### 📄 PDF reports
-- **Four reports** — dividend year (TW and US payouts split, gross → tax → net), holdings snapshot, realized P/L & tax summary, and period performance. Export one from **Settings → Reports**, or just ask the assistant for it.
-- **Layout lives in a Word template on the server**, not in Swift. The app sends a template id and a period; the backend assembles the JSON and [Adobe Document Generation](https://developer.adobe.com/document-services/apis/document-generation/) renders template + JSON → PDF. A column, a heading or the page furniture changes **without an app release**.
-- **The numbers come from the same services the screens read**, so a report can't drift from the app. Taiwan cash dividends carry the 2.11% NHI supplementary premium on each payment of NT$20,000 or more; US dividends are shown withheld at the 30% statutory rate; every conversion in a document uses one FX rate, captured at generation and printed on the cover.
-- **Cached on a key that includes a data version** — re-asking for the same report over unchanged records returns the file that already exists and costs no Document Transaction.
-- **Read it in the app** — a full-screen PDFKit viewer with a pager and a share sheet, and the file cached on disk so reopening works offline.
-- Adobe credentials live in server environment only (`ADOBE_CLIENT_ID` / `ADOBE_CLIENT_SECRET`); the app talks only to your backend. **Until they're set** — and the four `.docx` templates are dropped in `backend/app/reports/templates/` — the same payload renders locally, so the whole feature works out of the box and Settings tells you which renderer is live.
-
-### 🛠 Trade & dividend management
-- Add, edit, and delete **trades** (buy/sell) and **dividends**, with the market as an explicit TW/US control that drives the currency, the automatic fee (TW: max(20, gross × 0.1425%); US: flat 1) and validation — a lettered symbol filed under Taiwan is rejected with a specific message rather than silently guessed
-- **Every record has its own page** — market, date, shares, price, fee, gross, total cost or net proceeds, the realized P/L a sell booked, notes, and why the lot reads Open or Closed
-- **Paged logs** — the trade and dividend lists page a dozen rows at a time, and the pager keeps the same position on every page
-- **FIFO cost basis** — realized P/L matches how US brokers report on the 1099 (first-in, first-out); open lots give the cost basis of shares still held
-- Backend **CSV import/export** endpoints (one unified file for trades + dividends) and auto-seed from `backend/data/seed/portfolio.csv` on first boot
-- **AI image import** — snap a brokerage statement/screenshot and a vision model extracts the trades + dividends to review before saving. You can add a **free-text note** alongside the image (e.g. "US trade in USD", "the 優群 row is 3217") that the model uses to disambiguate, and it resolves a Taiwan **company name → stock code** when the document shows only the name.
-
-### 📲 Home Screen widget (iOS)
-- Small and medium **WidgetKit** widgets showing combined net worth + today's P&L, with a TW/US breakdown on medium
-- Smart-Stack compatible; fed by a shared App Group snapshot the app writes on each refresh (no networking/auth in the extension)
-
-### 🔐 Accounts & data
-- **Google sign-in** (login only) via the native OAuth flow — or continue as a guest
-- **Per-user data scoping** — each signed-in account sees only its own trades, dividends, and chats; un-authenticated requests fall back to a shared "legacy" bucket
-
----
-
-## Tech stack
-
-```
-Backend                                iOS app (native)
-─────────────────                      ─────────────────
-FastAPI                                Swift + SwiftUI
-SQLAlchemy 2.0                         Swift Charts · WidgetKit (Home Screen widget)
-  · SQLite (local default)             URLSession (async/await)
-  · Postgres / Neon (optional)         Keychain (API keys) · App Group (widget data)
-TWSE MIS   (live TW quotes)            ASWebAuthenticationSession (Google)
-Yahoo      (live US quotes + history)
-FinMind    (TW monthly revenue)        Multi-provider AI (your own key):
-google-genai · openai · anthropic        OpenAI / Gemini / Claude
-quote relay + ngrok (cloud TW quotes)
-python-multipart · python-dotenv · psycopg · google-auth
-
-Web dashboard (read-only)
-─────────────────
-React 18 + Vite · dependency-free SVG charts · deployed on Vercel
-password-gated, stateless HMAC token → /api/web/* (scoped to one user)
-```
-
-All market data flows through standardised public endpoints (TWSE MIS, Yahoo, FinMind) — no scraping, no broker login, no paid feeds. Because TWSE MIS only answers from Taiwan IPs, a hosted backend reaches it through a small **quote relay** running on a Taiwan/home connection, exposed at a permanent **ngrok** URL (see [Real-time TW quotes in the cloud](#real-time-tw-quotes-in-the-cloud-the-relay)). US quotes from Yahoo work from anywhere.
-
----
-
-## Architecture
+## AI architecture
 
 ```mermaid
 flowchart LR
-  subgraph iPhone["iPhone — native SwiftUI app"]
-    UI[Overview · Dashboard · Trades<br/>Dividends · Stock detail · Assistant]
-    Widget["Home Screen widget<br/>net worth · today P&L"]
-  end
-  subgraph Web["Browser — web dashboard (read-only)"]
-    WUI[net worth · chart · TW/US holdings]
-  end
-  subgraph Backend["FastAPI"]
-    WebAPI["/api/web/*<br/>password gate · scoped"]
-    Trades["/api/trades · /api/dividends"]
-    Portfolio["/api/portfolio/*<br/>holdings · overview · summary"]
-    Markets["/api/markets<br/>DB-driven config"]
-    Stock["/api/stock/:ticker/detail"]
-    Data["/api/data/*"]
-    AI["/api/ai/*<br/>chat (OpenAI/Gemini/Claude)"]
-    Auth["auth — verify Google ID token<br/>per-user scoping"]
-    Quotes["tw_quotes · yahoo_quotes<br/>5s cache (TW + US)"]
-    SInfo["stock_info.py — 1h fundamentals · 6h financials"]
-    DB[("trades.db / Neon<br/>trades · markets · chats (per user)")]
-  end
-  Google[("Google Sign-In<br/>OAuth — login only")]
-  TWSE[("TWSE MIS<br/>live TW · ~5s")]
-  Relay["quote relay (TW IP)<br/>via ngrok — cloud hop"]
-  YLive[("Yahoo<br/>live US quotes + FX")]
-  YF[("yfinance<br/>history · fundamentals")]
-  FM[("FinMind<br/>monthly revenue")]
-  LLM[("OpenAI · Gemini · Anthropic<br/>user's own key · SSE streaming")]
-  GSearch[("Google Search<br/>via Gemini grounding")]
-
-  UI -- "fetch /api/* (Bearer token)" --> Trades
-  UI --> Portfolio
-  UI --> Markets
-  UI --> Stock
-  UI --> Data
-  UI -- "SSE stream" --> AI
-  UI -- "sign in" --> Google
-  UI -. "writes snapshot (App Group)" .-> Widget
-  WUI -- "password → token" --> WebAPI
-  WebAPI --> DB
-  Trades --> Auth
-  AI --> Auth
-  Trades --> DB
-  Data --> DB
-  Portfolio --> DB
-  Markets --> DB
-  Portfolio --> Quotes
-  Stock --> Quotes
-  Stock --> SInfo
-  AI --> DB
-  AI --> SInfo
-  AI -- "chat (user key)" --> LLM
-  LLM -- "google_search (Gemini)" --> GSearch
-  Quotes --> TWSE
-  Quotes -. "cloud only" .-> Relay
-  Relay --> TWSE
-  Quotes --> YLive
-  SInfo --> YF
-  SInfo --> FM
+    I[SwiftUI app] --> A[FastAPI chat and SSE]
+    W[Read-only React dashboard] --> R[Scoped web API]
+    A <--> L[LLM provider]
+    A --> T[Typed tool dispatcher]
+    T --> P[Portfolio and analytics services]
+    R --> P
+    P --> D[(SQLite or PostgreSQL)]
+    P --> M[Market data adapters]
+    T --> C[Proposed record change]
+    C --> U[User confirmation in iOS]
+    U --> V[Validated record API]
+    V --> D
 ```
 
----
+**Read → calculate → explain.** The assistant can request holdings, filtered records, cost lots, performance, fundamentals, and reports. The backend performs account arithmetic and returns structured results. This makes the calculation path inspectable independently of model output.
 
-## Project layout
+**Propose → review → commit.** Tool-generated writes are proposals. Confirmation cards let the user review additions, corrections, deletions, and imports before ordinary record endpoints persist them.
 
-```
-backend/
-  app/
-    main.py            FastAPI app + CORS + seed-load + .env loader
-    database.py        Trade, Dividend (+ market col), Metadata, Chat,
-                       ChatMessage, Market, MarketHoliday models + seeding
-    schemas.py         Pydantic request/response models
-    routers/
-      trades.py        CRUD + PUT + FIFO open/closed status per row
-      dividends.py     CRUD + PUT for dividends
-      portfolio.py     holdings / overview / summary / earnings / names / quote
-      markets.py       market configs + holiday add/remove (DB-driven)
-      data.py          unified portfolio.csv import + export
-      ai.py            AI Q&A + image import (vision parse, name→code) + chat history
-      webauth.py       read-only web dashboard: password gate + /api/web/* endpoints
-      mobile.py        cross-device QR upload bridge for the AI import
-      stock.py         per-stock detail (parallel live + fundamentals + financials)
-    services/
-      quotes.py        QuoteData + symbol resolution + TW/US market detection
-      tw_quotes.py     TWSE MIS client (batched, 5s cache, name capture)
-      yahoo_quotes.py  US live quotes via Yahoo (5s cache)
-      quote_relay_client.py  cloud → relay hop for TW quotes (ngrok URL)
-      markets.py       DB-driven market config: currency, hours, holidays, open/closed
-      portfolio.py     FIFO cost basis, realized P/L, daily earnings, gross MV
-      stock_info.py    yfinance fundamentals + history + TAIEX,
-                       FinMind monthly revenue, quarterly_income_stmt
-      fx.py            USD↔TWD rate (Yahoo, cached) for combined net worth
-      csv_io.py · xlsx_io.py   unified import / export
-  quote_relay.py       run on a TW connection; cloud reaches MIS through it
-  data/trades.db       (auto-created, gitignored)
-ios/                   native SwiftUI iPhone app (see ios/README.md)
-  StockTracker/
-    App/ Config/ Networking/ Models/ Stores/ Theme/ Util/
-    Auth/              Keychain + Google sign-in (ASWebAuthSession + PKCE)
-    Views/             Overview, Dashboard, Trades, Dividends, StockDetail,
-                       Assistant (Markdown chat + history), Import, Settings
-  StockTrackerWidget/  WidgetKit extension — net worth + today's P&L widget
-  StockTrackerShared/  snapshot model shared by app + widget (App Group)
-  project.yml          XcodeGen spec (app + widget targets, entitlements)
-  rebuild-ipa.sh       build the sideloadable .ipa
-frontend/              read-only web dashboard — React + Vite, deploy to Vercel
-  src/                 api.js · App · Login · Dashboard · Sparkline
-  vercel.json          Vite framework + SPA rewrites
-  README.md            local dev + Vercel deploy + backend env vars
-```
+**Stream → reconnect.** Server-side chat runs stream status and response events to iOS, with persisted chat history and support for background completion. Regression tests exercise the transport, tool execution, data scoping, and calculation paths with synthetic account data.
 
----
+The iOS client currently selects Gemini; the backend also contains provider adapters. Provider availability, model output, and market feeds remain external dependencies. The tests establish specific application behaviors, not a guarantee that every generated answer is correct.
 
-## Quick start
+## Run locally
 
 ### Backend
 
-```powershell
-cd backend
-pip install -r requirements.txt
+Use **Python 3.11+**. SQLite is the default; a PostgreSQL connection is optional.
+
+```bash
+git clone https://github.com/jimmy19981226/stock-tracker.git
+cd stock-tracker/backend
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+cp .env.example .env
+# Edit .env and set WEB_DASHBOARD_PASSWORD to a password of your choice.
 python -m uvicorn app.main:app --reload --port 8011
 ```
 
-API docs: <http://127.0.0.1:8011/docs>
+On Windows, activate with `.venv\Scripts\Activate.ps1`. Open the [local API explorer](http://127.0.0.1:8011/docs) or check `GET /api/health`. A fresh local database starts empty. Add your own records through the iOS client or the API explorer.
 
-> To reach the backend from a physical iPhone on your Wi-Fi, start uvicorn with
-> `--host 0.0.0.0` and set the app's backend URL (Settings) to your Mac's LAN IP.
+### Web dashboard
 
-### iOS app
-
-Open the SwiftUI project in Xcode and Run, or build a sideloadable `.ipa`:
+In another terminal, from the repository root:
 
 ```bash
-cd ios
-xcodegen generate && open StockTracker.xcodeproj   # run from Xcode, or:
-./rebuild-ipa.sh                                    # -> ios/dist/StockTracker.ipa
+cd frontend
+npm ci
+npm run dev
 ```
 
-The app defaults to the deployed backend (change it in the in-app Settings). See
-[`ios/README.md`](ios/README.md) and [`ios/INSTALL_ON_IPHONE.md`](ios/INSTALL_ON_IPHONE.md).
+Open **http://localhost:5173** and enter the dashboard password. Vite forwards `/api` requests to `http://127.0.0.1:8011`. The web client reads the account scope configured by `WEB_DASHBOARD_USER_ID`, which defaults to `legacy`.
 
-### Cloud database (optional)
+### iOS and optional AI
 
-By default the app stores everything in a local SQLite file (`backend/data/trades.db`).
-To use a cloud Postgres instead (e.g. a free [Neon](https://neon.tech) database — handy
-for syncing across devices or deploying), set `DATABASE_URL` in `backend/.env`:
+Generate the project with XcodeGen, open it in Xcode, and set the app's backend URL to your own instance before entering records. The repository's existing app configuration includes a hosted default URL. See the [iOS setup guide](ios/README.md).
 
-```
-DATABASE_URL=postgresql://user:password@ep-xxx.us-west-2.aws.neon.tech/dbname?sslmode=require
-```
+Portfolio tracking can run without an AI provider key. Configure the optional assistant in the iOS settings, or follow the backend environment example for server-managed Gemini access. Request content used by AI features is sent to the selected provider.
 
-The app auto-detects it (routing through `psycopg`) and falls back to SQLite when unset.
+## Verification
 
-### AI assistant (optional)
+```bash
+# From backend/, with the development dependencies installed:
+python -m unittest discover -s tests -v
 
-In the iOS app's **Settings → AI Assistant**, paste **your Gemini API key** — it's stored in the iOS Keychain and sent per request. The model is fixed to **Gemini 3.5 Flash-Lite**. Update the backend dependencies and redeploy the backend alongside the iOS update so Gemini tool calls retain their required signatures.
-
-Optionally set a server-side Gemini key so the app can use Gemini with no per-user key: copy `backend/.env.example` → `backend/.env`, add `GOOGLE_AI_API_KEY=AIza...` (free key at <https://aistudio.google.com/apikey>), and restart the backend.
-
-### Deploy to the cloud (optional)
-
-To reach the app from your phone or any device, host the two pieces — both have free tiers:
-
-- **Database → [Neon](https://neon.tech)** (Postgres). Create a project, copy the connection string.
-- **Backend → [Render](https://render.com)** (Web Service). The repo ships a [`render.yaml`](render.yaml)
-  blueprint — point Render at the repo and set these env vars in the dashboard:
-  `DATABASE_URL` (Neon), `GOOGLE_AI_API_KEY` (optional), `GOOGLE_CLIENT_ID` (for app sign-in),
-  optionally `QUOTE_RELAY_URL` + `QUOTE_RELAY_SECRET` for live TW quotes (see below),
-  and optionally `ADOBE_CLIENT_ID` + `ADOBE_CLIENT_SECRET` to render PDF reports
-  through Adobe Document Generation instead of the built-in local renderer.
-
-The iOS app points at the Render backend URL (set in the app's Settings). The free tier
-"scales to zero," so the first request after idle takes ~30–60 s to wake, then it's fast.
-
-### Real-time TW quotes in the cloud (the relay)
-
-TWSE MIS only answers requests from **Taiwan IPs**, so a cloud-hosted backend can't fetch live TW
-prices directly — it falls back to Yahoo, which is **~15 min delayed** for TW. To get near-real-time
-TW quotes on the deployed app, run the **quote relay** on a machine that *can* reach MIS and expose it
-at a stable URL:
-
-1. **Run** [`tools/start-relay-ngrok.ps1`](tools/start-relay-ngrok.ps1) (Windows). It starts
-   `quote_relay.py` on `localhost:8500` and opens a **permanent [ngrok](https://ngrok.com) tunnel** to it.
-2. **One-time ngrok setup** — a free ngrok account gives you one free static domain; paste your
-   authtoken + domain into `tools/ngrok_authtoken.txt` / `tools/ngrok_domain.txt` (the script reads them).
-3. **Point the backend at it** — set `QUOTE_RELAY_URL` (your ngrok URL) and `QUOTE_RELAY_SECRET`
-   (matching `tools/relay_secret.txt`) in Render's env. The cloud now borrows your machine's TW
-   connection just for the quote hop; everything else stays on the cloud.
-
-The relay is read-only (quotes only — it never touches your DB). TW prices are live while the relay is
-running; when it's off, the app transparently falls back to delayed Yahoo. **US prices need no relay** —
-Yahoo serves them from anywhere. Tell the source apart on `/api/portfolio/quote/2330`: the MIS feed
-returns the Chinese name (台積電) and bid/ask/volume; Yahoo returns the English name only.
-
----
-
-## How it works
-
-- **Market detection** — a ticker's format decides its market: numeric codes (`2330`, `00919`, `00937B`) → **TW / TWD**, alphabetic symbols (`NVDA`, `BRK.B`) → **US / USD**. Each trade/dividend also carries an explicit `market` column.
-- **Ticker resolution** — bare 4-6 digit TW codes auto-suffix to `xxxx.TW`; US symbols resolve directly.
-- **Live quotes** — TW tickers go to **TWSE MIS** (batched into one HTTP call per refresh, probing both `tse_` 上市 and `otc_` 上櫃 prefixes); US tickers go to **Yahoo**. Both are cached ~5 s server-side so the 5 s client poll tracks the broker closely without hammering either source.
-- **TW stock names are always Traditional Chinese** — sourced from FinMind's `TaiwanStockInfo` dataset (e.g. `2330` → 台積電), independent of which quote source actually answered. Without this, a cloud deploy with no quote relay configured falls back to Yahoo for TW quotes too, whose name field is English — this keeps the display name correct either way.
-- **Combined net worth** — the Overview sums both portfolios into one figure shown in NT$ **and** US$, converting with a live USD↔TWD rate (Yahoo, cached). If a market that holds positions is missing a live value, the combined total blanks rather than showing a fabricated number.
-- **Cost basis** — FIFO (first-in, first-out), matching US broker 1099 reporting. A sell consumes the oldest lots first; realized P/L is proceeds minus those lots' cost (minus fees), and the remaining lots are the cost basis of shares still held.
-- **Market value** — `current_price × shares`, gross. Matches 資產市值 / 總現值 in most TW broker apps.
-- **Unrealized P/L** — market value − cost basis − estimated exit cost (sell commission 0.1425% + securities transaction tax: 0.3% shares / 0.1% equity ETFs / 0% bond ETFs, each floored). This nets out the cost of liquidating, so it lines up with the broker's 損益試算 / 獲利率 columns rather than the gross gain.
-- **Open vs closed status** — FIFO-matched per ticker: buys queue up; sells consume buy lots front-first; any buy lot with leftover shares is `open`, fully-consumed buys and all sells are `closed`.
-- **Per-stock detail** — `/api/stock/{ticker}/detail` aggregates the live quote + yfinance fundamentals (1 h cache) + daily history + FinMind monthly revenue (TW) + yfinance quarterly financials (6 h cache) + your local trades / dividends in one call. The five upstream fetches run **concurrently**, so the modal loads in ~the slowest single call instead of the sum.
-- **AI context** — every chat sends your full portfolio JSON + light fundamentals on every holding. If your question mentions a ticker, deep monthly revenue + quarterly margins for that ticker also get attached so the model can answer trend questions with citations.
-
-### Live data flow
-
-While a portfolio is on screen the app polls `/api/portfolio/{holdings,summary}` — every **5 s** while that market is open, **60 s** otherwise — and pauses when you leave the screen. Server-side quote caches (~5 s) absorb duplicate calls, and `names` is cached ~10 min so closed positions aren't re-fetched. Each market's open/closed status comes from the DB `markets` config (TW 09:00–13:30 Taipei, US 09:30–16:00 New York), editable without a redeploy.
-
-Outside market hours MIS rolls `y` (yesterday's close) over to today's close, but the parser caches the last good quote per ticker and uses bid/ask midpoint / `o` (today's open) as fallbacks — so the TODAY column doesn't collapse to 0 % between trades.
-
----
-
-## CSV import / export
-
-The backend uses **one unified CSV** for both trades and dividends, via the `/api/data/export` and `/api/data/import` endpoints.
-
-Each row's `kind` column tells the backend whether it's a trade or a dividend:
-
-```
-kind,type,ticker,shares,price,date,fee,amount,notes
-trade,buy,2330,100,950,2024-01-15,28,,initial buy
-trade,sell,2330,100,1100,2024-06-01,30,,closed
-dividend,,2330,,,2024-08-15,,5,Q2 cash dividend
+# From frontend/:
+npm ci
+npm run build
 ```
 
-- For `kind=trade`: fill `type` (buy/sell), `shares`, `price`, `date`, `fee`, `notes` (optional). Leave `amount` blank.
-- For `kind=dividend`: fill `ticker`, `date`, `amount`, `notes` (optional). Leave the trade-only columns blank.
-- Dates accept `YYYY-MM-DD`, `YYYY/MM/DD`, or `MM/DD/YYYY`.
-- Two import modes: **append** (default, adds rows) and **replace** (wipes existing trades + dividends, then imports). The `kind=replace` mode is used for round-trip identity testing.
+The backend suite covers account isolation, tool calls, confirmation proposals, image handling, exact dated returns, malformed credentials, Unicode passwords, and token expiry/rotation. Ordinary runs skip the explicitly opt-in live Gemini tests. CI runs the backend tests and a clean web build; native iOS tests require Xcode.
 
-### Auto-seed on first boot
+## Code guide
 
-Drop a file at `backend/data/seed/portfolio.csv` and the backend loads it on startup — **but only when both tables are empty.** First boot with no DB → the seed file is imported automatically. Once you have any data → the seed file is ignored. To re-seed: delete `backend/data/trades.db`, then restart.
+| Start here | What to inspect |
+| :--- | :--- |
+| [`ai_tools.py`](backend/app/services/ai_tools.py) | Tool schemas, dispatch, and proposed actions |
+| [`ai_analytics.py`](backend/app/services/ai_analytics.py) / [`ai_answers.py`](backend/app/services/ai_answers.py) | Filtered analysis and supported numeric answer checks |
+| [`ai.py`](backend/app/routers/ai.py) | Chat lifecycle, streaming, and provider integration |
+| [`portfolio.py`](backend/app/services/portfolio.py) / [`performance.py`](backend/app/services/performance.py) | FIFO accounting and dated performance calculations |
+| [`backend/tests/`](backend/tests/) | Integration tests with isolated databases and stubbed external services |
+| [`ios/`](ios/) / [`frontend/`](frontend/) | Native app and browser dashboard |
 
----
+## Deployment boundaries
 
-## Endpoints
+The backend retains a **guest/legacy account** for local and single-user operation. The web dashboard password protects `/api/web/*`; it does not lock every backend endpoint. The first verified Google account can adopt legacy records. Review these behaviors in [development and deployment notes](docs/DEVELOPMENT.md) before exposing a real portfolio on a public server.
 
-| Method | Path                                | Purpose                                     |
-|--------|-------------------------------------|---------------------------------------------|
-| GET    | /api/health                         | liveness                                    |
-| GET    | /api/trades                         | list trades, newest first                   |
-| POST   | /api/trades                         | create a trade                              |
-| PUT    | /api/trades/{id}                    | update a trade                              |
-| DELETE | /api/trades/{id}                    | delete a trade                              |
-| GET    | /api/dividends                      | list dividends, newest first                |
-| POST   | /api/dividends                      | create a dividend                           |
-| PUT    | /api/dividends/{id}                 | update a dividend                           |
-| DELETE | /api/dividends/{id}                 | delete a dividend                           |
-| GET    | /api/data/export                    | download unified portfolio CSV              |
-| POST   | /api/data/import?mode={append,replace} | upload unified CSV                       |
-| GET    | /api/data/last-export               | timestamp of most recent export             |
-| GET    | /api/portfolio/holdings             | per-ticker open positions + live P/L (TW + US) |
-| GET    | /api/portfolio/overview             | TW + US summary cards + combined net worth (NT$ & US$) + FX |
-| GET    | /api/portfolio/summary              | per-currency totals incl. dividends + total earned |
-| GET    | /api/portfolio/names                | ticker → short-name map (e.g. 2330→台積電)    |
-| GET    | /api/portfolio/realized-history?days=N | daily cumulative realized P/L            |
-| GET    | /api/portfolio/earnings-history?days=N | daily cumulative realized + dividends    |
-| GET    | /api/portfolio/quote/{ticker}       | live spot quote (price + name)              |
-| GET    | /api/stock/{ticker}/detail?period=  | live + fundamentals + history + financials (parallel-fetched) |
-| GET    | /api/markets                        | market configs (TW/US): currency, timezone, hours, holidays |
-| POST   | /api/markets/{code}/holidays        | add a market closure (date, name?) — no redeploy |
-| DELETE | /api/markets/{code}/holidays/{date} | remove a market closure                     |
-| GET    | /api/ai/status                      | whether GOOGLE_AI_API_KEY is configured     |
-| POST   | /api/ai/chat                        | multipart (`message` + optional `chat_id` + optional image `file`) → SSE stream (`init`→`status`/`thinking`/`chunk`/`action`→`done`); tool-calling loop, runs detached server-side; provider via `X-AI-Provider`/`X-AI-Key` |
-| POST   | /api/ai/chats/{id}/stop             | cancel that chat's in-flight generation (partial reply persisted) |
-| POST   | /api/ai/prewarm                     | wake backend + pre-build chat context (called when the Assistant opens) |
-| POST   | /api/ai/parse-records               | upload an image/PDF (+ optional `instructions` note), get `{trades, dividends, notes}` back — read-only, nothing written to DB |
-| GET    | /api/ai/chats                       | list saved conversations, newest first      |
-| GET    | /api/ai/chats/{id}                  | fetch one conversation with all messages    |
-| PATCH  | /api/ai/chats/{id}                  | rename a conversation                       |
-| DELETE | /api/ai/chats/{id}                  | delete a conversation (cascades messages)   |
-| POST   | /api/mobile/sessions                | mint a QR upload session, returns `{token, url, expires_in, lan_ip}` |
-| GET    | /api/mobile/sessions/{token}        | desktop polls this; status transitions `pending → received → parsing → ready` |
-| DELETE | /api/mobile/sessions/{token}        | release session bytes when modal closes     |
-| POST   | /api/mobile/sessions/{token}/file   | phone uploads here from the mobile page     |
-| GET    | /m/upload/{token}                   | mobile-friendly upload HTML page (rendered by phone after QR scan) |
-| POST   | /api/reports                        | start a PDF render (`template`, `period`); returns immediately, `cached: true` when the data hasn't changed |
-| GET    | /api/reports                        | the account's recent reports, the template catalogue, and which renderer is live |
-| GET    | /api/reports/{id}                   | poll a render: `pending` → `ready` \| `failed`, with pages, bytes and the FX rate used |
-| GET    | /api/reports/{id}/file              | the PDF itself |
-| GET    | /api/web/config                     | whether the read-only web dashboard is enabled (`WEB_DASHBOARD_PASSWORD` set) |
-| POST   | /api/web/login                      | exchange the dashboard password for a stateless 12h bearer token |
-| GET    | /api/web/overview · holdings · summary · earnings-history · trades · dividends | read-only data for the web dashboard, scoped to `WEB_DASHBOARD_USER_ID` (Bearer token required) |
+Market feeds may be delayed or unavailable, historical coverage varies, and brokerage fee/tax assumptions may differ from your records. AI output and portfolio metrics support personal analysis; verify consequential decisions against authoritative records.
 
----
+## Documentation
 
-## AI assistant
-
-The **Assistant** tab gives natural-language Q&A over your portfolio using **Gemini 3.5 Flash-Lite** and your own Gemini key. It streams Markdown replies, reads attached images, and calls portfolio and web-search tools. The backend retains its other provider adapters for API clients; the iOS app always requests this one Gemini model.
-
-### What it knows
-
-- Every open position with **light fundamentals** (sector, P/E, EPS, market cap, 52-week range, dividend yield, beta, 1-year analyst target, earnings / ex-div dates).
-- Every trade and dividend you've recorded.
-- For tickers you mention in the question (or in recent turns): **24 months of monthly revenue with YoY %** and **8 quarters of revenue / EPS / margins**.
-- **Whatever its tools return** — 30 typed tools cover portfolio reads (summary, holdings, trades and dividends with ids, FIFO lots, allocation weights), market data (batched quotes, price history at daily/weekly/monthly, FX, market hours with the next open/close), company data (fundamentals, 月營收, eight quarters of margins), analytics (TWR/XIRR/benchmark performance, dividend calendar, net-worth history, a sale simulation), dated record totals, performance comparisons and attribution, checked answer rendering, DuckDuckGo **web search** with self-cited sources, write actions (`propose_records`, `update_*`, `delete_*`, `add_*`) that only ever *propose* records for an in-chat confirm card, and `generate_report`, which renders a PDF when an answer is too large or too tabular for chat.
-
-This means questions like *"is 2330's gross margin improving?"* or *"compare 2330's price to its 1-year analyst target"* return tables with real numbers from your data — not generic boilerplate. Ask *"what's the latest news on 2330?"* and Gemini searches the web, writes a summary, and **inline citation chips** link each claim back to its source.
-
-### Streaming, tools & background runs
-
-- The backend streams Server-Sent Events: `init` → `status` (tool progress) / `thinking` (reasoning deltas) / `chunk` (answer tokens) / `action` (proposed records) → `done`. It routes by `X-AI-Provider` / `X-AI-Key`; Gemini can fall back to the server's `GOOGLE_AI_API_KEY`.
-- Generation runs in a **detached server-side worker** — if the app is backgrounded or loses the stream, the reply still completes and persists; the app recovers it automatically on return. `POST /api/ai/chats/{id}/stop` cancels the run.
-- The iOS app consumes the stream with `URLSession.bytes`, renders partial **Markdown** live, streams reasoning into a collapsible section, and turns `action` events into the same confirm card the image import uses.
-- Gemini chat starts with a lightweight, account-scoped ledger index and retrieves detailed facts through tools when needed. Independent reads run concurrently and repeated successful reads are reused within that answer. Quantitative answers reference tool values through `answer_with_data`; the server renders the figures, currencies and dates into Markdown tables or requested JSON. Service failures and the eight-round limit return available data instead of an empty response.
-- Trade/dividend reads accept inclusive date filters. `get_record_summary` computes complete totals beyond page limits using the full FIFO cost ledger; currencies remain separate. `compare_performance` handles rolling and calendar comparisons. `get_performance_attribution` separates contributions, net sales, recorded fees, dividends and per-stock gains, checks them against portfolio P/L, and withholds inconsistent contributor amounts. Historical FX attribution is not included.
-
-### Persistent chat history
-
-- The first user message becomes the chat title (auto-truncated).
-- Tap the **history** button (top-left of the Assistant) for all saved chats with title, message count, and date. Tap a row to reopen it.
-- **Swipe** a row to delete it, or use the **trash** button to clear them all.
-- Tap **✎** (top-right) to start a fresh chat without losing your history.
-
-### What it can / can't do
-
-- ✅ Answer questions from your local data + per-ticker fundamentals + live tool calls (quotes, history, performance, web search — all providers).
-- ✅ Cite web-sourced claims as markdown links with a Sources list.
-- ✅ Draft trades/dividends you dictate into a confirm card (you tap Add to save).
-- ✅ Read a photo you attach in the conversation (Gemini, OpenAI, Claude) and ask which market it's about if that's unclear.
-- ✅ Stream responses token-by-token over SSE, with visible reasoning where the provider exposes it (Claude, Gemini).
-- ❌ Won't give buy/sell recommendations or price predictions, even when relaying analyst opinions found via search — those are framed as observations, never advice.
-- ❌ Won't write to your portfolio directly — write tools only ever propose records for your confirmation.
-
-### Privacy tradeoff
-
-When you ask a question in the iOS app, your portfolio JSON + ticker fundamentals are sent to Google Gemini for inference, using **your own key** or the backend's optional Gemini key. Web-search tool calls may also send search queries to DuckDuckGo. Any photo you attach is sent as an inline image and is replayed on later turns of the same chat so follow-up questions about it still work. Market quotes still happen on your backend. The assistant is entirely opt-in — with no Gemini key available it's disabled and the rest of the app works normally.
-
-> **Free tier note:** Google may use your prompts to improve their models on the free Gemini API tier. Switch to billing-enabled Vertex AI / Cloud if that's a dealbreaker.
-
----
-
-## Privacy
-
-- Your trade data lives in `backend/data/trades.db` (SQLite, on disk).
-- The DB and any `seed/` files are gitignored — never pushed to GitHub.
-- Outbound calls:
-  - **TWSE MIS** (`https://mis.twse.com.tw`) — live TW quotes (directly when local; via your own quote relay when cloud-hosted).
-  - **Yahoo Finance** — live US quotes, daily history + fundamentals, and the USD↔TWD rate (no auth, public).
-  - **FinMind** (`https://api.finmindtrade.com`) — TW monthly revenue (no auth on the free tier).
-  - **ngrok** — only if you run the optional TW quote relay; it tunnels *your* relay (quotes only, never your DB).
-  - **Google AI** (`https://generativelanguage.googleapis.com`) — only when you've set `GOOGLE_AI_API_KEY` and ask a question in the Assistant.
-  - **Google Search** — invoked indirectly by Gemini's `google_search` tool when grounding a reply. URLs returned are Vertex AI redirect URLs that proxy to the actual source on click.
-- No analytics, no telemetry, no third-party storage.
+| Guide | Purpose |
+| :--- | :--- |
+| [Feature reference](docs/FEATURES.md) | Detailed product capabilities |
+| [Screenshot gallery](docs/GALLERY.md) | iOS, web, widget, and report views |
+| [Development and deployment](docs/DEVELOPMENT.md) | Configuration, trust boundaries, tests, and contribution workflow |
+| [iOS setup](ios/README.md) | XcodeGen, simulator/device setup, and assistant configuration |
+| [Web setup](frontend/README.md) | Dashboard authentication and deployment |
+| [Windows self-hosting](docs/SELF_HOSTING_WINDOWS.md) | Existing Windows deployment workflow |
+| [Taiwan quote relay](docs/TW_QUOTE_RELAY.md) | Optional quote relay configuration |

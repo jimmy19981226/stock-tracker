@@ -26,14 +26,14 @@ _CLAIM_FLAG = "legacy_claimed_by"
 def get_current_user(authorization: str | None = Header(default=None)) -> str:
     """FastAPI dependency → the request's user_id.
 
-    No/blank token → ``"legacy"``. A valid Google token → ``"google:<sub>"``.
+    Absent header → ``"legacy"``. Malformed headers → 401. A valid Google token → ``"google:<sub>"``.
     An invalid/expired token → 401.
     """
-    if not authorization:
+    if authorization is None:
         return LEGACY_USER
     parts = authorization.split(" ", 1)
     if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1].strip():
-        return LEGACY_USER
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
 
     user_id = _verify_google_token(parts[1].strip())
     _maybe_adopt_legacy(user_id)
