@@ -158,3 +158,22 @@ This is an Apple limit, no bypass. Resolution chosen: **wait** for the rolling
      VPN + background refresh are on; occasionally iOS skips the window and you
      open SideStore → **Refresh All** (~5 s). Max **3** sideloaded apps; **10**
      new App IDs per 7 days. Depends on the anisette server (SideStore .io).
+
+---
+
+# Option D — Direct install from this Mac (free Apple ID, what worked on 2026-09-05)
+
+No sideloader at all: build + sign with the free team (`D77DF52MVG`) and push over USB.
+
+```bash
+cd ios && ./install-to-iphone.sh
+```
+
+- First time only, on the iPhone: **Settings → General → VPN & Device Management →
+  Developer App → "Apple Development: jimmy19981226@gmail.com" → Trust.**
+- The signature lasts **7 days** (free account). Re-run the script to renew; the
+  app and its data stay in place. Same-week renewals do **not** consume App IDs.
+- Why the script signs manually: the repo lives in an iCloud-synced folder, whose
+  Finder/provenance xattrs make Xcode's own CodeSign step fail with "resource fork,
+  Finder information, or similar detritus not allowed". `ditto --noextattr` fixes it.
+- Don't combine this with SideStore on the same Apple ID (either one revokes the other's cert).

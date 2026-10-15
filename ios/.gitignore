@@ -3,6 +3,7 @@ StockTracker.xcodeproj/
 
 # Xcode / build artifacts
 build/
+build-device/
 dist/
 *.ipa
 DerivedData/
