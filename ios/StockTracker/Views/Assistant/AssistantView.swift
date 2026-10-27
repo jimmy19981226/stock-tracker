@@ -543,7 +543,7 @@ struct AssistantView: View {
     @EnvironmentObject private var settings: AppSettings
     @ObservedObject private var reports = ReportsStore.shared
     @State private var showHistory = false
-    @State private var providerHasKey = AISettings.hasKey
+    @State private var providerHasKey = AISettings.usePersonalKey && AISettings.hasKey
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
 
@@ -571,7 +571,7 @@ struct AssistantView: View {
             if streaming { inputFocused = false }
         }
         .onAppear {
-            providerHasKey = AISettings.hasKey
+            providerHasKey = AISettings.usePersonalKey && AISettings.hasKey
             // Wake a cold backend and pre-build the chat context while the user
             // is still reading, so the first send streams immediately.
             Task { await APIClient.shared.prewarmAI() }

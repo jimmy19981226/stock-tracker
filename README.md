@@ -100,7 +100,7 @@ Open **http://localhost:5173** and enter the dashboard password. Vite forwards `
 
 Generate the project with XcodeGen, open it in Xcode, and set the app's backend URL to your own instance before entering records. The repository's existing app configuration includes a hosted default URL. See the [iOS setup guide](ios/README.md).
 
-Portfolio tracking can run without an AI provider key. Configure the optional assistant in the iOS settings, or follow the backend environment example for server-managed Gemini access. Request content used by AI features is sent to the selected provider.
+Portfolio tracking can run without an AI provider key. In iOS Settings → AI assistant, choose Included AI for the server-managed Gemini connection, or Personal key to use your own key. Switching to Included AI preserves your saved key but does not send it. Follow the backend environment example to configure server-managed access. Request content used by AI features is sent to the selected provider.
 
 ## Verification
 

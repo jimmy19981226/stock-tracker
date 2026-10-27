@@ -1868,6 +1868,28 @@ def _claude_loop(api_key: str, model: str, system_prompt: str,
         messages.append({"role": "user", "content": results})
 
 
+def _gemini_error_category(exc: Exception) -> str:
+    """Classify provider diagnostics without logging keys or request contents."""
+    code = getattr(exc, "code", None)
+    detail = str(exc).lower()
+    if code in (400, 401, 403) and any(marker in detail for marker in (
+        "api_key_invalid", "api key not valid", "api key expired", "api_key_expired",
+        "api key was reported as leaked", "api key has been revoked", "api_key_service_blocked",
+        "api_key_http_referrer_blocked", "api_key_ip_address_blocked", "api_key_android_app_blocked",
+        "api_key_ios_app_blocked", "api_key_api_target_blocked",
+    )):
+        return "invalid_api_key"
+    if code in (401, 403):
+        return "authorization"
+    if code == 429:
+        return "usage_limit"
+    if code in (500, 502, 503, 504):
+        return "provider_unavailable"
+    if code == 400:
+        return "invalid_request"
+    return "unknown"
+
+
 def _gemini_loop(api_key: str, model: str, system_prompt: str,
                  history, user_id: str):
     """Signed tool calls, bounded retries, parallel reads and checked answers.
@@ -1968,8 +1990,11 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
                 with_thoughts = False
                 continue
             code = getattr(exc, "code", None)
-            logging.getLogger(__name__).warning("Gemini request failed: %s, status=%s", type(exc).__name__, code)
-            if code == 429:
+            category = _gemini_error_category(exc)
+            logging.getLogger(__name__).warning("Gemini request failed: %s, status=%s, category=%s", type(exc).__name__, code, category)
+            if category == "invalid_api_key":
+                reason = "Gemini rejected the API key. In Settings → AI assistant, choose Included AI or replace your personal Gemini key."
+            elif code == 429:
                 reason = "Gemini's usage limit was reached. Please try again shortly."
             elif code in (500, 502, 503, 504):
                 reason = "Gemini is temporarily unavailable. Please try again shortly."

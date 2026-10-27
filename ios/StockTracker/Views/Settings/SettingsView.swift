@@ -13,6 +13,7 @@ struct SettingsView: View {
     @FocusState private var focusedField: EditableField?
     @State private var baseURL = AppConfig.baseURL
     @State private var apiKey = ""
+    @State private var usePersonalAIKey = AISettings.usePersonalKey
     @State private var health: String?
     @State private var checking = false
     @State private var quoteSources: QuoteSourcesStatus?
@@ -161,24 +162,44 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("assistant.model")
 
-            LabeledField(label: "Gemini API key") {
-                SecureField("AIza…", text: $apiKey)
-                    .focused($focusedField, equals: .apiKey)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .onChange(of: apiKey) { _, newValue in
-                        AISettings.setApiKey(newValue)
-                    }
+            Picker("AI connection", selection: $usePersonalAIKey) {
+                Text("Included AI").tag(false)
+                Text("Personal key").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("assistant.connection")
+            .onChange(of: usePersonalAIKey) { _, value in
+                AISettings.usePersonalKey = value
+                focusedField = nil
             }
 
-            VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                Link("Get a Gemini API key", destination: AISettings.apiKeyURL)
-                    .foregroundStyle(Theme.accent)
-                Text("Your key is stored in the iOS Keychain and sent per request. Never stored on the server.")
-                    .foregroundStyle(Theme.textSecondary)
+            Text(usePersonalAIKey
+                 ? "Using your Gemini key. If chat rejects requests, switch to Included AI or replace your key."
+                 : "Uses Studio’s configured AI connection. Your saved personal key is kept on this device and is not sent.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if usePersonalAIKey {
+                LabeledField(label: "Gemini API key") {
+                    SecureField("AIza…", text: $apiKey)
+                        .focused($focusedField, equals: .apiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .onChange(of: apiKey) { _, newValue in
+                            AISettings.setApiKey(newValue)
+                        }
+                }
+
+                VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                    Link("Get a Gemini API key", destination: AISettings.apiKeyURL)
+                        .foregroundStyle(Theme.accent)
+                    Text("Your key is stored in the iOS Keychain and sent per request. Never stored on the server.")
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .font(Theme.Typo.caption)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .font(Theme.Typo.caption)
-            .fixedSize(horizontal: false, vertical: true)
 
             toggleRow("Show reasoning while thinking",
                       isOn: Binding(get: { settings.showReasoning },

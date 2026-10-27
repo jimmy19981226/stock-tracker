@@ -240,6 +240,23 @@ class CheckedAnswerTests(TestCase):
         structured = json.loads(ai_answers.render({"format": "json", "facts": facts}, sources))
         self.assertEqual(structured, {"us_profit": 1234567.89, "tw": {"profit": 2000}})
 
+    def test_today_table_rounds_display_artifacts_without_changing_source_json(self):
+        values = {"today_pl": 24383.000000000004, "today_pl_pct": 1.4713336438965874,
+                  "total_value": 1681587, "current_price": 123.456789, "amount": 0.00012345}
+        source = {1: {"market": "TW", **values, "_evidence": self.sources[1]["_evidence"]}}
+        facts = [{"name": "tw_" + field, "source_id": 1, "path": field} for field in values]
+        table = ai_answers.render({"format": "table", "facts": facts}, source)
+        self.assertIn("| TW · Today's gain or loss | TWD 24,383.00 |", table)
+        self.assertIn("| TW · Today's return | 1.47% |", table)
+        self.assertIn("| TW · Portfolio value | TWD 1,681,587.00 |", table)
+        self.assertIn("| TW · Current price | TWD 123.456789 |", table)
+        self.assertIn("| TW · Amount | TWD 0.00012345 |", table)
+        self.assertNotIn("TW · Tw", table)
+        self.assertNotIn("24383.000000000004", table)
+        structured = json.loads(ai_answers.render({"format": "json", "facts": facts}, source))
+        self.assertEqual(structured, {"tw_" + field: value for field, value in values.items()})
+        self.assertEqual(source[1]["today_pl"], values["today_pl"])
+
     def test_interrupted_performance_reply_preserves_readable_currency_dates_and_missing_data(self):
         evidence = {"tool": "get_performance", "retrieved_at": "2026-10-06 20:00:00 UTC"}
         sources = {

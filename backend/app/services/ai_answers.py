@@ -9,7 +9,8 @@ import json
 import math
 import re
 
-_LABELS = {"reason": "Reason", "period_pl": "Profit or loss", "twr_pct": "Time-weighted return", "xirr_pct": "Annualized money-weighted return",
+_LABELS = {"reason": "Reason", "today_pl": "Today's gain or loss", "today_pl_pct": "Today's return", "total_value": "Portfolio value",
+           "period_pl": "Profit or loss", "twr_pct": "Time-weighted return", "xirr_pct": "Annualized money-weighted return",
            "currency": "Currency", "start_date": "Start date", "end_date": "End date",
            "requested_start_date": "Requested opening date", "requested_end_date": "Requested closing date",
            "opening_value": "Opening value", "closing_value": "Closing value", "realized_pl": "Realized profit or loss",
@@ -20,7 +21,7 @@ _LABELS = {"reason": "Reason", "period_pl": "Profit or loss", "twr_pct": "Time-w
 _MONEY_FIELDS = {"amount", "price", "avg_cost", "current_price", "market_value", "cost_basis", "total_value",
                  "period_pl", "period_pl_change", "opening_value", "closing_value", "realized_pl", "unrealized_pl",
                  "cash_earned", "dividends", "fees", "buy_cost", "sell_net_proceeds", "gross_trading_price_pl",
-                 "contributions", "withdrawals", "contributors_total_pl"}
+                 "contributions", "withdrawals", "contributors_total_pl", "today_pl"}
 
 
 def requested_json_fields(question: str) -> list[str] | None:
@@ -123,7 +124,8 @@ def render(args: dict, sources: dict[int, dict], question: str = "") -> str:
         _assign(out, name, value)
         actual_fields.append(name)
         field = path.rsplit(".", 1)[-1]
-        label = _LABELS.get(field, name.replace("_", " ").replace(".", " · ").capitalize())
+        display_name = re.sub(r"^(?:US|TW)[._]", "", name, flags=re.IGNORECASE)
+        label = _LABELS.get(field, display_name.replace("_", " ").replace(".", " · ").capitalize())
         if field in {"start_date", "end_date"} and path.split(".")[0] in {"performance", "current", "previous"}:
             label = "Opening valuation date" if field == "start_date" else "Closing valuation date"
         if name.upper().startswith(("US.", "TW.", "US_", "TW_")):
@@ -134,11 +136,14 @@ def render(args: dict, sources: dict[int, dict], question: str = "") -> str:
             if field in _MONEY_FIELDS and currency:
                 from decimal import Decimal
                 amount = Decimal(str(value))
-                formatted = currency + " " + (format(amount, ",.2f") if amount.as_tuple().exponent >= -2 else format(amount, ",f"))
+                # Totals should not expose binary floating-point artifacts.
+                # Preserve precision for individual prices and distributions.
+                precise = field in {"price", "avg_cost", "current_price", "amount"}
+                formatted = currency + " " + (format(amount, ",f") if precise and amount.as_tuple().exponent < -2 else format(amount, ",.2f"))
             elif field.endswith("percentage_points"):
                 formatted += " percentage points"
             elif field.endswith("_pct") or field.startswith("pct_"):
-                formatted += "%"
+                formatted = f"{value:,.2f}%"
         rows.append((label, formatted))
         used.add(source_id)
     if style == "json":

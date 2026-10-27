@@ -5,7 +5,7 @@ from threading import Barrier
 from unittest import TestCase
 from unittest.mock import patch
 
-from google.genai import types
+from google.genai import errors, types
 
 from app.services import ai_tools
 
@@ -162,6 +162,64 @@ class GeminiToolTests(TestCase):
                 _, events, _ = self.run_loop([ProviderError(code)])
                 self.assertIn(expected, events[-1][1])
                 self.assertNotIn("private provider diagnostic", events[-1][1])
+
+    def test_rejected_personal_keys_are_classified_without_exposing_sdk_diagnostics(self):
+        secret = "synthetic-private-api-key"
+        for code, reason in [(400, "API_KEY_INVALID"), (400, "API_KEY_EXPIRED"),
+                             (403, "API_KEY_SERVICE_BLOCKED"), (403, "API_KEY_HTTP_REFERRER_BLOCKED"),
+                             (403, "API_KEY_IP_ADDRESS_BLOCKED"), (403, "API_KEY_IOS_APP_BLOCKED"),
+                             (401, "API_KEY_API_TARGET_BLOCKED")]:
+            with self.subTest(code=code, reason=reason):
+                failure = errors.ClientError(code, {"error": {
+                    "code": code, "status": "INVALID_ARGUMENT" if code == 400 else "PERMISSION_DENIED",
+                    "message": f"Credential rejected for {secret}",
+                    "details": [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": reason,
+                                 "metadata": {"apiKey": secret, "consumer": "private-project", "referrer": "private-referrer"}}],
+                }})
+                self.assertEqual(ai_tools._gemini_error_category(failure), "invalid_api_key")
+                with self.assertLogs("app.services.ai_tools", level="WARNING") as captured:
+                    requests, events, executed = self.run_loop([failure])
+                self.assertEqual(len(requests), 1)
+                executed.assert_not_called()
+                self.assertIn("Included AI", events[-1][1])
+                self.assertIn("Settings", events[-1][1])
+                safe_output = " ".join(captured.output) + " " + str(events)
+                for private in (secret, "private-project", "private-referrer", "Credential rejected for"):
+                    self.assertNotIn(private, safe_output)
+
+    def test_message_only_invalid_key_error_has_the_same_safe_recovery_guidance(self):
+        failure = errors.ClientError(400, {"error": {"code": 400, "status": "INVALID_ARGUMENT",
+            "message": "API key not valid. Please pass a valid API key. PRIVATE_TEST_SECRET"}})
+        self.assertEqual(ai_tools._gemini_error_category(failure), "invalid_api_key")
+        with self.assertLogs("app.services.ai_tools", level="WARNING") as captured:
+            _, events, _ = self.run_loop([failure])
+        self.assertIn("replace your personal Gemini key", events[-1][1])
+        self.assertNotIn("PRIVATE_TEST_SECRET", str(events) + str(captured.output))
+
+    def test_unrelated_bad_request_is_not_misdiagnosed_as_an_invalid_key(self):
+        failure = errors.ClientError(400, {"error": {"code": 400, "status": "INVALID_ARGUMENT",
+            "message": "candidate_count is unsupported; api_key=PRIVATE_TEST_SECRET",
+            "details": [{"reason": "INVALID_ARGUMENT", "metadata": {"request": "private-input"}}]}})
+        self.assertEqual(ai_tools._gemini_error_category(failure), "invalid_request")
+        with self.assertLogs("app.services.ai_tools", level="WARNING") as captured:
+            _, events, _ = self.run_loop([failure])
+        self.assertIn("try a new chat", events[-1][1])
+        self.assertNotIn("Included AI", events[-1][1])
+        for private in ("PRIVATE_TEST_SECRET", "candidate_count", "private-input"):
+            self.assertNotIn(private, str(events) + str(captured.output))
+
+    def test_credential_rejection_after_tool_read_preserves_only_known_facts(self):
+        failure = errors.ClientError(400, {"error": {"code": 400, "message": "API_KEY_INVALID PRIVATE_TEST_SECRET"}})
+        with self.assertLogs("app.services.ai_tools", level="WARNING") as captured:
+            requests, events, executed = self.run_loop([
+                [chunk(types.Part(function_call=types.FunctionCall(name="get_holdings", args={}, id="read")))],
+                failure,
+            ])
+        self.assertEqual(len(requests), 2)
+        executed.assert_called_once()
+        self.assertIn("Included AI", events[-1][1])
+        self.assertIn("1,234.56", events[-1][1])
+        self.assertNotIn("PRIVATE_TEST_SECRET", str(events) + str(captured.output))
 
     def test_temporary_provider_failure_preserves_checked_data_and_does_not_retry_forever(self):
         class Unavailable(Exception):
