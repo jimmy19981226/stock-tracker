@@ -7,15 +7,24 @@ from server import Handler
 
 class InteractionHandler(Handler):
     def do_POST(self):
+        if self.path == '/api/ai/chats/900/stop':
+            self.rfile.read(int(self.headers.get('Content-Length', 0)))
+            self.send_response(204)
+            self.end_headers()
+            return
         if self.path != '/api/ai/chat':
             return super().do_POST()
-        self.rfile.read(int(self.headers.get('Content-Length', 0)))
+        body = self.rfile.read(int(self.headers.get('Content-Length', 0)))
+        if b'Show a simulated provider error' in body:
+            return self.respond({'detail': 'The sample AI service is temporarily unavailable. Please try again.'}, 503)
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream')
         self.end_headers()
         try:
             self.event({'type': 'init', 'chat_id': 900, 'title': 'Navigation test'})
             self.event({'type': 'chunk', 'delta': 'Checking the sample portfolio…'})
+            if b'Simulate an interrupted reply' in body:
+                return
             time.sleep(10)
             self.event({'type': 'done', 'content': 'Navigation test reply completed once.'})
         except (BrokenPipeError, ConnectionResetError):

@@ -101,6 +101,10 @@ final class KeyboardNavigationTests: XCTestCase {
     }
     func testSettingsKeyboardKeepsNavigation() {
         let app = launch("light", tab: "settings")
+        let personal = app.buttons["Personal key"]
+        XCTAssertTrue(personal.waitForExistence(timeout: 10))
+        for _ in 0..<5 where !personal.isHittable { app.swipeUp() }
+        personal.tap()
         let key = app.secureTextFields["AIza…"]
         XCTAssertTrue(key.waitForExistence(timeout: 10))
         for _ in 0..<5 where !key.isHittable { app.swipeUp() }
@@ -110,6 +114,35 @@ final class KeyboardNavigationTests: XCTestCase {
         snap(app, "keyboard-settings")
         app.buttons["tab.overview"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5)); menu(app, keyboard: false)
+        app.terminate()
+    }
+
+    func testAIConnectionModesLight() { checkAIConnectionModes("light") }
+    func testAIConnectionModesDark() { checkAIConnectionModes("dark") }
+    private func checkAIConnectionModes(_ theme: String) {
+        let app = launch(theme, tab: "settings")
+        let included = app.buttons["Included AI"]
+        let personal = app.buttons["Personal key"]
+        XCTAssertTrue(included.waitForExistence(timeout: 10))
+        for _ in 0..<5 where !included.isHittable { app.swipeUp() }
+        personal.tap()
+        let key = app.secureTextFields["AIza…"]
+        XCTAssertTrue(key.waitForExistence(timeout: 5))
+        for _ in 0..<5 where !key.isHittable { app.swipeUp() }
+        key.tap() // Focus only; preserve the simulator's credential.
+        menu(app, keyboard: true)
+        // Moving to a different tab must dismiss the keyboard, retain the
+        // selected mode, and leave the connection control reachable on return.
+        app.buttons["tab.assistant"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        app.buttons["tab.settings"].tap()
+        XCTAssertTrue(key.waitForExistence(timeout: 5), "Returning to Settings must retain Personal key mode")
+        for _ in 0..<5 where !included.isHittable { app.swipeUp() }
+        included.tap()
+        XCTAssertTrue(key.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Uses Studio’s configured AI connection. Your saved personal key is kept on this device and is not sent."].exists)
+        menu(app, keyboard: false)
+        snap(app, "ai-connection-included-\(theme)")
         app.terminate()
     }
     func testReplyContinuesAcrossTabSwitch() {
@@ -137,6 +170,71 @@ final class KeyboardNavigationTests: XCTestCase {
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label == %@", "Navigation test reply completed once.")).count, 1)
         menu(app, keyboard: false)
         snap(app, "chat-reply-survives-navigation")
+        app.terminate()
+    }
+
+    private func launchInteraction() -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-api.baseURL", "http://127.0.0.1:8109", "-appearance", "dark"]
+        app.launchEnvironment = ["UITEST_GUEST": "1", "UITEST_TAB": "assistant"]
+        app.launch()
+        XCTAssertTrue(app.textFields["assistantComposer"].waitForExistence(timeout: 20))
+        return app
+    }
+
+    private func send(_ text: String, in app: XCUIApplication) {
+        let composer = app.textFields["assistantComposer"]
+        composer.tap(); composer.typeText(text)
+        app.buttons["assistantSend"].tap()
+    }
+
+    func testProviderErrorCanBeFollowedBySuccessfulReply() {
+        let app = launchInteraction()
+        send("Show a simulated provider error", in: app)
+        let error = app.staticTexts["The sample AI service is temporarily unavailable. Please try again."]
+        XCTAssertTrue(error.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Show a simulated provider error"].exists)
+        menu(app, keyboard: false)
+        snap(app, "assistant-provider-error")
+        send("Check the sample portfolio", in: app)
+        XCTAssertTrue(error.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Navigation test reply completed once."].waitForExistence(timeout: 20))
+        menu(app, keyboard: false)
+        snap(app, "assistant-after-provider-error")
+        app.terminate()
+    }
+
+    func testInterruptedReplyShowsRecoveryAndCanStartNewChat() {
+        let app = launchInteraction()
+        send("Simulate an interrupted reply", in: app)
+        let error = app.staticTexts["The connection ended before the assistant finished. Reconnecting to your answer…"]
+        XCTAssertTrue(error.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Checking the sample portfolio…"].exists)
+        menu(app, keyboard: false)
+        snap(app, "assistant-interrupted-reply")
+        app.buttons["New chat"].tap()
+        XCTAssertTrue(error.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Checking the sample portfolio…"].exists)
+        send("Check the sample portfolio", in: app)
+        XCTAssertTrue(app.staticTexts["Navigation test reply completed once."].waitForExistence(timeout: 20))
+        menu(app, keyboard: false)
+        app.terminate()
+    }
+
+    func testStopThenNewChatDoesNotReceiveLateReply() {
+        let app = launchInteraction()
+        send("Check the sample portfolio", in: app)
+        let partial = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Checking the sample portfolio…")).firstMatch
+        XCTAssertTrue(partial.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["assistantSend"].label, "Stop response")
+        app.buttons["assistantSend"].tap()
+        XCTAssertTrue(app.staticTexts["Checking the sample portfolio…"].waitForExistence(timeout: 5))
+        app.buttons["New chat"].tap()
+        XCTAssertTrue(app.staticTexts["Checking the sample portfolio…"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["Navigation test reply completed once."].waitForExistence(timeout: 12))
+        menu(app, keyboard: false)
+        snap(app, "assistant-stopped-new-chat")
         app.terminate()
     }
 

@@ -82,14 +82,45 @@ enum Fmt {
     }
 
     /// "Mar 4, 2025" from an ISO yyyy-MM-dd (or full timestamp) string.
-    static func prettyDate(_ iso: String?) -> String {
+    static func prettyDate(_ iso: String?, timeZone: TimeZone = .current) -> String {
         guard let iso, !iso.isEmpty else { return "—" }
-        let datePart = String(iso.prefix(10))
-        let inFmt = DateFormatter()
-        inFmt.dateFormat = "yyyy-MM-dd"
-        inFmt.timeZone = TimeZone(identifier: "UTC")
-        guard let date = inFmt.date(from: datePart) else { return datePart }
+        let utc = TimeZone(secondsFromGMT: 0)!
+        let date: Date
+        let displayZone: TimeZone
+        if iso.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil {
+            // A record's calendar date is not an instant; never move it to
+            // yesterday when the device is west of UTC.
+            let input = DateFormatter()
+            input.locale = Locale(identifier: "en_US_POSIX")
+            input.calendar = Calendar(identifier: .gregorian)
+            input.timeZone = utc
+            input.dateFormat = "yyyy-MM-dd"
+            input.isLenient = false
+            guard let parsed = input.date(from: iso) else { return iso }
+            date = parsed
+            displayZone = utc
+        } else {
+            // The backend stores naive UTC timestamps. Explicit offsets still
+            // take precedence, and full time must survive local conversion.
+            var timestamp = iso.replacingOccurrences(of: " ", with: "T")
+            if timestamp.range(of: #"(?:[zZ]|[+-]\d{2}:?\d{2})$"#, options: .regularExpression) == nil {
+                timestamp += "Z"
+            }
+            let input = ISO8601DateFormatter()
+            input.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            var parsed = input.date(from: timestamp)
+            if parsed == nil {
+                input.formatOptions = [.withInternetDateTime]
+                parsed = input.date(from: timestamp)
+            }
+            guard let parsed else { return iso }
+            date = parsed
+            displayZone = timeZone
+        }
         let out = DateFormatter()
+        out.locale = Locale(identifier: "en_US_POSIX")
+        out.calendar = Calendar(identifier: .gregorian)
+        out.timeZone = displayZone
         out.dateFormat = "MMM d, yyyy"
         return out.string(from: date)
     }

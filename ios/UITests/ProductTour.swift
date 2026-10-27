@@ -97,7 +97,7 @@ final class ProductTour: XCTestCase {
         snap(app, "final-trade-entry")
         app.buttons["Close"].tap()
         app.buttons["Ask assistant"].tap()
-        XCTAssertTrue(app.staticTexts["A little clarity.\nA better perspective."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["assistant.welcome"].waitForExistence(timeout: 5))
     }
 
     func testFinalHomeDark() {

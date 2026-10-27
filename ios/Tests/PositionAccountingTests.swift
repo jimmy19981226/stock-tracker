@@ -50,3 +50,40 @@ final class PositionAccountingTests: XCTestCase {
               status: .closed)
     }
 }
+
+final class FormatTests: XCTestCase {
+    func testCalendarDatesRemainTheSameAcrossDeviceTimeZones() throws {
+        for zone in ["America/Denver", "America/Los_Angeles", "Asia/Taipei", "Pacific/Kiritimati"] {
+            let timeZone = try XCTUnwrap(TimeZone(identifier: zone))
+            XCTAssertEqual(Fmt.prettyDate("2026-10-27", timeZone: timeZone), "Oct 27, 2026", zone)
+            XCTAssertEqual(Fmt.prettyDate("2026-03-08", timeZone: timeZone), "Mar 8, 2026", zone)
+            XCTAssertEqual(Fmt.prettyDate("2024-02-29", timeZone: timeZone), "Feb 29, 2024", zone)
+        }
+    }
+
+    func testNaiveBackendUTCTimestampsUseTheirFullTimeForLocalDate() throws {
+        let denver = try XCTUnwrap(TimeZone(identifier: "America/Denver"))
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27T18:35:56.123456", timeZone: denver), "Oct 27, 2026")
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27T01:35:56", timeZone: denver), "Oct 26, 2026")
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27 18:35:56.123456", timeZone: denver), "Oct 27, 2026")
+        XCTAssertEqual(Fmt.prettyDate("2026-03-08T06:30:00", timeZone: denver), "Mar 7, 2026")
+        XCTAssertEqual(Fmt.prettyDate("2026-03-08T09:30:00", timeZone: denver), "Mar 8, 2026")
+    }
+
+    func testExplicitUTCAndOffsetsAreConvertedToTheRequestedTimeZone() throws {
+        let denver = try XCTUnwrap(TimeZone(identifier: "America/Denver"))
+        let taipei = try XCTUnwrap(TimeZone(identifier: "Asia/Taipei"))
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27T01:35:56Z", timeZone: denver), "Oct 26, 2026")
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27T01:35:56.123456Z", timeZone: taipei), "Oct 27, 2026")
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27T01:00:00+08:00", timeZone: denver), "Oct 26, 2026")
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27T23:30:00-07:00", timeZone: taipei), "Oct 28, 2026")
+    }
+
+    func testMissingAndInvalidDatesDoNotInventAValidDay() {
+        XCTAssertEqual(Fmt.prettyDate(nil), "—")
+        XCTAssertEqual(Fmt.prettyDate(""), "—")
+        XCTAssertEqual(Fmt.prettyDate("not-a-date"), "not-a-date")
+        XCTAssertEqual(Fmt.prettyDate("2026-02-30"), "2026-02-30")
+        XCTAssertEqual(Fmt.prettyDate("2026-10-27Tinvalid"), "2026-10-27Tinvalid")
+    }
+}

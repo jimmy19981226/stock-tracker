@@ -92,6 +92,15 @@ final class AssistantViewModel: ObservableObject {
             ]
         }
         // UI-test hook: seed a markdown-table reply to screenshot the renderer.
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_LONG_NAME"] == "1" {
+            messages = [ChatMessage(role: "assistant", content: """
+            Metric | Value
+            --- | ---
+            US · Largest name | Taiwan Semiconductor Manufacturing Company Limited
+            US · Largest share | 42.21%
+            Today's gain | US$1,234.56
+            """)]
+        }
         if ProcessInfo.processInfo.environment["UITEST_CHAT_TABLE"] == "1" {
             messages = [
                 ChatMessage(role: "user", content: "How are my TW holdings doing?"),
@@ -541,11 +550,14 @@ struct AssistantView: View {
     @ObservedObject var vm: AssistantViewModel
     @EnvironmentObject private var store: PortfolioStore
     @EnvironmentObject private var settings: AppSettings
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || ProcessInfo.processInfo.environment["UITEST_REDUCE_MOTION"] == "1" }
     @ObservedObject private var reports = ReportsStore.shared
     @State private var showHistory = false
     @State private var providerHasKey = AISettings.usePersonalKey && AISettings.hasKey
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var inputFocused: Bool
+    @State private var runStarted = Date()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -568,7 +580,10 @@ struct AssistantView: View {
         }
         .task { await vm.loadStatus() }
         .onChange(of: vm.isStreaming) { _, streaming in
-            if streaming { inputFocused = false }
+            if streaming { inputFocused = false; runStarted = Date() }
+        }
+        .sensoryFeedback(.success, trigger: vm.isStreaming) { previous, current in
+            previous && !current && vm.error == nil && !vm.streamingText.isEmpty
         }
         .onAppear {
             providerHasKey = AISettings.usePersonalKey && AISettings.hasKey
@@ -583,16 +598,27 @@ struct AssistantView: View {
 
     private var header: some View {
         HStack(spacing: Theme.Space.s) {
-            IconButton(symbol: "clock") { showHistory = true }
-                .accessibilityLabel("Chat history")
-            Text("Assistant")
-                .font(Theme.Typo.headingLg)
+            Image(systemName: "sparkles")
+                .font(Theme.Typo.headingSm)
                 .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .foregroundStyle(Theme.text)
+                .foregroundStyle(Theme.accent)
+                .frame(width: Theme.Assistant.mark, height: Theme.Assistant.mark)
+                .background(Theme.accentTint, in: RoundedRectangle(cornerRadius: Theme.Radius.badge))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Theme.Space.xxs) {
+                Text("Assistant")
+                    .font(Theme.Typo.heading)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .foregroundStyle(Theme.text)
+                Text(AISettings.modelLabel)
+                    .font(Theme.Typo.micro).foregroundStyle(Theme.textSecondary)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+            }
             Spacer(minLength: Theme.Space.xs)
-            TagChip(text: "AI", style: .accent)
+            IconButton(symbol: "clock.arrow.circlepath") { showHistory = true }
+                .accessibilityLabel("Chat history")
             IconButton(symbol: "square.and.pencil") { vm.reset() }
                 .disabled(vm.messages.isEmpty && vm.streamingText.isEmpty)
                 .accessibilityLabel("New chat")
@@ -608,7 +634,7 @@ struct AssistantView: View {
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: Theme.Space.m) {
+                LazyVStack(alignment: .leading, spacing: Theme.Space.cardGap) {
                     if vm.messages.isEmpty && vm.streamingText.isEmpty {
                         emptyState
                     }
@@ -622,23 +648,21 @@ struct AssistantView: View {
                         }
                         MessageView(message: message)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
+                        if index == vm.messages.count - 1, message.role == "assistant",
+                           !vm.isStreaming, vm.error == nil, vm.pendingImport == nil {
+                            followUpActions
+                        }
                     }
 
                     if vm.isStreaming {
                         VStack(alignment: .leading, spacing: Theme.Space.m) {
-                            if let status = vm.streamStatus {
-                                ToolStatusLine(text: status)
-                            }
+                            generatingRow
                             if !vm.thinkingText.isEmpty, settings.showReasoning {
                                 ReasoningBlock(text: vm.thinkingText,
                                                active: vm.streamingText.isEmpty)
                             }
-                            if vm.streamingText.isEmpty {
-                                if vm.thinkingText.isEmpty && vm.streamStatus == nil {
-                                    ToolStatusLine(text: "reading your portfolio…")
-                                }
-                            } else {
-                                AnswerView(text: vm.streamingText + " ▍")
+                            if !vm.streamingText.isEmpty {
+                                AnswerView(text: vm.streamingText + " ▍", isStreaming: true)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -666,27 +690,37 @@ struct AssistantView: View {
                         noKeyBanner
                     }
                     if let error = vm.error {
-                        ErrorBanner(message: error)
-                    }
-                    if vm.isStreaming {
-                        generatingRow
+                        VStack(alignment: .leading, spacing: Theme.Space.m) {
+                            ErrorBanner(message: error)
+                            if let question = vm.messages.last(where: { $0.role == "user" }), !question.content.isEmpty {
+                                Button {
+                                    vm.input = question.content
+                                    inputFocused = true
+                                } label: {
+                                    Label("Edit question and retry", systemImage: "arrow.counterclockwise")
+                                        .font(Theme.Typo.button).foregroundStyle(Theme.accent)
+                                        .frame(minHeight: Theme.Assistant.control)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                     Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, Theme.Space.screenH)
                 .padding(.vertical, Theme.Space.l)
-                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.messages.count)
-                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.isStreaming)
+                .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85), value: vm.messages.count)
+                .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85), value: vm.isStreaming)
             }
             .scrollDismissesKeyboard(.interactively)
             .sensoryFeedback(.impact(weight: .light), trigger: vm.messages.count)
             .onChange(of: vm.messages.count) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
             }
             .onChange(of: vm.streamingText) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             .onChange(of: vm.thinkingText) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             .onChange(of: vm.pendingImport == nil) { _, _ in
-                withAnimation { proxy.scrollTo("bottom", anchor: .bottom) }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
             }
         }
     }
@@ -696,9 +730,48 @@ struct AssistantView: View {
     /// Stop is right there for when that isn't what you wanted.
     private var generatingRow: some View {
         HStack(spacing: Theme.Space.m) {
-            PulsingCaption(text: "✦ generating" + (settings.backgroundGeneration
-                ? " — continues if you leave the app" : ""))
-            SecondaryButton(title: "Stop") { vm.stopStreaming() }
+            Image(systemName: "sparkles")
+                .font(Theme.Typo.headingSm).foregroundStyle(Theme.accent)
+                .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Theme.Space.xxs) {
+                Text(vm.streamingText.isEmpty ? (vm.streamStatus ?? "Connecting to your portfolio…") : "Writing your answer…")
+                    .font(Theme.Typo.detailMed).foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("assistant.progress")
+                TimelineView(.periodic(from: runStarted, by: 1)) { context in
+                    let elapsed = max(0, Int(context.date.timeIntervalSince(runStarted)))
+                    Text(elapsed >= 30 ? "Still working · \(elapsed)s" : "Working on your answer · \(elapsed)s")
+                        .font(Theme.Typo.micro).monospacedDigit().foregroundStyle(Theme.textSecondary)
+                }
+            }
+            Spacer(minLength: Theme.Space.xs)
+        }
+        .appCard(padding: Theme.Space.l, radius: Theme.Radius.inset)
+    }
+
+    private var followUpActions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Space.s) { followUpButtons }
+            VStack(alignment: .leading, spacing: Theme.Space.s) { followUpButtons }
+        }
+    }
+
+    @ViewBuilder private var followUpButtons: some View {
+        ForEach(["Explain this simply", "What should I review?"], id: \.self) { prompt in
+            Button {
+                vm.input = prompt
+                inputFocused = true
+            } label: {
+                Label(prompt, systemImage: "arrow.turn.down.right")
+                    .font(Theme.Typo.captionMed)
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, Theme.Space.m)
+                    .frame(minHeight: Theme.Assistant.control)
+                    .background(Theme.accentTint, in: RoundedRectangle(cornerRadius: Theme.Radius.segment))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("assistant.followUp.\(prompt)")
         }
     }
 
@@ -712,30 +785,51 @@ struct AssistantView: View {
     ]
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.xxl) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 28, weight: .medium))
-                .foregroundStyle(Theme.accent)
-                .frame(width: 64, height: 64)
-                .background(Theme.accentTint, in: RoundedRectangle(cornerRadius: 22))
+        VStack(alignment: .leading, spacing: Theme.Space.cardGap) {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                Text("A little clarity.\nA better perspective.")
-                    .font(Theme.Typo.title).tracking(-0.8).foregroundStyle(Theme.text)
+                Text("YOUR PORTFOLIO, IN FOCUS")
+                    .font(Theme.Typo.eyebrow).foregroundStyle(Theme.textSecondary)
+                Text("Less noise.\nMore understanding.")
+                    .font(Theme.Typo.title).foregroundStyle(Theme.text)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("Explore your investments, understand performance, or turn a screenshot into records.")
+                    .accessibilityIdentifier("assistant.welcome")
+                Text("Ask a question. Explore your holdings. Make sense of what changed.")
                     .font(Theme.Typo.detail).foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            VStack(spacing: Theme.Space.m) {
-                suggestion("Your daily briefing", detail: "What moved your portfolio today", icon: "sun.max", prompt: Self.suggestions[0])
-                suggestion("See the bigger picture", detail: "Compare returns with your benchmark", icon: "chart.xyaxis.line", prompt: Self.suggestions[1])
-                suggestion("Research a holding", detail: "Latest news on your largest investment", icon: "text.magnifyingglass", prompt: Self.suggestions[2])
+            Button {
+                vm.input = Self.suggestions[0]
+                inputFocused = true
+            } label: {
+                VStack(alignment: .leading, spacing: Theme.Space.xl) {
+                    HStack {
+                        Image(systemName: "sun.max")
+                            .font(Theme.Typo.heading).foregroundStyle(Theme.heroText)
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(Theme.Typo.headingSm).foregroundStyle(Theme.heroLabel)
+                    }
+                    VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                        Text("Your daily briefing").font(Theme.Typo.heading).foregroundStyle(Theme.heroText)
+                        Text("A clear view of today's performance, across your markets.")
+                            .font(Theme.Typo.detail).foregroundStyle(Theme.heroLabel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .heroCard(padding: Theme.Space.screenH)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Your daily briefing. What moved your portfolio today")
+            VStack(alignment: .leading, spacing: Theme.Space.m) {
+                Text("EXPLORE WITH ASSISTANT").font(Theme.Typo.eyebrow).foregroundStyle(Theme.textSecondary)
+                suggestion("Compare performance", detail: "See how you track against your benchmark", icon: "chart.xyaxis.line", prompt: Self.suggestions[1])
+                suggestion("Research a holding", detail: "Find context on your largest investment", icon: "text.magnifyingglass", prompt: Self.suggestions[2])
             }
             Label("You review every record before it is saved.", systemImage: "checkmark.shield")
                 .font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, Theme.Space.xl)
+        .padding(.top, Theme.Space.s)
         .padding(.bottom, Theme.Space.m)
     }
 
@@ -745,14 +839,14 @@ struct AssistantView: View {
             inputFocused = true
         } label: {
             HStack(spacing: Theme.Space.l) {
-                Image(systemName: icon).font(.system(size: 20, weight: .regular))
-                    .foregroundStyle(Theme.accent).frame(width: 26)
+                Image(systemName: icon).font(Theme.Typo.headingSm)
+                    .foregroundStyle(Theme.accent).frame(width: Theme.Assistant.mark)
                 VStack(alignment: .leading, spacing: Theme.Space.xxs) {
                     Text(title).font(Theme.Typo.row).foregroundStyle(Theme.text)
                     Text(detail).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "arrow.up.left").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+                Image(systemName: "arrow.up.left").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
             }
             .appCard(padding: Theme.Space.xl)
         }
@@ -808,12 +902,14 @@ struct AssistantView: View {
 
             HStack(spacing: Theme.Space.s) {
                 PhotosPicker(selection: $photoItem, matching: .images) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .medium))
+                    Image(systemName: "photo.badge.plus")
+                        .font(Theme.Typo.headingSm)
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                         .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 44, height: 44)
+                        .frame(width: Theme.Assistant.control, height: Theme.Assistant.control)
                 }
                 .disabled(vm.isSubmittingImport)
+                .accessibilityLabel("Attach a screenshot")
 
                 TextField(vm.pendingAttachment == nil ? "Ask about your portfolio…"
                                                       : "Add a note (optional)…",
@@ -822,14 +918,7 @@ struct AssistantView: View {
                     .lineLimit(1...5)
                     .font(Theme.Typo.body)
                     .foregroundStyle(Theme.text)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 9)
-                    .background(Theme.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
-                            .stroke(Theme.line, lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button,
-                                                style: .continuous))
+                    .padding(.vertical, Theme.Space.m)
                     .onSubmit { vm.send() }
                     .accessibilityIdentifier("assistantComposer")
 
@@ -837,18 +926,21 @@ struct AssistantView: View {
                     if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
                 } label: {
                     Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.onAccent)
-                        .frame(width: 44, height: 44)
-                        .background(vm.isStreaming || vm.canSend ? Theme.accent : Theme.textTertiary)
+                        .font(Theme.Typo.button)
+                        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                        .foregroundStyle(vm.isStreaming || vm.canSend ? Theme.onAccent : Theme.textTertiary)
+                        .frame(width: Theme.Assistant.control, height: Theme.Assistant.control)
+                        .background(vm.isStreaming || vm.canSend ? Theme.accent : Theme.track)
                         .clipShape(Circle())
-                        .contentTransition(.symbolEffect(.replace))
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
                 .disabled(!vm.isStreaming && !vm.canSend)
                 .accessibilityLabel(vm.isStreaming ? "Stop response" : "Send message")
                 .accessibilityIdentifier("assistantSend")
             }
+            .padding(Theme.Space.xs)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.card))
         }
         .padding(.horizontal, Theme.Space.screenH)
         .padding(.top, Theme.Space.m)
@@ -891,16 +983,16 @@ private struct MessageView: View {
                         Spacer(minLength: 40)
                         Text(content)
                             .font(Theme.Typo.body)
-                            .foregroundStyle(Theme.onAccent)
+                            .foregroundStyle(Theme.text)
                             .padding(.horizontal, Theme.Space.l)
                             .padding(.vertical, Theme.Space.m)
-                            .background(Theme.accent)
+                            .background(Theme.accentTint)
                             // 18/18/5/18: the one clipped corner points at the
                             // sender, the way every message app draws a tail
                             // without drawing a tail.
                             .clipShape(UnevenRoundedRectangle(
-                                topLeadingRadius: 18, bottomLeadingRadius: 18,
-                                bottomTrailingRadius: 5, topTrailingRadius: 18,
+                                topLeadingRadius: Theme.Radius.card, bottomLeadingRadius: Theme.Radius.card,
+                                bottomTrailingRadius: Theme.Radius.pill, topTrailingRadius: Theme.Radius.card,
                                 style: .continuous))
                             .textSelection(.enabled)
                     }
@@ -928,14 +1020,47 @@ private struct MessageView: View {
 /// before, as part of a wholesale restyle of this screen, and reverted.
 private struct AnswerView: View {
     let text: String
+    var isStreaming = false
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || ProcessInfo.processInfo.environment["UITEST_REDUCE_MOTION"] == "1" }
+    @State private var copied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            HStack(spacing: Theme.Space.s) {
+                Image(systemName: "sparkles")
+                    .font(Theme.Typo.detailMed).foregroundStyle(Theme.accent)
+                Text("STUDIO").font(Theme.Typo.eyebrow).foregroundStyle(Theme.textSecondary)
+                Spacer()
+                if !isStreaming {
+                    Button {
+                        UIPasteboard.general.string = text
+                        withAnimation(reduceMotion ? nil : .snappy) { copied = true }
+                    } label: {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .font(Theme.Typo.detail)
+                            .foregroundStyle(copied ? Theme.accent : Theme.textSecondary)
+                            .frame(width: Theme.Assistant.control, height: Theme.Assistant.control)
+                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(copied ? "Reply copied" : "Copy reply")
+                    .sensoryFeedback(.success, trigger: copied)
+                    .task(id: copied) {
+                        guard copied else { return }
+                        try? await Task.sleep(for: .seconds(2))
+                        if !Task.isCancelled { copied = false }
+                    }
+                }
+            }
             MarkdownText(markdown: text, serif: false)
                 .textSelection(.enabled)
-            Text("Observation from your data — not investment advice.")
-                .font(Theme.Typo.caption)
-                .foregroundStyle(Theme.textSecondary)
+                .lineSpacing(Theme.Space.xxs)
+            if !isStreaming {
+                Text("Observation from your data — not investment advice.")
+                    .font(Theme.Typo.micro)
+                    .foregroundStyle(Theme.textSecondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contextMenu {
@@ -973,6 +1098,8 @@ private struct ReasoningBlock: View {
     @State private var expanded: Bool
     @State private var userToggled = false
     @State private var started = Date()
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || ProcessInfo.processInfo.environment["UITEST_REDUCE_MOTION"] == "1" }
 
     init(text: String, active: Bool) {
         self.text = text
@@ -984,7 +1111,7 @@ private struct ReasoningBlock: View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 userToggled = true
-                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { expanded.toggle() }
             } label: {
                 HStack(spacing: Theme.Space.s) {
                     Image(systemName: "chevron.right")
@@ -1020,7 +1147,7 @@ private struct ReasoningBlock: View {
         .onChange(of: active) { _, nowActive in
             // Auto-collapse when the thinking ends, unless the reader pinned it.
             if !nowActive && !userToggled {
-                withAnimation(.easeInOut(duration: 0.2)) { expanded = false }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { expanded = false }
             }
         }
     }
@@ -1034,15 +1161,17 @@ private struct ReasoningBlock: View {
 /// card, which has the same job to describe.
 struct PulsingCaption: View {
     let text: String
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || ProcessInfo.processInfo.environment["UITEST_REDUCE_MOTION"] == "1" }
     @State private var dim = false
 
     var body: some View {
         Text(text)
             .font(Theme.Typo.detail)
             .foregroundStyle(Theme.textSecondary)
-            .opacity(dim ? 0.35 : 1)
-            .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: dim)
-            .onAppear { dim = true }
+            .opacity(dim && !reduceMotion ? 0.6 : 1)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: dim)
+            .onAppear { dim = !reduceMotion }
     }
 }
 

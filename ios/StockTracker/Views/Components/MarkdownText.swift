@@ -90,6 +90,19 @@ struct MarkdownText: View {
             Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 2)
 
         case let .table(header, rows):
+            if header.count == 2 {
+                // Metric/value replies must fit the phone. Long company names
+                // wrap; a wide grid would otherwise start partially offscreen.
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    metricRow(header, isHeader: true)
+                    Divider()
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        metricRow(row, isHeader: false)
+                    }
+                }
+                .appCard(padding: Theme.Space.l, radius: Theme.Radius.inset)
+                .accessibilityIdentifier("assistant.metricTable")
+            } else {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
                 ScrollView(.horizontal) {
                     Grid(alignment: .leading, horizontalSpacing: Theme.Space.xxl, verticalSpacing: Theme.Space.m) {
@@ -126,7 +139,31 @@ struct MarkdownText: View {
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
+            }
         }
+    }
+
+    private func metricRow(_ cells: [String], isHeader: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.l) {
+            inline(cells.first ?? "")
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            inline(cells.count > 1 ? cells[1] : "")
+                .foregroundStyle(isHeader ? Theme.textSecondary : textColor)
+                .monospacedDigit()
+                .multilineTextAlignment(.trailing)
+                .lineLimit(cells.count > 1 && isNumericCell(cells[1]) ? 1 : nil)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(isHeader ? Theme.Typo.captionMed : Theme.Typo.detail)
+    }
+
+    private func isNumericCell(_ value: String) -> Bool {
+        value.range(of: #"^[*+\-−\s]*(?:(?:US|NT|TWD|USD)?[$€£¥]?\s*)?[+\-−]?[0-9][0-9,.]*(?:%|[*\s])*$"#,
+                    options: .regularExpression) != nil
     }
 
     private var bodyFont: Font {

@@ -137,6 +137,15 @@ enum Theme {
         static let gridGap: CGFloat = 10
     }
 
+    /// Assistant controls and message rhythm, shared by welcome and chat.
+    enum Assistant {
+        static let control: CGFloat = 44
+        static let mark: CGFloat = 36
+        static let messageInset: CGFloat = 32
+        static let attachment: CGFloat = 56
+        static let illustration: CGFloat = 52
+    }
+
     // MARK: - Typography
     // Native San Francisco. Text styles scale with the user's accessibility setting.
     enum Typo {
