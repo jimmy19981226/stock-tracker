@@ -1,108 +1,117 @@
 import Charts
 import SwiftUI
+import UIKit
 
-/// The market-index strip, pinned above the tab bar on the Overview tab.
-///
-/// Collapsed it is a single scrolling line — the least a market index can be
-/// and still be worth glancing at. Expanded it becomes one recessed card per
-/// index with the day's range and a month of shape. It lives in the navigation
-/// chrome, so it draws no surface of its own beyond the divider that separates
-/// it from the tab bar.
+/// A compact rotating ticker shared by the five main destinations.
+/// Quote values continue to come from PortfolioStore's existing refresh stream.
 struct IndexBarView: View {
-    /// `nil` on the Overview root (show everything); a market on a dashboard.
     let market: MarketCode?
     @EnvironmentObject private var store: PortfolioStore
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var cursor = 0
+    @State private var showDetails = false
     @State private var showEditor = false
-    @State private var expanded = false
     @State private var details: [String: StockDetail] = [:]
 
     private var indices: [IndexQuote] {
         guard let market else { return store.indices }
         return store.indices.filter { $0.market == market }
     }
+    private var canRotate: Bool {
+        indices.count > 1 && scenePhase == .active && !showDetails && !reduceMotion
+    }
 
     var body: some View {
-        if indices.isEmpty {
-            EmptyView()
-        } else {
-            VStack(spacing: 0) {
-                if expanded {
-                    VStack(spacing: Theme.Space.s) {
-                        ForEach(indices) { q in
-                            IndexDetailCard(quote: q, detail: details[q.symbol])
-                                .task { await loadDetail(q.symbol) }
-                        }
-                    }
-                    .padding(.horizontal, Theme.Space.l)
-                    .padding(.top, Theme.Space.m)
-                    .padding(.bottom, 2)
-                }
-
-                HStack(spacing: 0) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: Theme.Space.xl) {
-                            ForEach(indices) { q in
-                                IndexChip(quote: q)
-                            }
-                            Button { showEditor = true } label: {
-                                Text("＋")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(Theme.textTertiary)
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Edit indices")
-                        }
-                        .padding(.horizontal, Theme.Space.l)
-                    }
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.22)) { expanded.toggle() }
-                    } label: {
-                        Image(systemName: expanded ? "chevron.down" : "chevron.up")
-                            .font(.system(size: 11, weight: .semibold))
+        if !indices.isEmpty {
+            let quote = indices[cursor % indices.count]
+            HStack(spacing: 0) {
+                Button(action: advance) {
+                    HStack(spacing: Theme.Space.s) {
+                        Text(quote.name)
+                            .font(Theme.Typo.captionMed)
                             .foregroundStyle(Theme.textStrong)
-                            .frame(width: 36, height: 26)
-                            .contentShape(Rectangle())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .layoutPriority(1)
+                        Spacer(minLength: 0)
+                        Text(Fmt.number(quote.price, digits: 2))
+                            .font(Theme.Typo.captionMed)
+                            .foregroundStyle(Theme.text)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        MovePct(pct: quote.changePct)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(expanded ? "Hide index details" : "Show index details")
+                    .id(quote.symbol)
+                    .transition(.opacity)
+                    .padding(.leading, Theme.Space.m)
+                    .padding(.trailing, Theme.Space.xs)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
-                .padding(.vertical, 6)
-                .padding(.trailing, 4)
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(quote.name), \(Fmt.number(quote.price, digits: 2)), \(Fmt.pct(quote.changePct))")
+                .accessibilityValue(quote.symbol)
+                .accessibilityHint(indices.count > 1 ? "Show the next index" : "Current market index")
+                .accessibilityIdentifier("marketTicker.next")
+
+                Button { showDetails = true } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show all market indices")
+                .accessibilityIdentifier("marketTicker.details")
             }
-            .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
-            .sheet(isPresented: $showEditor) {
-                IndexEditorView().environmentObject(store)
+            .background(Theme.inset, in: RoundedRectangle(cornerRadius: Theme.Radius.button))
+            .padding(.horizontal, Theme.Space.l)
+            .padding(.vertical, 4)
+            .background(Theme.ground)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .task(id: canRotate) {
+                guard canRotate else { return }
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(5)) }
+                    catch { return }
+                    guard !Task.isCancelled else { return }
+                    // VoiceOver users control when the spoken quote changes.
+                    if !UIAccessibility.isVoiceOverRunning { advance() }
+                }
+            }
+            .onChange(of: indices.map(\.symbol)) { _, _ in cursor = 0 }
+            .sheet(isPresented: $showDetails) {
+                SheetScaffold(title: "Market indices", onClose: { showDetails = false }) {
+                    VStack(spacing: Theme.Space.m) {
+                        ForEach(indices) { quote in
+                            IndexDetailCard(quote: quote, detail: details[quote.symbol])
+                                .task { await loadDetail(quote.symbol) }
+                        }
+                        SecondaryButton(title: "Edit indices", fullWidth: true) { showEditor = true }
+                    }
+                }
+                .sheet(isPresented: $showEditor) {
+                    IndexEditorView().environmentObject(store)
+                }
             }
         }
     }
 
-    /// One detail fetch per symbol per screen visit — price and change stay
-    /// live from the store; the fetch only feeds the sparkline and O/H/L.
+    private func advance() {
+        guard indices.count > 1 else { return }
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+            cursor = (cursor + 1) % indices.count
+        }
+    }
+
     private func loadDetail(_ symbol: String) async {
         guard details[symbol] == nil else { return }
-        if let d = try? await APIClient.shared.getStockDetail(symbol, period: .oneMonth) {
-            details[symbol] = d
+        if let detail = try? await APIClient.shared.getStockDetail(symbol, period: .oneMonth) {
+            details[symbol] = detail
         }
-    }
-}
-
-/// One index on the collapsed line: name, level, today's move.
-private struct IndexChip: View {
-    let quote: IndexQuote
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.xs) {
-            Text(quote.name)
-                .font(Theme.Typo.detailMed)
-                .foregroundStyle(Theme.textStrong)
-            Text(Fmt.number(quote.price, digits: 2))
-                .font(Theme.Typo.inlineNum)
-                .foregroundStyle(Theme.text)
-                .rollingNumber(quote.price)
-            MovePct(pct: quote.changePct)
-        }
-        .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: false)
     }
 }
 

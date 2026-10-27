@@ -113,6 +113,7 @@ final class KeyboardNavigationTests: XCTestCase {
         app.terminate()
     }
     func testReplyContinuesAcrossTabSwitch() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-api.baseURL", "http://127.0.0.1:8109", "-appearance", "light"]
         app.launchEnvironment = ["UITEST_GUEST": "1", "UITEST_TAB": "assistant"]
@@ -121,7 +122,13 @@ final class KeyboardNavigationTests: XCTestCase {
         XCTAssertTrue(composer.waitForExistence(timeout: 20))
         composer.tap(); composer.typeText("Check the sample portfolio")
         app.buttons["assistantSend"].tap()
-        XCTAssertTrue(app.staticTexts["Checking the sample portfolio…"].waitForExistence(timeout: 5))
+        // Streaming text includes a trailing cursor. Match the stable content,
+        // then prove this is still an active response before leaving the tab.
+        let partial = app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Checking the sample portfolio…")).firstMatch
+        XCTAssertTrue(partial.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["assistantSend"].label, "Stop response")
+        XCTAssertFalse(app.staticTexts["Navigation test reply completed once."].exists)
         app.buttons["tab.trades"].tap()
         XCTAssertTrue(app.buttons["+ Add trade"].waitForExistence(timeout: 5))
         app.buttons["tab.assistant"].tap()

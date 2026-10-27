@@ -49,7 +49,6 @@ struct OverviewView: View {
                 }
 
                 netWorthChart
-                IndexBarView(market: nil).appListCard()
 
                 Text("Updated \(clock) · \(cadenceNote)")
                     .font(Theme.Typo.caption)

@@ -70,6 +70,9 @@ struct RootView: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            IndexBarView(market: nil)
+        }
         // Keep every destination reachable while typing. SwiftUI moves this
         // safe-area inset above the keyboard and the active screen/composer
         // uses the remaining space. A tab tap dismisses editing first.

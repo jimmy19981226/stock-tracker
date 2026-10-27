@@ -51,3 +51,9 @@ Main navigation must stay visible and tappable above the keyboard. Switching tab
 Run `KeyboardNavigationTests` with both `server.py` (8099) and `interaction_server.py` (8109) running. The latter supplies a deterministic delayed SSE reply without any model call or database, allowing the UI test to leave the assistant and return while generation is in progress. The tests cover both chat themes, every destination, draft preservation, holdings search results, settings focus, numeric keyboard dismissal, trade/dividend cancellation, import cancellation, and exactly one completed response after tab switching.
 
 `AssistantConversationTests` separately checks overlapping history loads, late recovery responses, generation/background cleanup ownership, conversation-specific attachments/proposals, and confirmed import completion after navigation. Navigation within the same conversation preserves its draft; explicitly opening another conversation clears that draft. Confirmed writes continue and refresh the shared portfolio, but their completion must not change the new conversation's transcript or proposal.
+
+## Rotating top ticker
+
+`IndexBarView` now lives in RootView's top safe-area inset on all five destinations. It cycles the user's configured indices every five seconds using existing quote-store values; tapping advances immediately and the chevron opens all index details and the existing editor. Rotation pauses when the app is inactive, the details sheet is open, Reduce Motion is enabled, or VoiceOver is running. Quote refreshes do not reset the selected index.
+
+`MarketTickerTests` verifies automatic and manual advance, placement above page content, persistence across all destinations, and the details sheet in light/dark appearances. Run against the synthetic8099 preview server. Keyboard navigation tests are rerun with the top strip present.
