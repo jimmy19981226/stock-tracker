@@ -24,7 +24,7 @@ for market in ['TW','US']:
     hs=[h for h in HOLDINGS if h['market']==market]
     value=sum(h['market_value'] for h in hs);cost=sum(h['cost_basis'] for h in hs);pl=sum(h['unrealized_pl'] for h in hs);today=sum(h['today_change'] for h in hs)
     dividends=sum(d['amount'] for d in DIVIDENDS if d['market']==market)
-    SUMMARIES.append(dict(currency='TWD' if market=='TW' else 'USD',total_value=value,total_cost=cost,total_pl=pl,total_pl_pct=pl/cost*100,today_pl=today,today_pl_pct=today/(value-today)*100,realized_pl=0,dividends=dividends,total_earned=dividends,year_earned=dividends,year=2026,holdings_count=len(hs)))
+    SUMMARIES.append(dict(currency='TWD' if market=='TW' else 'USD',total_value=value,total_cost=cost,total_pl=pl,total_pl_pct=pl/cost*100,today_pl=today,today_pl_pct=today/(value-today)*100,realized_pl=0,dividends=dividends,total_earned=dividends,year_earned=dividends,year_realized_pl=0,year_dividends=dividends,year=2026,holdings_count=len(hs)))
 FX = 31.8
 TOTAL = SUMMARIES[0]['total_value'] + SUMMARIES[1]['total_value']*FX
 OVERVIEW=dict(tw=SUMMARIES[0],us=SUMMARIES[1],fx=dict(usd_twd=FX,asof=END.isoformat()),combined=dict(twd=TOTAL,usd=TOTAL/FX))
@@ -34,7 +34,7 @@ def history(total):
 
 def detail(ticker):
     h=next((h for h in HOLDINGS if h['ticker']==ticker),HOLDINGS[0]);price=h['current_price']
-    return dict(ticker=ticker,symbol=ticker,name=h['name'],live=dict(price=price,previous_close=price*.99,today_change=price*.01,today_change_pct=1,volume=32540000),fundamentals=dict(currency=h['currency'],pe=25.4,eps=44.5,market_cap=29000000000000,fifty_two_week_high=price*1.1,fifty_two_week_low=price*.65,dividend_yield=1.8,sector='Technology'),position=dict(shares=h['shares'],avg_cost=h['avg_cost'],cost_basis=h['cost_basis'],market_value=h['market_value'],exit_cost=h['exit_cost'],unrealized_pl=h['unrealized_pl'],unrealized_pl_pct=h['unrealized_pl_pct'],realized_pl=0,dividends_received=1380,total_return=h['unrealized_pl']+1380,total_return_pct=h['unrealized_pl_pct'],first_buy_date='2026-08-12',holding_days=76,trade_count=1,fees_paid=0),history=[dict(date=p['date'],close=p['total']) for p in history(price)],taiex_history=[],trades=[],dividends=[],yield_on_cost=2.1,monthly_revenue=[],quarterly_financials=[])
+    return dict(ticker=ticker,symbol=ticker,name=h['name'],live=dict(price=price,previous_close=price*.99,today_change=price*.01,today_change_pct=1,volume=32540000),fundamentals=dict(currency=h['currency'],pe=25.4,eps=44.5,market_cap=29000000000000,fifty_two_week_high=price*1.1,fifty_two_week_low=price*.65,dividend_yield=0.018,sector='Technology'),position=dict(shares=h['shares'],avg_cost=h['avg_cost'],cost_basis=h['cost_basis'],market_value=h['market_value'],exit_cost=h['exit_cost'],unrealized_pl=h['unrealized_pl'],unrealized_pl_pct=h['unrealized_pl_pct'],realized_pl=0,dividends_received=1380,total_return=h['unrealized_pl']+1380,total_return_pct=h['unrealized_pl_pct'],first_buy_date='2026-08-12',holding_days=76,trade_count=1,fees_paid=0),history=[dict(date=p['date'],close=p['total']) for p in history(price)],taiex_history=[],trades=[],dividends=[],yield_on_cost=2.1,monthly_revenue=[],quarterly_financials=[])
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass

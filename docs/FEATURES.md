@@ -1,24 +1,46 @@
 # Feature reference
 
-### 🌏 Multi-market overview (TW + US)
-- **Two portfolios, one app** — Taiwan (TWD) and US (USD) holdings each get their own dashboard, while Trades and Dividends are single screens across both markets with a TW/US filter. Market is auto-detected from the ticker format (numeric → TW, letters → US) and is always an explicit, overridable control on the record form.
-- **Overview landing page** — a TW card and a US card showing each market's value, total P/L, and today's move. Tap a card to enter that portfolio; the back button returns you to the overview.
-- **Combined net worth** — both portfolios summed into a single figure shown in **both NT$ and US$**, with the live USD↔TWD rate. The number flashes green/red as it ticks.
-- **Combined unrealized P&L** — the Overview also shows unrealized P&L alone (open positions' gain/loss, US converted to NT$ at the live rate) alongside the all-in Total Return figure, so you can see them separately.
-- **Color-coded P&L** — gains render green, losses red, across the net worth, market cards, summary, and every holding.
-- **US pre-market / after-hours status** — the US market card shows "Pre-Market" / "After Hours" during NYSE/Nasdaq's real extended sessions (an amber dot, distinct from the green "Market open"), instead of collapsing straight to "Market closed". Taiwan cash equities have no analogous evening session, so the TW card stays open/closed only.
-- **DB-driven market config** — trading hours, holidays, currency, and timezone for each market live in the database (`markets` + `market_holidays` tables), not hardcoded, so the open/closed status is correct per market and editable without a redeploy.
+Current iOS release: **2.0.13 (build 20)**. Screenshots in the
+[gallery](GALLERY.md) use synthetic demonstration records.
 
-### 📊 Live portfolio dashboard
-- Hero **Total Earned** card (realized + dividends) with gradient styling
-- **Total Return** card — realized + dividends + unrealized, your all-in profit
-- Per-currency summary grid: market value, unrealized P/L, realized P/L, dividends, and today's move (accent-colored)
-- Unrealized P/L is **net of estimated exit costs** (sell commission + transaction tax), so it matches your broker's 損益試算 / 獲利率 rather than the gross gain
-- **Cumulative earnings chart** (Swift Charts) stacking realized P/L + dividends
-- **Performance card** — time-weighted return, annualized, and the gap against the market's benchmark index, with the two curves overlaid and twelve months of P&L underneath. Tap the benchmark name to compare against a different index.
-- **Holdings list** — each position with shares, avg cost, live price, today's move, market value and unrealized P&L, plus a weight bar showing its share of the market; sortable by value, today's move, or gain %
+### Multi-market overview
 
-Holdings/summary refresh while a portfolio is on screen — every 5 s while that market is open, 60 s otherwise.
+- Five persistent tabs: Overview, Trades, Assistant, Dividends, and Settings.
+  Trades and Dividends support TW/US filtering; the market drives each record's currency.
+- Combined portfolio value in NT$ and an approximate US$ equivalent using the
+  available exchange rate. Unrealized P/L and lifetime realized + dividends
+  appear separately in the hero.
+- **Unified portfolio card:** value, daily change, lifetime figures, and current-year
+  earnings share one card, followed by the Add trade and Add dividend actions.
+- **Navigation dock:** five visible destinations with larger icons, a full selected
+  pill, an opaque surface, and a Reduce Motion-aware fade. It stays above
+  the keyboard while composing.
+- **Current-year earnings:** distinct realized stock P/L and dividends received
+  for TWD and USD. Sales include historical purchase cost and closed positions;
+  dividends use payment dates. Future-dated records do not contribute to YTD.
+- Configurable indices below “Your portfolio,” cycling every four seconds with
+  manual advance and details/editor controls. Common TW/US indices include
+  TAIEX, Taiwan OTC, S&P 500, Nasdaq, Dow, SOX, and VIX, subject to feed availability.
+  Taiwan OTC uses official TWSE MIS quotes and TPEx monthly history; dated
+  closing quotes provide a fallback, and unavailable charts offer Retry.
+- Market cards link to Taiwan and United States portfolios. Session labels
+  distinguish US pre-market/after-hours from the regular session.
+- Light/dark/system appearances, native typography, and configurable Taiwan/US
+  P/L color conventions. Directional glyphs provide a non-color signal.
+
+### Market portfolio and performance
+
+- Market-value hero with lifetime realized + dividends, plus today's change
+  and unrealized P/L.
+- Separate **Holdings** and **Performance** sections. Holdings are searchable
+  and sortable, with cost, price, value, P/L, and portfolio weights.
+- Taiwan moving-average cost and US FIFO, including recorded fees. Taiwan
+  unrealized P/L deducts estimated sale commission and transaction tax; actual
+  broker amounts can differ when fee assumptions or recorded data differ.
+- Performance metrics, benchmark comparisons, and cumulative earnings history.
+  Missing historical prices remain unavailable rather than becoming zero.
+- Quotes publish every five seconds while a market is open, with slower closed
+  market refreshes. Feed outages/delays remain possible.
 
 ### 🔎 Per-stock detail (tap any holding)
 - **Live quote header** + key stats: previous close, day range, market cap, P/E, EPS, beta, dividend yield, a visual **52-week range bar**, **1-year analyst target**
@@ -27,7 +49,7 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 - The backend `/detail` endpoint also serves **monthly revenue (月營收)** and **8 quarters of financials** for any ticker — used to enrich AI answers
 
 ### ✦ AI assistant
-- **One Gemini model on iOS** — Gemini 3.5 Flash-Lite with **your own API key** (entered in-app, stored in the iOS Keychain, sent per-request — never stored on the server). The existing Gemini key is retained; old provider and model selections are ignored.
+- **One Gemini model on iOS** — Gemini 3.5 Flash-Lite. Included AI uses the backend key; Personal key uses the saved Keychain credential. Switching modes preserves the saved key. Invalid-key errors explain how to recover. Groq/GPT-OSS is not selectable in this version.
 - **Typed tool calling** — the model fetches exactly what it needs mid-answer: portfolio summary, holdings, trades, dividends, purchase lots, a sale simulation using the app's own 損益試算 arithmetic, position weights, company fundamentals (including 月營收 and quarterly margins), live quotes for up to 10 tickers at once, price history, TWR/XIRR/benchmark performance, the dividend calendar, net-worth history, the indices *you* follow, USD/TWD, market hours, web search, and a PDF report when the answer is too big for chat. Each call shows a live status line ("Reading holdings…").
 - **Dated performance questions** — “How is my performance over these two weeks?” uses a 14-calendar-day window (`2w`) for every market with recorded trades. Custom start/end dates are also supported. Opening/closing values, buys, net sale proceeds, fees and paid dividends determine the period's profit; all-time gains are not substituted. The response identifies actual valuation dates and unavailable historical prices. Short windows fetch only the required price range and skip positions closed before it.
 - **It can amend, not just add** — records carry ids, so "that 2330 buy should have been 1,035" produces a **correction**, not a second buy. Corrections, deletions and multi-row imports each get their own confirm card, and a delete card states what the deletion costs — which lots re-open, whose realized P/L moves — computed server-side by replaying the market-specific accounting, never written by the model.
@@ -35,15 +57,15 @@ Holdings/summary refresh while a portfolio is on screen — every 5 s while that
 - **Image-aware chat** — attach a photo (a stock chart, quote, or trade confirmation) right in the compose bar; it stages there so you can still add a note before sending, both go up together, and Gemini reads the image in-conversation. It's told to ask whether it's the US or Taiwan listing when that isn't clear from the image/context, rather than guess — and can still propose the records it reads once the market's confirmed — a whole statement in one card rather than one card per row. Sent images stay tappable full-screen even mid-reply, and persist so reopening the chat later still shows them.
 - **Visible reasoning** — Gemini thought summaries, when returned, stream into a collapsible **Reasoning** section (expanded while thinking, collapses when the answer starts, tap to toggle). The iOS model uses minimal thinking to prioritize responsiveness.
 - **Background generation** — replies keep generating server-side if you switch apps or lock the screen; the finished answer is waiting when you come back. The stop button cancels the server run too.
-- **Always ready** — opening the Assistant pre-warms the backend and pre-builds your portfolio context, so the first message streams immediately.
-- **Streaming replies** rendered as Markdown in the app's own reading voice — headings, bold, lists, code blocks, blockquotes, tables — with the tool lines above them and the "not investment advice" note below.
-- **Portfolio-aware** — every chat carries a snapshot of your holdings + light fundamentals; mention a ticker and its monthly revenue + quarterly margins are attached so the model answers with real numbers.
+- **Progress and recovery** — opening Assistant starts a lightweight prewarm. A reply shows actual tool status, elapsed time, and a stop control. Slow hosting/provider requests can still occur; errors preserve the transcript and offer an editable retry.
+- **Readable conversations** — Markdown headings, lists, code, links and tables; two-column metric tables wrap long company names, while wide comparisons scroll horizontally. Copy feedback and editable follow-up prompts accompany answers. Message/progress animations respect Reduce Motion. Keyboard navigation remains available.
+- **Portfolio-aware** — chat starts with a small account index. The model requests holdings, records, fundamentals, and calculations through account-scoped tools as needed.
 - **Chat history** — past conversations are saved; reopen one, long-press to delete, or clear them all.
 
 ### 📄 PDF reports
 - **Four reports** — dividend year (TW and US payouts split, gross → tax → net), holdings snapshot, realized P/L & tax summary, and period performance. Export one from **Settings → Reports**, or just ask the assistant for it.
 - **Layout lives in a Word template on the server**, not in Swift. The app sends a template id and a period; the backend assembles the JSON and [Adobe Document Generation](https://developer.adobe.com/document-services/apis/document-generation/) renders template + JSON → PDF. A column, a heading or the page furniture changes **without an app release**.
-- **The numbers come from the same services the screens read**, so a report can't drift from the app. Taiwan cash dividends carry the 2.11% NHI supplementary premium on each payment of NT$20,000 or more; US dividends are shown withheld at the 30% statutory rate; every conversion in a document uses one FX rate, captured at generation and printed on the cover.
+- **The numbers come from the same services the screens read**, so a report can't drift from the app. Taiwan cash dividends carry the 2.11% NHI supplementary premium on each payment of NT$20,000 or more; US dividends use the report service's 30% withholding assumption; every conversion in a document uses one FX rate, captured at generation and printed on the cover.
 - **Cached on a key that includes a data version** — re-asking for the same report over unchanged records returns the file that already exists and costs no Document Transaction.
 - **Read it in the app** — a full-screen PDFKit viewer with a pager and a share sheet, and the file cached on disk so reopening works offline.
 - Adobe credentials live in server environment only (`ADOBE_CLIENT_ID` / `ADOBE_CLIENT_SECRET`); the app talks only to your backend. **Until they're set** — and the four `.docx` templates are dropped in `backend/app/reports/templates/` — the same payload renders locally, so the whole feature works out of the box and Settings tells you which renderer is live.

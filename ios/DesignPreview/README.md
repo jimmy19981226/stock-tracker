@@ -72,4 +72,14 @@ Two-column metric replies fit the viewport and wrap long company names; wider co
 
 `Fmt.prettyDate` preserves calendar-only trade dates and converts complete UTC/offset timestamps to local dates. The date regressions use injected time zones, including DST boundaries, without changing the machine's settings.
 
+## Current-year earnings on Overview
+
+The portfolio hero includes a current-year section below the lifetime figures and above the quick actions. It separates realized stock P/L from dividends received, with TWD and USD displayed individually. It reads `year_realized_pl` and `year_dividends` from the existing currency summaries; it never derives realized profit from open holdings or mixes currencies. The backend replays historical purchases for cost basis and includes only sale/payment dates from January 1 through today. The fields are optional on iOS so older cached snapshots render an unavailable value until refreshed. A cached summary from another year is not relabeled as the current year.
+
 Backend lifecycle and screenshot-import tests cover account ownership, cancellation, detached stream recovery, secret-free error boundaries, malformed provider JSON, invalid record fields and preview-only extraction. Screenshot inference runs off the event loop; a held-provider concurrency test verifies that health requests remain responsive. Live inference tests remain opt-in. On the 2026-10-27 comprehensive run, three initial provider 429 failures passed one retry each after spacing testcase starts by at least 60 seconds; preserve both initial and retry evidence when reporting reliability.
+
+The Overview quick actions open Add trade and Add dividend sheets. `ProductTour`
+checks both forms can be cancelled without saving. `MarketTickerTests` also
+uses `index_preview_server.py` (port 8111) to exercise empty and failed index
+history, a completed loading state, and successful Retry. The production OTC
+adapter uses official TWSE MIS quotes and TPEx monthly history.

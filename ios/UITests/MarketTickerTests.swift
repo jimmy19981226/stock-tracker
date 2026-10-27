@@ -1,10 +1,10 @@
 import XCTest
 
 final class MarketTickerTests: XCTestCase {
-    private func launch(_ theme: String, flags: [String: String] = [:]) -> XCUIApplication {
+    private func launch(_ theme: String, flags: [String: String] = [:], baseURL: String = "http://127.0.0.1:8099") -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments = ["-api.baseURL", "http://127.0.0.1:8099", "-appearance", theme]
+        app.launchArguments = ["-api.baseURL", baseURL, "-appearance", theme]
         app.launchEnvironment = ["UITEST_GUEST": "1"].merging(flags) { _, new in new }
         app.launch()
         XCTAssertTrue(app.buttons["marketTicker.next"].waitForExistence(timeout: 20))
@@ -94,6 +94,42 @@ final class MarketTickerTests: XCTestCase {
         assertPlacement(app)
         assertAutomaticRotation(app.buttons["marketTicker.next"])
         snapshot(app, "portfolio-market-ticker-mirroring-inactive")
+        app.terminate()
+    }
+
+    // Run DesignPreview/index_preview_server.py alongside the ordinary preview.
+    func testEmptyHistoryCanBeRetried() { retryHistory("empty", theme: "light") }
+    func testFailedHistoryCanBeRetried() { retryHistory("error", theme: "dark") }
+
+    private func retryHistory(_ scenario: String, theme: String) {
+        let app = launch(theme, baseURL: "http://127.0.0.1:8111/\(scenario)")
+        let ticker = app.buttons["marketTicker.next"]
+        XCTAssertTrue(ticker.label.contains("Unavailable"), "Missing quotes must be described explicitly")
+        XCTAssertFalse(ticker.label.contains("0.00%"), "Unavailable changes must not look like zero returns")
+        app.buttons["marketTicker.details"].tap()
+        let retry = app.buttons["index.retry.^TWOII"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 10), "Finished empty/error history must offer Retry")
+        snapshot(app, "index-\(scenario)-unavailable-\(theme)")
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "index-\(scenario)-accessibility"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        XCTAssertTrue(app.staticTexts["Chart unavailable"].isHittable)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", "Unavailable"))
+            .allElementsBoundByIndex.contains { $0.isHittable }, "A visible index quote must say Unavailable")
+        XCTAssertFalse(app.progressIndicators["index.loading.^TWOII"].exists,
+                       "Failed history must stop the indefinite loading spinner")
+        retry.tap()
+        let chart = app.descendants(matching: .any)["index.chart.^TWOII"].firstMatch
+        XCTAssertTrue(chart.waitForExistence(timeout: 10), "Retry must render recovered history")
+        XCTAssertTrue(chart.isHittable)
+        XCTAssertFalse(retry.exists)
+        XCTAssertFalse(app.staticTexts["Chart unavailable"].exists)
+        XCTAssertFalse(app.progressIndicators["index.loading.^TWOII"].exists)
+        snapshot(app, "index-\(scenario)-recovered-\(theme)")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(ticker.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["tab.assistant"].isHittable)
         app.terminate()
     }
 }

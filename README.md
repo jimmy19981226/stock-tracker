@@ -2,7 +2,7 @@
 
 # AI Stock Studio
 
-**A portfolio-aware AI assistant backed by real account calculations.**
+**Stock Studio 2.0.13 · Portfolio tracking and AI assistance for Taiwan and US stocks.**
 
 Track Taiwan and US equities through a native iOS app and a responsive web dashboard, with a shared FastAPI backend for portfolio accounting, market data, and agent tools.
 
@@ -18,11 +18,42 @@ Track Taiwan and US equities through a native iOS app and a responsive web dashb
 ## Product tour
 
 <p align="center">
-  <img src="docs/screenshots/ios-overview.png" width="30%" alt="iOS overview combining Taiwan and US portfolio values" />
-  <img src="docs/screenshots/ios-assistant.png" width="30%" alt="Portfolio assistant answering a question using account data" />
-  <img src="docs/screenshots/ios-confirm-card.png" width="30%" alt="Review card requiring confirmation before a proposed record change" />
+  <img src="docs/screenshots/ios-overview.png" width="30%" alt="Version 2.0.13 portfolio overview with rotating indices and current-year earnings" />
+  <img src="docs/screenshots/ios-dividend-entry.png" width="30%" alt="Add dividend form opened from the portfolio shortcut" />
+  <img src="docs/screenshots/ios-assistant.png" width="30%" alt="Redesigned assistant welcome page with editable portfolio prompts" />
 </p>
-<p align="center"><em>Track a portfolio → ask a question → review a proposed change.</em></p>
+<p align="center">
+  <img src="docs/screenshots/ios-dark.png" width="30%" alt="Portfolio overview in dark mode" />
+  <img src="docs/screenshots/ios-assistant-chat.png" width="30%" alt="Readable assistant tables and editable follow-up actions" />
+  <img src="docs/screenshots/ios-stock.png" width="30%" alt="Native stock detail and position view" />
+</p>
+
+Screenshots use **synthetic demonstration portfolios**, not a real account. The
+current iOS release is **2.0.13 (build 20)**, dated October 27, 2026. Its teal and
+neutral design supports light/dark appearances and five persistent destinations:
+Overview, Trades, Assistant, Dividends, and Settings.
+
+### What is in this version
+
+- **Unified portfolio card:** total value, today’s move, lifetime figures, and
+  current-year earnings in one surface. Add trade and Add dividend sit below it.
+- **Current-year earnings:** realized stock P/L and dividends received, separated
+  by currency. Sales use their recorded cost basis, including prior-year buys;
+  dividends use payment dates. Future-dated records are excluded from YTD totals.
+- **Market index strip:** below “Your portfolio,” rotating through configured
+  indices every four seconds, with manual advance and an editor. Supported
+  choices include TAIEX, Taiwan OTC, S&P 500, Nasdaq, Dow, SOX, and VIX; quote
+  availability depends on the market-data provider. Taiwan OTC uses official
+  TWSE MIS quotes and TPEx history, with dated closing-price fallback and a
+  retry action when charts are unavailable.
+- **Assistant conversations:** quieter bubbles, readable Markdown/tables, copy
+  confirmation, editable follow-up prompts, real tool progress, elapsed time,
+  stop/recovery controls, and motion that respects Reduce Motion.
+- **Persistent navigation:** an inset dock with a full selection pill, larger
+  icons, and light/dark support. Tabs remain accessible while typing; switching
+  tabs preserves the assistant draft and active conversation.
+- **Explicit AI connection:** Included AI uses the server-managed key; Personal
+  key uses the saved Keychain credential. iOS uses Gemini 3.5 Flash-Lite.
 
 **Team project.** AI Stock Studio was developed collaboratively. This repository presents the shared system, with implementation credit belonging to its contributors.
 
@@ -63,7 +94,7 @@ flowchart TB
 
 **Stream → reconnect.** Server-side chat runs stream status and response events to iOS, with persisted chat history and support for background completion. Regression tests exercise the transport, tool execution, data scoping, and calculation paths with synthetic account data.
 
-The iOS client currently selects Gemini; the backend also contains provider adapters. Provider availability, model output, and market feeds remain external dependencies. The tests establish specific application behaviors, not a guarantee that every generated answer is correct.
+The iOS client uses `gemini-3.5-flash-lite`; the backend also contains other provider adapters. A Groq/GPT-OSS option is not included in this release. Provider availability, model output, and market feeds remain external dependencies. The tests establish specific application behaviors, not a guarantee that every generated answer is correct.
 
 ## Run locally
 
@@ -106,14 +137,31 @@ Portfolio tracking can run without an AI provider key. In iOS Settings → AI as
 
 ```bash
 # From backend/, with the development dependencies installed:
-python -m unittest discover -s tests -v
+DATABASE_URL=sqlite:///:memory: RUN_GEMINI_LIVE_TESTS=0 python -m unittest discover -s tests -v
 
 # From frontend/:
 npm ci
 npm run build
 ```
 
-The backend suite covers account isolation, tool calls, confirmation proposals, image handling, exact dated returns, malformed credentials, Unicode passwords, and token expiry/rotation. Ordinary runs skip the explicitly opt-in live Gemini tests. CI runs the backend tests and a clean web build; native iOS tests require Xcode.
+The backend suite covers account isolation, market-specific accounting, year-to-date earnings, tool calls, confirmation proposals, image handling, exact dated returns, credential failures, Unicode passwords, and token expiry/rotation. Ordinary runs skip the explicitly opt-in live Gemini tests. CI runs the backend tests and a clean web build; native iOS tests require Xcode.
+
+Latest local verification for 2.0.13:
+
+| Check | Result |
+| :--- | :--- |
+| Backend, isolated SQLite | 128 passed; 12 opt-in live tests skipped |
+| iOS unit tests | 52 passed |
+| iOS UI regression checks | 15 distinct cases across targeted runs: product tours, YTD layout, navigation, form cancellation, chat, index rotation and retry |
+| Release build | iPhone release build succeeds; 2.0.13 (20) installed on device |
+| Live OTC data | Official quote and rolling one-month chart history verified through the hosted API |
+
+The previous assistant verification passed 22 distinct UI cases. All 12 live
+Gemini scenarios passed at least once; three initially hit provider rate limits
+and passed a single paced retry. These are separate from the offline suite.
+Live checks consume provider quota and use synthetic records. They do not prove
+permanent provider availability or eliminate the slow responses observed on the
+hosted service. Run native tests using the [preview/test guide](ios/DesignPreview/README.md).
 
 ## Code guide
 
@@ -137,7 +185,7 @@ Market feeds may be delayed or unavailable, historical coverage varies, and brok
 | Guide | Purpose |
 | :--- | :--- |
 | [Feature reference](docs/FEATURES.md) | Detailed product capabilities |
-| [Screenshot gallery](docs/GALLERY.md) | iOS, web, widget, and report views |
+| [Screenshot gallery](docs/GALLERY.md) | Current iOS tour and web dashboard |
 | [Development and deployment](docs/DEVELOPMENT.md) | Configuration, trust boundaries, tests, and contribution workflow |
 | [iOS setup](ios/README.md) | XcodeGen, simulator/device setup, and assistant configuration |
 | [Web setup](frontend/README.md) | Dashboard authentication and deployment |

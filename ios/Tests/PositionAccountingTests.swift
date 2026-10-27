@@ -33,6 +33,39 @@ final class PositionAccountingTests: XCTestCase {
         XCTAssertEqual(booked[13]!, 1_497, accuracy: 0.000_001)
     }
 
+    func testYearIncomeFieldsDecodeIndependentlyAndOlderSummariesRemainCompatible() throws {
+        let original: [String: Any] = [
+            "currency": "TWD", "total_value": 10000, "total_cost": 9000,
+            "total_pl": 1000, "total_pl_pct": 11.11, "today_pl": 50, "today_pl_pct": 0.5,
+            "realized_pl": 4000, "dividends": 500, "total_earned": 4500,
+            "year_earned": -95.25, "year": 2026, "holdings_count": 2,
+        ]
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let legacy = try decoder.decode(CurrencySummary.self, from: JSONSerialization.data(withJSONObject: original))
+        XCTAssertNil(legacy.yearRealizedPl, "Older snapshots must not substitute lifetime profit for YTD")
+        XCTAssertNil(legacy.yearDividends)
+        XCTAssertEqual(legacy.realizedPl, 4000)
+        XCTAssertEqual(legacy.dividends, 500)
+
+        var current = original
+        current["year_realized_pl"] = -125.75
+        current["year_dividends"] = 30.5
+        let decoded = try decoder.decode(CurrencySummary.self, from: JSONSerialization.data(withJSONObject: current))
+        XCTAssertEqual(decoded.yearRealizedPl, -125.75)
+        XCTAssertEqual(decoded.yearDividends, 30.5)
+        XCTAssertEqual(decoded.yearEarned, -95.25)
+        XCTAssertEqual(decoded.currency, "TWD")
+        XCTAssertEqual(decoded.realizedPl, legacy.realizedPl)
+        XCTAssertEqual(decoded.dividends, legacy.dividends)
+
+        current["year_realized_pl"] = 0
+        current["year_dividends"] = NSNull()
+        let partial = try decoder.decode(CurrencySummary.self, from: JSONSerialization.data(withJSONObject: current))
+        XCTAssertEqual(partial.yearRealizedPl, 0, "Zero realized gain is available data")
+        XCTAssertNil(partial.yearDividends, "An unavailable component must remain distinct from zero")
+    }
+
     private func ledger(_ market: MarketCode, offset: Int = 0) -> [Trade] {
         [trade(offset + 1, .buy, 10, 100, 2, market),
          trade(offset + 2, .buy, 10, 200, 2, market),

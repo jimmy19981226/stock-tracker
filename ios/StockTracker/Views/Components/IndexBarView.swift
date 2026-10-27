@@ -13,6 +13,8 @@ struct IndexBarView: View {
     @State private var showDetails = false
     @State private var showEditor = false
     @State private var details: [String: StockDetail] = [:]
+    @State private var loadingDetails: Set<String> = []
+    @State private var finishedDetails: Set<String> = []
 
     private var indices: [IndexQuote] {
         guard let market else { return store.indices }
@@ -43,13 +45,13 @@ struct IndexBarView: View {
                             .minimumScaleFactor(0.8)
                             .layoutPriority(1)
                         Spacer(minLength: 0)
-                        Text(Fmt.number(quote.price, digits: 2))
+                        Text(quote.price == nil ? "Unavailable" : Fmt.number(quote.price, digits: 2))
                             .font(Theme.Typo.captionMed)
                             .foregroundStyle(Theme.text)
                             .monospacedDigit()
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
-                        MovePct(pct: quote.changePct)
+                        if let change = quote.changePct { MovePct(pct: change) }
                     }
                     .id(quote.symbol)
                     .transition(.opacity)
@@ -59,7 +61,7 @@ struct IndexBarView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(quote.name), \(Fmt.number(quote.price, digits: 2)), \(Fmt.pct(quote.changePct))")
+                .accessibilityLabel("\(quote.name), \(quote.price == nil ? "Unavailable" : Fmt.number(quote.price, digits: 2)), \(Fmt.pct(quote.changePct))")
                 .accessibilityValue(quote.symbol)
                 .accessibilityHint(indices.count > 1 ? "Show the next index" : "Current market index")
                 .accessibilityIdentifier("marketTicker.next")
@@ -93,7 +95,10 @@ struct IndexBarView: View {
                 SheetScaffold(title: "Market indices", onClose: { showDetails = false }) {
                     VStack(spacing: Theme.Space.m) {
                         ForEach(indices) { quote in
-                            IndexDetailCard(quote: quote, detail: details[quote.symbol])
+                            IndexDetailCard(quote: quote, detail: details[quote.symbol],
+                                            isLoading: !finishedDetails.contains(quote.symbol) || loadingDetails.contains(quote.symbol)) {
+                                Task { await loadDetail(quote.symbol, retry: true) }
+                            }
                                 .task { await loadDetail(quote.symbol) }
                         }
                         SecondaryButton(title: "Edit indices", fullWidth: true) { showEditor = true }
@@ -113,9 +118,15 @@ struct IndexBarView: View {
         }
     }
 
-    private func loadDetail(_ symbol: String) async {
-        guard details[symbol] == nil else { return }
+    private func loadDetail(_ symbol: String, retry: Bool = false) async {
+        guard !loadingDetails.contains(symbol), retry || !finishedDetails.contains(symbol) else { return }
+        loadingDetails.insert(symbol)
+        defer {
+            loadingDetails.remove(symbol)
+            if !Task.isCancelled { finishedDetails.insert(symbol) }
+        }
         if let detail = try? await APIClient.shared.getStockDetail(symbol, period: .oneMonth) {
+            guard !Task.isCancelled else { return }
             details[symbol] = detail
         }
     }
@@ -127,6 +138,8 @@ struct IndexBarView: View {
 private struct IndexDetailCard: View {
     let quote: IndexQuote
     let detail: StockDetail?
+    let isLoading: Bool
+    let retry: () -> Void
 
     private var closes: [(Int, Double)] {
         (detail?.history ?? []).compactMap(\.close).enumerated().map { ($0.offset, $0.element) }
@@ -143,12 +156,17 @@ private struct IndexDetailCard: View {
                         .font(Theme.Typo.nano)
                         .foregroundStyle(Theme.textSecondary)
                 }
-                Text(Fmt.number(quote.price, digits: 2))
+                Text(quote.price == nil ? "Unavailable" : Fmt.number(quote.price, digits: 2))
                     .font(Theme.Typo.value)
                     .foregroundStyle(Theme.text)
                     .numeral()
                     .rollingNumber(quote.price)
                 changeLine
+                if let source = quote.source, let asOf = quote.asOf {
+                    Text("\(source) · \(asOf)")
+                        .font(Theme.Typo.nano)
+                        .foregroundStyle(Theme.textSecondary)
+                }
                 if let live = detail?.live {
                     HStack(spacing: Theme.Space.m) {
                         ohl("O", live.dayOpen)
@@ -178,8 +196,19 @@ private struct IndexDetailCard: View {
                     .chartYAxis(.hidden)
                     .chartYScale(domain: .automatic(includesZero: false))
                     .frame(width: 104, height: 38)
-                } else {
+                    .accessibilityIdentifier("index.chart.\(quote.symbol)")
+                } else if isLoading {
                     ProgressView().controlSize(.small).frame(width: 104, height: 38)
+                        .accessibilityIdentifier("index.loading.\(quote.symbol)")
+                } else {
+                    VStack(alignment: .trailing, spacing: Theme.Space.xs) {
+                        Text("Chart unavailable")
+                            .font(Theme.Typo.micro).foregroundStyle(Theme.textSecondary)
+                        Button("Retry", action: retry)
+                            .font(Theme.Typo.captionMed).foregroundStyle(Theme.accent)
+                            .frame(minHeight: Theme.Assistant.control)
+                            .accessibilityIdentifier("index.retry.\(quote.symbol)")
+                    }
                 }
             }
         }

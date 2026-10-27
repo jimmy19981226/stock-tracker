@@ -10,7 +10,11 @@ struct OverviewView: View {
     let onOpenMarket: (MarketCode) -> Void
     var onAskAssistant: () -> Void = {}
     var onOpenSettings: () -> Void = {}
-    @State private var showAddTrade = false
+    private enum RecordEntry: String, Identifiable {
+        case trade, dividend
+        var id: String { rawValue }
+    }
+    @State private var recordEntry: RecordEntry?
 
     // Hero and market cards read the same published quote snapshot.
     private var overview: PortfolioOverview? { store.overview }
@@ -66,7 +70,12 @@ struct OverviewView: View {
         .screenBackground()
         .refreshable { await reload() }
         .task(id: period) { await loadSeries() }
-        .sheet(isPresented: $showAddTrade) { TradeFormView(market: .TW, existing: nil) }
+        .sheet(item: $recordEntry) { entry in
+            switch entry {
+            case .trade: TradeFormView(market: .TW, existing: nil)
+            case .dividend: DividendFormView(market: .TW, existing: nil)
+            }
+        }
     }
 
     // MARK: Header
@@ -98,8 +107,8 @@ struct OverviewView: View {
 
     private var quickActions: some View {
         adaptiveLayout {
-            quickAction("Add trade", icon: "plus", action: { showAddTrade = true })
-            quickAction("Ask assistant", icon: "sparkles", action: onAskAssistant)
+            quickAction("Add trade", icon: "plus", action: { recordEntry = .trade })
+            quickAction("Add dividend", icon: "plus", action: { recordEntry = .dividend })
         }
     }
 
@@ -226,6 +235,59 @@ struct OverviewView: View {
 private struct NetWorthHero: View {
     let overview: PortfolioOverview?
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var adaptiveLayout: AnyLayout {
+        typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: Theme.Space.m))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: Theme.Space.m))
+    }
+
+    // Read the backend's realized ledger totals, including closed positions
+    // and the cost of purchases made before this year. Never sum open holdings.
+    private var yearEarnings: some View {
+        let year = Calendar.current.component(.year, from: Date())
+        return VStack(alignment: .leading, spacing: Theme.Space.l) {
+            HStack {
+                Text("\(String(year)) earnings")
+                    .font(Theme.Typo.detailMed).foregroundStyle(Theme.heroText)
+                Spacer()
+                Text("YEAR TO DATE")
+                    .font(Theme.Typo.eyebrow).foregroundStyle(Theme.heroLabel)
+            }
+            adaptiveLayout {
+                yearEarningsMetric("Realized stock P/L", year: year, realized: true)
+                yearEarningsMetric("Dividends received", year: year, realized: false)
+            }
+        }
+        .accessibilityIdentifier("overview.yearEarnings")
+    }
+
+    private func yearEarningsMetric(_ title: String, year: Int, realized: Bool) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            Text(title).font(Theme.Typo.captionMed).foregroundStyle(Theme.heroLabel)
+            ForEach(MarketCode.allCases) { market in
+                let summary = market == .TW ? overview?.tw : overview?.us
+                let value = summary?.year == year
+                    ? (realized ? summary?.yearRealizedPl : summary?.yearDividends) : nil
+                HStack(spacing: Theme.Space.xxs) {
+                    if realized, let value, value != 0 {
+                        Image(systemName: value < 0 ? "arrow.down.right" : "arrow.up.right")
+                            .font(Theme.Typo.caption)
+                    }
+                    Text(realized ? Fmt.signedAmount(value, currency: market.currencyCode)
+                                  : Fmt.amount(value, currency: market.currencyCode))
+                        .font(Theme.Typo.valueSm).numeral(0.6)
+                        .accessibilityIdentifier("overview.year.\(realized ? "realized" : "dividends").\(market.rawValue)")
+                }
+                .foregroundStyle(Theme.heroText)
+                .accessibilityLabel("\(market == .TW ? "Taiwan" : "United States"), \(title)")
+                .accessibilityValue(Fmt.amount(value, currency: market.currencyCode))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var fx: Double { overview?.fx.usdTwd ?? 0 }
 
     private func combined(_ pick: (CurrencySummary) -> Double?) -> Double? {
@@ -285,12 +347,16 @@ private struct NetWorthHero: View {
             .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.Radius.button))
 
             HStack(alignment: .top, spacing: Theme.Space.xl) {
-                HeroStat(label: "Unrealized", value: Fmt.signedAmount(usd(unrealized), currency: "USD"))
-                HeroStat(label: "Realized + dividends", value: Fmt.signedAmount(usd(earned), currency: "USD"))
+                HeroStat(label: "Unrealized", value: Fmt.signedAmount(usd(unrealized), currency: "USD"), sub: "Open positions")
+                HeroStat(label: "Realized + dividends", value: Fmt.signedAmount(usd(earned), currency: "USD"), sub: "Lifetime")
             }
+
+            Rectangle().fill(Theme.heroRule).frame(height: 1)
+            yearEarnings
         }
-        .heroCard(padding: 22)
-        .accessibilityElement(children: .combine)
+        .heroCard(padding: Theme.Space.xl)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("overview.portfolioHero")
         .accessibilityLabel("Investing net worth")
         .accessibilityValue(Fmt.amount(overview?.combined.twd, currency: "TWD"))
     }

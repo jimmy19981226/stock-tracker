@@ -1,4 +1,10 @@
-# Handoff: AI Stock Studio — iOS UI redesign
+# Archived handoff: AI Stock Studio — original iOS UI design
+
+This folder preserves an earlier design specification. It is not the current
+release specification: Stock Studio 2.0.13 uses teal surfaces, native San Francisco
+typography, an inset navigation dock, and Taiwan moving-average / US FIFO
+accounting. See the [current app guide](../ios/README.md) and
+[product gallery](../docs/GALLERY.md) for the implemented design.
 
 ## What's in this bundle
 | File | What it is |

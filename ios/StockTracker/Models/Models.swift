@@ -78,6 +78,9 @@ struct CurrencySummary: Codable, Identifiable, Hashable {
     let yearEarned: Double
     let year: Int
     let holdingsCount: Int
+    // Optional for cached snapshots and servers from before the YTD split.
+    var yearRealizedPl: Double? = nil
+    var yearDividends: Double? = nil
 }
 
 struct Dividend: Codable, Identifiable, Hashable {
@@ -157,6 +160,8 @@ struct IndexQuote: Codable, Identifiable, Hashable {
     var price: Double?
     var change: Double?
     var changePct: Double?
+    var asOf: String? = nil
+    var source: String? = nil
 }
 
 struct IndicesResponse: Codable {

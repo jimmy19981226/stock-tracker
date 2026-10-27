@@ -23,7 +23,9 @@ final class AssistantConversationTests: XCTestCase {
         let session = URLSession(configuration: config)
         let api = APIClient(session: session, validToken: { nil }, refreshToken: { nil })
         let background = BackgroundRecorder()
-        let vm = AssistantViewModel(api: api, backgroundTasks: background.handlers, refreshPortfolio: refreshPortfolio)
+        let vm = AssistantViewModel(api: api, backgroundTasks: background.handlers,
+                                    refreshPortfolio: refreshPortfolio,
+                                    recoveryDelay: { await Task.yield() })
         addTeardownBlock {
             await MainActor.run { vm.reset() }
             session.invalidateAndCancel()
@@ -31,11 +33,17 @@ final class AssistantConversationTests: XCTestCase {
         return (vm, background)
     }
 
+    private enum WaitError: Error { case timedOut }
+
     private func waitUntil(timeout: TimeInterval = 3, _ condition: () -> Bool,
                            file: StaticString = #filePath, line: UInt = #line) async throws {
-        let end = Date().addingTimeInterval(timeout)
-        while !condition(), Date() < end { try await Task.sleep(nanoseconds: 10_000_000) }
-        XCTAssertTrue(condition(), "Timed out waiting for asynchronous state", file: file, line: line)
+        let clock = ContinuousClock()
+        let end = clock.now.advanced(by: .seconds(timeout))
+        while !condition(), clock.now < end { try await Task.sleep(nanoseconds: 10_000_000) }
+        guard condition() else {
+            XCTFail("Timed out waiting for asynchronous state", file: file, line: line)
+            throw WaitError.timedOut
+        }
     }
 
     private func start(_ vm: AssistantViewModel, number: Int = 1) async throws -> ConversationURLProtocol {
@@ -211,9 +219,10 @@ final class AssistantConversationTests: XCTestCase {
         old.event(["type": "error", "detail": "Connection interrupted"])
         old.finish()
         try await waitUntil(timeout: 5) { ConversationURLProtocol.historyChannels.count == 1 }
+        let history = try XCTUnwrap(ConversationURLProtocol.historyChannels.first)
         vm.reset()
         _ = try await start(vm, number: 2)
-        ConversationURLProtocol.historyChannels[0].history(1, messages: [
+        history.history(1, messages: [
             ["role": "user", "content": "Old question"],
             ["role": "assistant", "content": "Old recovered answer"],
         ])

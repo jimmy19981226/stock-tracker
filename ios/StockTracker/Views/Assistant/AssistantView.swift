@@ -50,6 +50,7 @@ final class AssistantViewModel: ObservableObject {
     private let api: APIClient
     private let backgroundTasks: AssistantBackgroundTasks
     private let refreshPortfolio: (PortfolioStore) async -> Void
+    private let recoveryDelay: () async throws -> Void
     private var conversationRevision = UUID()
     private var activeRunID: UUID?
     private var historyRequestID: UUID?
@@ -66,10 +67,14 @@ final class AssistantViewModel: ObservableObject {
     private var bgTaskId: UIBackgroundTaskIdentifier = .invalid
 
     init(api: APIClient = .shared, backgroundTasks: AssistantBackgroundTasks = .live,
-         refreshPortfolio: @escaping (PortfolioStore) async -> Void = { await $0.loadAll() }) {
+         refreshPortfolio: @escaping (PortfolioStore) async -> Void = { await $0.loadAll() },
+         recoveryDelay: @escaping () async throws -> Void = {
+             try await Task.sleep(nanoseconds: 3_000_000_000)
+         }) {
         self.api = api
         self.backgroundTasks = backgroundTasks
         self.refreshPortfolio = refreshPortfolio
+        self.recoveryDelay = recoveryDelay
         if ProcessInfo.processInfo.environment["UITEST_CHAT_FORMAT"] == "1" {
             messages = [
                 ChatMessage(role: "user", content: "Show my positions and explain the figures."),
@@ -377,9 +382,10 @@ final class AssistantViewModel: ObservableObject {
     private func startRecovery(expectedCount: Int, runID: UUID) {
         guard let id = chatId else { return }
         recoverTask?.cancel()
+        let delay = recoveryDelay
         recoverTask = Task { [weak self] in
             for _ in 0..<20 {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                do { try await delay() } catch { return }
                 guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                 if let detail = try? await self.api.getChat(id),
                    self.activeRunID == runID, self.chatId == id, !Task.isCancelled,

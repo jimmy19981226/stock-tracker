@@ -144,7 +144,9 @@ struct RecordFormSheet: View {
                 }
 
                 HStack {
-                    Text(isTW ? "TWSE/TPEx · fees 0.1425% + tax" : "US · flat US$1 commission")
+                    Text(kind == .dividend
+                         ? "Cash dividend · \(isTW ? "TWD" : "USD")"
+                         : (isTW ? "TWSE/TPEx · fees 0.1425% + tax" : "US · flat US$1 commission"))
                     Spacer(minLength: Theme.Space.s)
                     Text("\(isTrade ? "Gross" : "Amount") \(gross.map { Fmt.amount($0, currency: currency) } ?? "—")")
                 }

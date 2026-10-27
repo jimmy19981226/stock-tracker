@@ -75,16 +75,9 @@ struct RootView: View {
         // uses the remaining space. A tab tap dismisses editing first.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             AppTabBar(selection: $tab)
-                .background {
-                    ZStack {
-                        Rectangle().fill(.ultraThinMaterial)
-                        Theme.chrome
-                    }
-                    .ignoresSafeArea(edges: .bottom)
-                }
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Theme.line).frame(height: 1)
-                }
+                .padding(.horizontal, Theme.Space.m)
+                .padding(.top, Theme.Space.xs)
+                .padding(.bottom, Theme.Space.xs)
         }
         .overlay(alignment: .bottom) {
             if let message = toasts.message {
@@ -139,9 +132,10 @@ struct RootView: View {
 /// The drawn tab bar.
 private struct AppTabBar: View {
     @Binding var selection: AppTab
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 4) {
             ForEach(AppTab.allCases) { tab in
                 let on = tab == selection
                 Button {
@@ -149,20 +143,24 @@ private struct AppTabBar: View {
                                                     to: nil, from: nil, for: nil)
                     selection = tab
                 } label: {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 5) {
                         Image(systemName: on && tab.hasFilledTwin ? tab.symbol + ".fill" : tab.symbol)
-                            .font(.system(size: 21, weight: on ? .semibold : .regular))
-                            .frame(width: 54, height: 30)
-                            .background(on ? Theme.accentTint : .clear, in: Capsule())
+                            .font(.system(size: 22, weight: on ? .semibold : .regular))
+                            .frame(height: 25)
                         Text(tab.label)
                             .font(on ? Theme.Typo.tabOn : Theme.Typo.tab)
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
                     }
-                    .foregroundStyle(on ? Theme.accentSelected : Theme.textTertiary)
+                    .foregroundStyle(on ? Theme.accentSelected : Theme.textSecondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 3)
-                    .padding(.bottom, 5)
+                    .frame(height: 56)
+                    .background {
+                        if on {
+                            RoundedRectangle(cornerRadius: 19, style: .continuous)
+                                .fill(Theme.accentTint)
+                        }
+                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -171,9 +169,14 @@ private struct AppTabBar: View {
                 .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 5)
+        .padding(6)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 25, style: .continuous)
+                .strokeBorder(Theme.line.opacity(0.65), lineWidth: 0.5)
+        }
+        .shadow(color: Theme.shadow, radius: 14, x: 0, y: 4)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: selection)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }

@@ -5,16 +5,29 @@ FastAPI backend (`../backend`) over HTTP — there is no web view, this is a rea
 native app. Unlike the browser frontend, native `URLSession` is not subject to
 CORS, so it calls the API directly.
 
-## Studio 2
+## Current release: 2.0.13 (build 20)
 
-Version 2.0 introduces native iOS typography, a teal and neutral visual system,
-light/dark appearances, portfolio quick actions, searchable holdings, a separate
-performance view, editable assistant prompts, and full-height record forms.
-Accessibility text sizes switch the home screen's cards and actions to a single
-column. Broker accounting remains Taiwan moving average / US FIFO.
+Studio 2 uses native iOS typography, teal and neutral surfaces, light/dark
+appearances, and five persistent tabs: Overview, Trades, Assistant, Dividends,
+and Settings. The tab bar remains reachable during keyboard input.
 
-See [Design preview and verification](DesignPreview/README.md) for a read-only,
-synthetic API and reproducible simulator screen tours.
+The inset navigation dock highlights the full selected item, keeps all five
+destinations visible above the keyboard, and uses a short selection fade that respects Reduce Motion.
+
+Overview rotates configured indices below the title. One portfolio card combines
+value, today’s move, lifetime figures, and current-year realized stock P/L and
+dividends received in TWD and USD. Add trade and Add dividend sit below the combined card. Taiwan uses
+moving-average cost; US positions use FIFO.
+YTD totals include sales and dividend payments from January 1 through today,
+including closed positions and cost basis from earlier purchases.
+
+The assistant offers editable welcome prompts and follow-ups, Markdown tables,
+copy feedback, actual tool status with elapsed time, stop/recovery controls, and
+Reduce Motion support. Main navigation preserves drafts and ongoing replies.
+
+See the [current screenshots](../docs/GALLERY.md) and
+[design preview/test guide](DesignPreview/README.md). Demonstration screenshots
+use synthetic data.
 
 ## Requirements
 
@@ -32,13 +45,11 @@ open StockTracker.xcodeproj
 
 ## Run
 
-The app **defaults to the deployed Render backend**
-(`https://ai-stock-studio.onrender.com`), which reads the production Neon
-database — so it works out of the box on the simulator or a real device with
-**no local server needed**. Just run it from Xcode.
-
-> Render's free tier sleeps after ~15 min idle, so the first request after a
-> while takes ~30–60s to wake up, then it's fast.
+The app configuration includes a hosted Render backend URL. For development,
+set your own URL before entering records; the hosted default is not a test
+fixture. Free hosting can sleep, and authentication, database access, market
+feeds, or AI providers can add latency. A successful local test does not imply
+that hosted requests will always be fast.
 
 To use a **local dev backend** instead (e.g. to test code changes):
 
@@ -64,10 +75,18 @@ xcrun simctl launch "iPhone 17" com.aistockstudio.app
 
 ## AI assistant
 
-The iOS assistant uses **Gemini 3.5 Flash-Lite** only. In **Settings → AI assistant**,
-enter a Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
-The key is stored in the iOS Keychain and sent per request. Existing Gemini keys
-are retained, and older provider or model preferences cannot override the model.
+The iOS assistant uses **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`).
+In **Settings → AI assistant**, choose:
+
+- **Included AI:** use the Gemini key configured on your backend. This requires
+  server-side configuration; the app does not bundle a provider credential.
+- **Personal key:** use a Gemini key from [Google AI Studio](https://aistudio.google.com/apikey),
+  stored in iOS Keychain and sent to your backend per request.
+
+Switching to Included AI preserves the personal key but omits it from requests.
+Rejected credentials have specific recovery guidance. Old model/provider
+preferences cannot override the selected iOS model. There is no Groq/GPT-OSS
+model selector in this release.
 
 Chat streams replies, accepts images, and keeps the existing portfolio tools and
 confirmation cards. The backend uses minimal thinking for this model. Install the
@@ -88,7 +107,7 @@ profit attribution that reconciles with portfolio returns. Quantitative Gemini
 answers use source references: the server copies values into tables or JSON,
 keeping full numbers, currencies and valuation dates. Missing data stays unavailable.
 Chat starts with a small account index, runs independent reads concurrently, and
-returns available data if the service fails or the tool-round limit is reached.
+can return already-checked data when available after a provider failure or tool-round limit; otherwise it reports an error. External availability and response time are not guaranteed.
 
 From the repository root, run the isolated backend feature tests:
 
@@ -121,26 +140,35 @@ StockTracker/
   Theme/          Colors, spacing, the reusable Card container
   Util/           Formatters + market-session helper
   Views/
-    Overview/     Net-worth hero + per-market cards (landing)
-    Portfolio/    Segmented Dashboard / Trades / Dividends
+    Overview/     Net worth, rotating indices, YTD earnings, market cards
+    Portfolio/    Market dashboard with Holdings / Performance sections
     Trades/       Trade log + add/edit form
     Dividends/    Dividend log + add/edit form
     StockDetail/  Live quote, price chart with trade markers, position, fundamentals
     Assistant/    Streaming AI chat (SSE)
-    Settings/     Backend URL editor
+    Settings/     Connection, appearance, AI credentials, reports, indices
 ```
 
 ## Native iOS design choices
 
-- **Bottom tab bar** (Portfolio / Assistant) replaces the web app's top nav.
-- **Navigation hierarchy**: Overview → market portfolio → stock detail, via
-  `NavigationStack`.
-- **Segmented control** for Dashboard / Trades / Dividends inside a portfolio.
-- **Swift Charts** for the earnings and price-history charts.
-- Sheets for add/edit forms, dark "studio" theme, rounded cards, SF Rounded
-  numerals, and the green/red P&L semantics carried over from the web app.
-- Live polling while a portfolio is on screen (5s while that market is open,
-  60s otherwise) — the same cadence as the web app.
+- Five persistent bottom destinations, with Overview → market → stock detail.
+- Separate Holdings / Performance sections within each market.
+- Native Swift Charts, searchable holdings, and full-height record forms with
+  reachable Close/Done controls.
+- Light, dark, and system appearances; configurable Taiwan/US gain-color
+  conventions; directional glyphs accompany P/L color.
+- Dynamic Type and Reduce Motion support. Fixed-size navigation glyphs cap
+  scaling while reading content retains accessibility text sizes.
+- Quote publication every five seconds while a market is open and a slower
+  refresh while markets are closed, with available last-close data preserved.
+
+## Verification
+
+The 2.0.13 update passed 52 iOS unit tests and 128 offline backend tests (12 live
+provider cases skipped), plus 15 distinct targeted UI checks. YTD checks exercise both appearances,
+large text, separate currencies, and navigation. Full product tours generate the
+README screenshots. See [the preview guide](DesignPreview/README.md) for commands.
+Never run a test fixture against the hosted portfolio or a production database.
 
 ### Testing hook
 

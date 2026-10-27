@@ -2,10 +2,11 @@ import XCTest
 
 /// Run against DesignPreview/server.py: synthetic data, no production writes.
 final class ProductTour: XCTestCase {
-    private func launch(_ appearance: String, tab: String = "overview", market: String? = nil) -> XCUIApplication {
+    private func launch(_ appearance: String, tab: String = "overview", market: String? = nil, largeText: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-api.baseURL", "http://127.0.0.1:8099", "-appearance", appearance]
         app.launchEnvironment["UITEST_GUEST"] = "1"
+        if largeText { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"] }
         app.launchEnvironment["UITEST_TAB"] = tab
         if let market { app.launchEnvironment["UITEST_MARKET"] = market }
         app.launch()
@@ -33,11 +34,73 @@ final class ProductTour: XCTestCase {
     func testLight() { tour("light") }
     func testDark() { tour("dark") }
 
+    func testYearEarningsLight() { checkYearEarnings("light") }
+    func testYearEarningsDark() { checkYearEarnings("dark") }
+    func testYearEarningsLargeText() { checkYearEarnings("light", largeText: true) }
+
+    private func checkYearEarnings(_ theme: String, largeText: Bool = false) {
+        continueAfterFailure = false
+        let app = launch(theme, largeText: largeText)
+        let hero = app.descendants(matching: .any)["overview.portfolioHero"].firstMatch
+        XCTAssertTrue(hero.waitForExistence(timeout: 15))
+        let card = app.descendants(matching: .any)["overview.yearEarnings"].firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 15))
+        let expected = [
+            ("Taiwan, Realized stock P/L", "NT$0"),
+            ("United States, Realized stock P/L", "US$0.00"),
+            ("Taiwan, Dividends received", "NT$3,180"),
+            ("United States, Dividends received", "US$54.30"),
+        ]
+        // SwiftUI exposes each metric through its parent label/value and
+        // propagates the card identifier, so assert the VoiceOver contract.
+        let values = expected.map { app.staticTexts[$0.0] }
+        let loaded = zip(values, expected).map { element, item in
+            XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", item.1), object: element)
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: loaded, timeout: 15), .completed,
+                       "Year-to-date realized P/L and dividends must retain each market's currency")
+        func cardFrame() -> CGRect {
+            app.staticTexts.matching(identifier: "overview.yearEarnings").allElementsBoundByIndex
+                .reduce(CGRect.null) { $0.union($1.frame) }.insetBy(dx: -16, dy: -16)
+        }
+        let scroll = app.scrollViews.firstMatch
+        let nav = app.buttons["tab.overview"]
+        for _ in 0..<8 {
+            if cardFrame().minY >= app.frame.minY + 60 && cardFrame().maxY <= nav.frame.minY { break }
+            let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+            let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: cardFrame().maxY > nav.frame.minY ? 0.48 : 0.92))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTAssertGreaterThanOrEqual(cardFrame().minY, app.frame.minY + 60)
+        XCTAssertLessThanOrEqual(cardFrame().maxY, nav.frame.minY,
+                                 "The full earnings card should fit above the main navigation")
+        snap(app, "year-earnings-\(largeText ? "large-text" : theme)")
+        for (element, item) in zip(values, expected) {
+            XCTAssertTrue(element.isHittable, "Year-to-date amount is not visible: \(item.0)")
+            XCTAssertEqual(element.value as? String, item.1)
+            XCTAssertGreaterThanOrEqual(element.frame.minX, app.frame.minX + 16)
+            XCTAssertLessThanOrEqual(element.frame.maxX, app.frame.maxX - 16)
+            XCTAssertTrue(hero.frame.contains(element.frame), "Year-to-date earnings must be inside the portfolio hero")
+        }
+        XCTAssertGreaterThanOrEqual(app.buttons["Add trade"].frame.minY, hero.frame.maxY,
+                                    "Quick actions should follow the combined portfolio card")
+        app.buttons["tab.assistant"].tap()
+        XCTAssertTrue(app.textFields["assistantComposer"].waitForExistence(timeout: 5))
+        app.buttons["tab.overview"].tap()
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+        app.terminate()
+    }
+
     private func tour(_ theme: String) {
         var app = launch(theme)
         XCTAssertTrue(app.buttons["market.TW"].waitForExistence(timeout: 15))
         snap(app, "\(theme)-01-home")
-        app.swipeUp()
+        let history = app.staticTexts["Portfolio history"]
+        for _ in 0..<5 {
+            if history.isHittable && history.frame.minY < app.frame.midY { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(history.isHittable, "Portfolio history must be visible in its screenshot")
         snap(app, "\(theme)-02-history")
         app.terminate()
 
@@ -88,16 +151,31 @@ final class ProductTour: XCTestCase {
         app.terminate()
     }
 
-    func testHomeActions() {
-        let app = launch("light")
-        snap(app, "final-home")
+    func testHomeActions() { checkHomeActions("light") }
+    func testHomeActionsDark() { checkHomeActions("dark") }
+
+    private func checkHomeActions(_ theme: String) {
+        let app = launch(theme)
+        XCTAssertTrue(app.buttons["market.TW"].waitForExistence(timeout: 15))
+        snap(app, "final-home-\(theme)")
         app.buttons["Add trade"].tap()
         XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["sheet.title"].isHittable)
-        snap(app, "final-trade-entry")
+        XCTAssertEqual(app.staticTexts["sheet.title"].label, "Add trade")
+        snap(app, "final-trade-entry-\(theme)")
         app.buttons["Close"].tap()
-        app.buttons["Ask assistant"].tap()
+        app.buttons["Add dividend"].tap()
+        XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["sheet.title"].label, "Add dividend")
+        XCTAssertTrue(app.staticTexts["Cash dividend · TWD"].isHittable)
+        XCTAssertFalse(app.staticTexts["TWSE/TPEx · fees 0.1425% + tax"].exists,
+                       "Cash dividend entry must not claim trade fees or transaction tax")
+        snap(app, "final-dividend-entry-\(theme)")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["tab.overview"].isHittable)
+        app.buttons["tab.assistant"].tap()
         XCTAssertTrue(app.staticTexts["assistant.welcome"].waitForExistence(timeout: 5))
+        app.terminate()
     }
 
     func testFinalHomeDark() {
@@ -114,7 +192,7 @@ final class ProductTour: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["market.TW"].waitForExistence(timeout: 15))
         snap(app, "large-text-home")
-        app.buttons["Ask assistant"].tap()
+        app.buttons["tab.assistant"].tap()
         XCTAssertTrue(app.textFields["assistantComposer"].waitForExistence(timeout: 5))
         snap(app, "large-text-assistant")
     }

@@ -22,7 +22,7 @@ override with `VITE_DEV_API`). So run the backend locally too:
 
 ```bash
 cd backend
-WEB_DASHBOARD_PASSWORD=yourpassword python -m uvicorn app.main:app --port 8011
+DATABASE_URL=sqlite:////tmp/stock-studio-dev.db WEB_DASHBOARD_PASSWORD=yourpassword python -m uvicorn app.main:app --port 8011
 ```
 
 Then open http://localhost:5173 and sign in with `yourpassword`.
