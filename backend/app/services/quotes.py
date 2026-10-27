@@ -88,6 +88,8 @@ class QuoteData:
     bid: float | None = None
     ask: float | None = None
     volume: int | None = None
+    as_of: str | None = None
+    source: str | None = None
 
 
 def _bare(ticker: str) -> str:
@@ -104,10 +106,16 @@ def get_quote(ticker: str) -> QuoteData | None:
 
 def get_quotes(tickers: Iterable[str]) -> dict[str, QuoteData]:
     # Lazy imports avoid a circular dependency at module load time.
-    from . import quote_relay_client, tw_quotes, yahoo_quotes
+    from . import quote_relay_client, tw_quotes, yahoo_quotes, tpex_index
 
     tickers = list(tickers)
     out: dict[str, QuoteData] = {}
+    if tpex_index.SYMBOL in tickers:
+        quote = tpex_index.get_quote()
+        if quote is not None:
+            out[tpex_index.SYMBOL] = quote
+        # Yahoo has no data for this ID, even when the official source fails.
+        tickers = [ticker for ticker in tickers if ticker != tpex_index.SYMBOL]
     prefer = source_preference.get()
 
     if prefer != "yahoo":

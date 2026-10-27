@@ -106,6 +106,8 @@ def get_indices(db: Session = Depends(get_db), user: str = Depends(get_current_u
                 "name": KNOWN_NAMES.get(sym) or (q.name if q else sym) or sym,
                 "market": _index_market(sym),
                 "price": price,
+                "as_of": q.as_of if q else None,
+                "source": q.source if q else None,
                 "change": change,
                 "change_pct": (change / prev * 100) if change is not None and prev else None,
             }

@@ -59,6 +59,17 @@ def stock_detail(
         "volume": quote.volume if quote else None,
     }
 
+    if ticker == "^TWOII":
+        # An index has no company fundamentals, position, or dividend records.
+        # Avoid five Yahoo/FinMind calls to a symbol Yahoo does not serve.
+        return {
+            "ticker": ticker, "symbol": ticker, "name": "櫃買指數", "live": live,
+            "fundamentals": {}, "position": None,
+            "history": stock_info.get_history(ticker, period), "taiex_history": [],
+            "trades": [], "dividends": [], "yield_on_cost": None,
+            "monthly_revenue": [], "quarterly_financials": [],
+        }
+
     # --- fundamentals + history + financials (yfinance/FinMind, cached) ---
     # These are independent network calls; run them concurrently so the modal
     # loads in ~the slowest single call instead of the sum of all five.

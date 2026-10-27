@@ -206,6 +206,10 @@ def get_history(ticker: str, period: str = "1y", *,
     ``{date, open, high, low, close, volume}`` dicts, oldest first.
     Explicit dates override period; both bounds are inclusive to callers.
     """
+    if ticker.strip().upper() == "^TWOII":
+        from . import tpex_index
+        return tpex_index.get_history(period, start_date=start_date, end_date=end_date)
+
     import yfinance as yf
 
     now = time.time()
