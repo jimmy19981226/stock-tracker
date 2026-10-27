@@ -36,8 +36,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     }
 }
 
-/// The app shell: five tabs, the pinned market-index strip above the tab bar on
-/// Overview, and the toast layer.
+/// The app shell: five persistent destinations and the toast layer.
 ///
 /// The tab bar is drawn rather than `TabView`'s, because the design specifies a
 /// solid glyph plus a 600-weight label when selected and a 1.7pt outline with a
@@ -56,19 +55,22 @@ struct RootView: View {
     @ObservedObject private var reports = ReportsStore.shared
 
     var body: some View {
-        ZStack {
-            Theme.ground.ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                Theme.ground.ignoresSafeArea()
 
-            Group {
-                switch tab {
-                case .overview: overviewStack
-                case .trades: TradesView()
-                case .assistant: AssistantView(vm: assistantVM)
-                case .dividends: DividendsView()
-                case .settings: SettingsView()
+                Group {
+                    switch tab {
+                    case .overview: overviewStack
+                    case .trades: TradesView()
+                    case .assistant: AssistantView(vm: assistantVM)
+                    case .dividends: DividendsView()
+                    case .settings: SettingsView()
+                    }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
         // Reads `typing` in the body proper, which is what makes the inset
         // below actually re-evaluate. A value only ever read inside a
@@ -87,9 +89,6 @@ struct RootView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !typing {
                 VStack(spacing: 0) {
-                    if tab == .overview && overviewTicker == nil {
-                        IndexBarView(market: overviewMarket)
-                    }
                     AppTabBar(selection: $tab)
                 }
                 .background {
@@ -124,10 +123,8 @@ struct RootView: View {
         .onDisappear { store.stopPolling() }
     }
 
-    /// Overview → market dashboard → stock detail. Modelled as state rather
-    /// than a `NavigationStack` because the index strip and the tab bar have to
-    /// stay pinned across the whole hierarchy, and the screens carry their own
-    /// back rows instead of a system nav bar.
+    /// Overview → market dashboard → stock detail; preserve the selected market
+    /// and ticker when switching tabs. Screens provide their own back controls.
     @ViewBuilder
     private var overviewStack: some View {
         if let ticker = overviewTicker, let market = overviewMarket {
@@ -139,9 +136,9 @@ struct RootView: View {
                           onOpen: { overviewTicker = $0 })
                 .transition(.move(edge: .trailing).combined(with: .opacity))
         } else {
-            OverviewView { market in
+            OverviewView(onOpenMarket: { market in
                 withAnimation(.easeOut(duration: 0.22)) { overviewMarket = market }
-            }
+            }, onAskAssistant: { tab = .assistant }, onOpenSettings: { tab = .settings })
         }
     }
 
@@ -175,7 +172,8 @@ private struct AppTabBar: View {
                     VStack(spacing: 4) {
                         Image(systemName: on && tab.hasFilledTwin ? tab.symbol + ".fill" : tab.symbol)
                             .font(.system(size: 21, weight: on ? .semibold : .regular))
-                            .frame(height: 25)
+                            .frame(width: 54, height: 30)
+                            .background(on ? Theme.accentTint : .clear, in: Capsule())
                         Text(tab.label)
                             .font(on ? Theme.Typo.tabOn : Theme.Typo.tab)
                             .lineLimit(1)
@@ -183,16 +181,19 @@ private struct AppTabBar: View {
                     }
                     .foregroundStyle(on ? Theme.accentSelected : Theme.textTertiary)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 5)
-                    .padding(.bottom, 4)
+                    .padding(.top, 3)
+                    .padding(.bottom, 5)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(tab.label)
+                .accessibilityIdentifier("tab.\(tab.rawValue)")
+                .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 12)
         .padding(.top, 8)
-        .padding(.bottom, 4)
+        .padding(.bottom, 5)
         .sensoryFeedback(.selection, trigger: selection)
     }
 }

@@ -515,11 +515,11 @@ struct AssistantView: View {
         HStack(spacing: Theme.Space.s) {
             IconButton(symbol: "clock") { showHistory = true }
                 .accessibilityLabel("Chat history")
-            Text("✦ Assistant")
+            Text("Assistant")
                 .font(Theme.Typo.headingLg)
                 .foregroundStyle(Theme.text)
             Spacer(minLength: Theme.Space.xs)
-            TagChip(text: AISettings.providerName, style: .accent)
+            TagChip(text: "AI", style: .accent)
             IconButton(symbol: "square.and.pencil") { vm.reset() }
                 .disabled(vm.messages.isEmpty && vm.streamingText.isEmpty)
                 .accessibilityLabel("New chat")
@@ -639,41 +639,51 @@ struct AssistantView: View {
     ]
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            Text("Try asking").eyebrowStyle(Theme.textSecondary)
-
+        VStack(alignment: .leading, spacing: Theme.Space.xxl) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 28, weight: .medium))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 64, height: 64)
+                .background(Theme.accentTint, in: RoundedRectangle(cornerRadius: 22))
             VStack(alignment: .leading, spacing: Theme.Space.s) {
-                ForEach(Self.suggestions, id: \.self) { prompt in
-                    Button {
-                        vm.input = prompt
-                        vm.send()
-                    } label: {
-                        Text(prompt)
-                            .font(Theme.Typo.detail)
-                            .foregroundStyle(Theme.text)
-                            .multilineTextAlignment(.leading)
-                            .padding(.horizontal, Theme.Space.m + 2)
-                            .padding(.vertical, Theme.Space.s + 1)
-                            .background(Theme.card)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
-                                    .stroke(Theme.line, lineWidth: 1))
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button,
-                                                        style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!providerHasKey)
-                }
+                Text("A little clarity.\nA better perspective.")
+                    .font(Theme.Typo.title).tracking(-0.8).foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Explore your investments, understand performance, or turn a screenshot into records.")
+                    .font(Theme.Typo.detail).foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-
-            Text("Typed tools — portfolio summary, holdings, trades, dividends, live quotes for any ticker, price history, TWR/XIRR/benchmark, dividend calendar, net-worth history, FX, market hours, web search. Write tools only ever draft a record for your confirmation.")
-                .font(Theme.Typo.caption)
-                .foregroundStyle(Theme.textSecondary)
-                .frame(maxWidth: 300, alignment: .leading)
+            VStack(spacing: Theme.Space.m) {
+                suggestion("Your daily briefing", detail: "What moved your portfolio today", icon: "sun.max", prompt: Self.suggestions[0])
+                suggestion("See the bigger picture", detail: "Compare returns with your benchmark", icon: "chart.xyaxis.line", prompt: Self.suggestions[1])
+                suggestion("Research a holding", detail: "Latest news on your largest investment", icon: "text.magnifyingglass", prompt: Self.suggestions[2])
+            }
+            Label("You review every record before it is saved.", systemImage: "checkmark.shield")
+                .font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, Theme.Space.xs)
         }
-        .padding(.top, Theme.Space.m)
+        .padding(.top, Theme.Space.xl)
+        .padding(.bottom, Theme.Space.m)
+    }
+
+    private func suggestion(_ title: String, detail: String, icon: String, prompt: String) -> some View {
+        Button {
+            vm.input = prompt
+            inputFocused = true
+        } label: {
+            HStack(spacing: Theme.Space.l) {
+                Image(systemName: icon).font(.system(size: 20, weight: .regular))
+                    .foregroundStyle(Theme.accent).frame(width: 26)
+                VStack(alignment: .leading, spacing: Theme.Space.xxs) {
+                    Text(title).font(Theme.Typo.row).foregroundStyle(Theme.text)
+                    Text(detail).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.up.left").font(.system(size: 12)).foregroundStyle(Theme.textTertiary)
+            }
+            .appCard(padding: Theme.Space.xl)
+        }
+        .buttonStyle(.plain)
     }
 
     /// Setup prompt — an invitation, not an alert, so it sits inline as a card
@@ -728,7 +738,7 @@ struct AssistantView: View {
                     Image(systemName: "plus")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 44, height: 44)
                 }
                 .disabled(vm.isSubmittingImport)
 
@@ -753,10 +763,10 @@ struct AssistantView: View {
                 Button {
                     if vm.isStreaming { vm.stopStreaming() } else { vm.send() }
                 } label: {
-                    Image(systemName: vm.isStreaming ? "stop.fill" : "paperplane.fill")
+                    Image(systemName: vm.isStreaming ? "stop.fill" : "arrow.up")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
+                        .foregroundStyle(Theme.onAccent)
+                        .frame(width: 44, height: 44)
                         .background(vm.isStreaming || vm.canSend ? Theme.accent : Theme.textTertiary)
                         .clipShape(Circle())
                         .contentTransition(.symbolEffect(.replace))
@@ -808,7 +818,7 @@ private struct MessageView: View {
                         Spacer(minLength: 40)
                         Text(content)
                             .font(Theme.Typo.body)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Theme.onAccent)
                             .padding(.horizontal, Theme.Space.l)
                             .padding(.vertical, Theme.Space.m)
                             .background(Theme.accent)
@@ -1256,7 +1266,7 @@ private struct ProposalRow: View {
                 Text(detail)
                     .font(Theme.Typo.micro)
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
                 if duplicate {
                     Text("Possible duplicate" + (duplicateDate.map { " · \($0.prefix(10))" } ?? ""))
                         .font(Theme.Typo.micro)
@@ -1282,7 +1292,7 @@ struct DestructiveButton: View {
                 if busy { ProgressView().tint(.white) }
                 else { Text(title).font(Theme.Typo.buttonSm) }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.onAccent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 11)
             .background(Theme.loss)

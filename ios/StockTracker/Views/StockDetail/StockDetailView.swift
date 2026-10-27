@@ -45,6 +45,7 @@ struct StockDetailView: View {
 
                     if let position = detail.position, position.shares > 0 {
                         PositionCard(position: position, currency: currency)
+                            .accessibilityIdentifier("stock.position")
                     }
 
                     FiftyTwoWeekBar(low: detail.fundamentals.fiftyTwoWeekLow,

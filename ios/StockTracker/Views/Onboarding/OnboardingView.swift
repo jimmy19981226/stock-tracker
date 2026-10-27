@@ -16,15 +16,15 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Spacer()
 
-                Text("✦")
+                Image(systemName: "chart.xyaxis.line")
                     .font(.system(size: 46))
                     .foregroundStyle(Theme.heroText)
-                Text("AI Stock Studio")
+                Text("Investing.\nIn perspective.")
                     .font(Theme.Typo.signIn)
                     .foregroundStyle(Theme.heroText)
                     .padding(.top, 10)
                     .padding(.bottom, 6)
-                Text("Taiwan and US portfolios in one net worth. Live prices, dividends, broker cost basis, and an assistant that reads your holdings.")
+                Text("Your Taiwan and US investments, brought together. Follow your progress and make sense of every move.")
                     .font(Theme.Typo.body)
                     .foregroundStyle(Theme.heroLabel)
                     .frame(maxWidth: 280, alignment: .leading)

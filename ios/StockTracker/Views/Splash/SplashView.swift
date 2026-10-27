@@ -13,12 +13,12 @@ struct SplashView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: Theme.Space.m) {
-                Text("✦")
+                Image(systemName: "chart.xyaxis.line")
                     .font(.system(size: 46))
                     .foregroundStyle(Theme.heroText)
                     .scaleEffect(appear ? 1 : 0.7)
                     .opacity(appear ? 1 : 0)
-                Text("AI Stock Studio")
+                Text("Stock Studio")
                     .font(Theme.Typo.title)
                     .foregroundStyle(Theme.heroText)
                     .opacity(appear ? 1 : 0)

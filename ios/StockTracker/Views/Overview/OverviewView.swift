@@ -3,11 +3,14 @@ import SwiftUI
 /// The landing screen: one net worth across both markets, the curve that got
 /// there, and a door into each market.
 ///
-/// The hero is the only dark field on the screen, and it is the only thing
-/// above the fold — everything below annotates it.
+/// A value-led overview with quick actions and direct market entry points.
 struct OverviewView: View {
     @EnvironmentObject private var store: PortfolioStore
+    @Environment(\.dynamicTypeSize) private var typeSize
     let onOpenMarket: (MarketCode) -> Void
+    var onAskAssistant: () -> Void = {}
+    var onOpenSettings: () -> Void = {}
+    @State private var showAddTrade = false
 
     // Hero and market cards read the same published quote snapshot.
     private var overview: PortfolioOverview? { store.overview }
@@ -23,19 +26,30 @@ struct OverviewView: View {
                     ErrorBanner(message: error) { Task { await reload() } }
                 }
 
-                NetWorthHero(overview: overview, clock: clock)
+                NetWorthHero(overview: overview)
+
+                quickActions
+
+                VStack(alignment: .leading, spacing: Theme.Space.l) {
+                    SectionLabel("Your markets") {
+                        Text("2 currencies").font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
+                    }
+                    adaptiveLayout {
+                        ForEach(MarketCode.allCases) { market in
+                            Button { onOpenMarket(market) } label: {
+                                MarketCard(market: market,
+                                           summary: store.summary(for: market),
+                                           session: store.session(for: market),
+                                           share: share(of: market))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("market.\(market.rawValue)")
+                        }
+                    }
+                }
 
                 netWorthChart
-
-                ForEach(MarketCode.allCases) { market in
-                    Button { onOpenMarket(market) } label: {
-                        MarketCard(market: market,
-                                   summary: store.summary(for: market),
-                                   session: store.session(for: market),
-                                   share: share(of: market))
-                    }
-                    .buttonStyle(.plain)
-                }
+                IndexBarView(market: nil).appListCard()
 
                 Text("Updated \(clock) · \(cadenceNote)")
                     .font(Theme.Typo.caption)
@@ -52,25 +66,61 @@ struct OverviewView: View {
         .screenBackground()
         .refreshable { await reload() }
         .task(id: period) { await loadSeries() }
+        .sheet(isPresented: $showAddTrade) { TradeFormView(market: .TW, existing: nil) }
     }
 
     // MARK: Header
 
     private var header: some View {
-        HStack(spacing: Theme.Space.s) {
-            BrandLine()
-            Spacer(minLength: Theme.Space.s)
-            ForEach(MarketCode.allCases) { market in
-                SessionPill(code: market.rawValue, isOpen: store.isOpen(market))
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                BrandLine()
+                Text("Your portfolio").font(Theme.Typo.title).foregroundStyle(Theme.text)
             }
+            Spacer()
+            Button(action: onOpenSettings) {
+                Image(systemName: "person.crop.circle")
+                    .font(.system(size: 25, weight: .light))
+                    .foregroundStyle(Theme.text)
+                    .frame(width: 48, height: 48)
+                    .background(Theme.card, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Account settings")
         }
+    }
+
+    private var adaptiveLayout: AnyLayout {
+        typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: Theme.Space.m))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: Theme.Space.m))
+    }
+
+    private var quickActions: some View {
+        adaptiveLayout {
+            quickAction("Add trade", icon: "plus", action: { showAddTrade = true })
+            quickAction("Ask assistant", icon: "sparkles", action: onAskAssistant)
+        }
+    }
+
+    private func quickAction(_ title: String, icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Space.s) {
+                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+                Text(title).font(Theme.Typo.buttonSm)
+            }
+            .foregroundStyle(Theme.accentChipText)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(Theme.accentTint, in: RoundedRectangle(cornerRadius: Theme.Radius.button))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: Net-worth chart
 
     private var netWorthChart: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
-            CardHeader(title: "Net worth",
+            CardHeader(title: "Portfolio history",
                        value: Fmt.signedAmount(rangeChange, currency: "TWD"),
                        suffix: Fmt.pct(rangeChangePct, digits: 1),
                        valueColor: Theme.pl(rangeChange))
@@ -80,7 +130,7 @@ struct OverviewView: View {
                 .padding(.bottom, 2)
 
             if series.count >= 2 {
-                SeriesChart(points: series, currency: "TWD",
+                SeriesChart(points: series, currency: "TWD", height: 165,
                             fromLabel: period.fromLabel(first: series.first?.date))
             } else {
                 Rectangle().fill(.clear).frame(height: 124)
@@ -175,7 +225,6 @@ struct OverviewView: View {
 /// two-column grid of the figures that explain it.
 private struct NetWorthHero: View {
     let overview: PortfolioOverview?
-    let clock: String
 
     private var fx: Double { overview?.fx.usdTwd ?? 0 }
 
@@ -190,10 +239,6 @@ private struct NetWorthHero: View {
     private var today: Double? { combined { $0.todayPl } }
     private var unrealized: Double? { combined { $0.totalPl } }
     private var earned: Double? { combined { $0.totalEarned } }
-    private var totalReturn: Double? {
-        guard let u = unrealized, let e = earned else { return unrealized ?? earned }
-        return u + e
-    }
     private var todayPct: Double? {
         guard let today, let total = overview?.combined.twd, total - today > 0 else { return nil }
         return today / (total - today) * 100
@@ -209,55 +254,42 @@ private struct NetWorthHero: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Investing net worth")
-                .eyebrowStyle(Theme.heroLabel)
-                .padding(.bottom, 4)
-
-            Text(Fmt.amount(overview?.combined.twd, currency: "TWD"))
-                .font(Theme.Typo.hero)
-                .tracking(-0.4)
-                .foregroundStyle(Theme.heroText)
-                .numeral(0.5)
-                .rollingNumber(overview?.combined.twd)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("≈ \(Fmt.amount(overview?.combined.usd, currency: "USD"))")
-                HStack(spacing: Theme.Space.xs) {
-                    Text("USD/TWD \(Fmt.number(overview?.fx.usdTwd, digits: 2))")
-                    Text("·")
-                    Text(clock)
-                }
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            HStack {
+                Text("Total portfolio value").font(Theme.Typo.detailMed)
+                Spacer()
+                Image(systemName: "globe.asia.australia").font(.system(size: 18))
             }
-            .font(Theme.Typo.detail)
             .foregroundStyle(Theme.heroLabel)
-            .numeral(0.7)
-            .padding(.top, Theme.Space.s)
 
-            Rectangle().fill(Theme.heroRule).frame(height: 1)
-                .padding(.top, Theme.Space.xl)
-
-            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
-                                GridItem(.flexible(), alignment: .leading)],
-                      alignment: .leading, spacing: Theme.Space.l) {
-                HeroStat(label: "Today",
-                         value: Fmt.signedAmount(usd(today), currency: "USD"),
-                         sub: Fmt.pct(todayPct),
-                         valueColor: Theme.pl(today))
-                HeroStat(label: "Unrealized",
-                         value: Fmt.signedAmount(usd(unrealized), currency: "USD"),
-                         valueColor: Theme.pl(unrealized))
-                HeroStat(label: "Realized + div",
-                         value: Fmt.signedAmount(usd(earned), currency: "USD"),
-                         valueColor: Theme.pl(earned))
-                HeroStat(label: "Total return",
-                         value: Fmt.signedAmount(usd(totalReturn), currency: "USD"),
-                         sub: totalReturn != nil
-                             ? "≈ " + Fmt.signedAmount(totalReturn, currency: "TWD") : "")
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Text(Fmt.amount(overview?.combined.twd, currency: "TWD"))
+                    .font(Theme.Typo.hero).tracking(-1.5)
+                    .foregroundStyle(Theme.heroText).numeral(0.5)
+                    .rollingNumber(overview?.combined.twd)
+                Text("≈ \(Fmt.amount(overview?.combined.usd, currency: "USD"))")
+                    .font(Theme.Typo.detail).foregroundStyle(Theme.heroLabel)
             }
-            .padding(.top, Theme.Space.l)
+
+            HStack(spacing: Theme.Space.xs) {
+                Image(systemName: (today ?? 0) < 0 ? "arrow.down.right" : "arrow.up.right")
+                Text(Fmt.signedAmount(today, currency: "TWD"))
+                    .numeral(0.6).layoutPriority(1)
+                Text("today").foregroundStyle(Theme.heroLabel).lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+                Text(Fmt.pct(todayPct)).numeral()
+            }
+            .font(Theme.Typo.captionMed).foregroundStyle(Theme.heroText)
+            .padding(.vertical, Theme.Space.m)
+            .padding(.horizontal, Theme.Space.l)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.Radius.button))
+
+            HStack(alignment: .top, spacing: Theme.Space.xl) {
+                HeroStat(label: "Unrealized", value: Fmt.signedAmount(usd(unrealized), currency: "USD"))
+                HeroStat(label: "Realized + dividends", value: Fmt.signedAmount(usd(earned), currency: "USD"))
+            }
         }
-        .heroCard(padding: 20)
+        .heroCard(padding: 22)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Investing net worth")
         .accessibilityValue(Fmt.amount(overview?.combined.twd, currency: "TWD"))
@@ -277,72 +309,36 @@ private struct MarketCard: View {
     private var currency: String { market.currencyCode }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: Theme.Space.s) {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack {
                 Text(market.rawValue)
-                    .font(Theme.Typo.eyebrowLg)
+                    .font(Theme.Typo.eyebrow)
                     .foregroundStyle(Theme.accentChipText)
-                    .chipFill(Theme.accentTint, radius: 7)
-                Text(market == .TW ? "Taiwan" : "US")
-                    .font(Theme.Typo.rowLg)
-                    .foregroundStyle(Theme.text)
-                Spacer(minLength: Theme.Space.xs)
-                if let share {
-                    Text("\(Int(share.rounded()))% of total")
-                        .font(Theme.Typo.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                        .numeral()
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 32, height: 32)
+                    .background(Theme.accentTint, in: Circle())
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.textTertiary)
             }
-            .padding(.bottom, Theme.Space.s)
-
-            HStack(alignment: .lastTextBaseline, spacing: Theme.Space.s) {
-                Text(Fmt.amount(summary?.totalValue, currency: currency))
-                    .font(Theme.Typo.section)
-                    .foregroundStyle(Theme.text)
-                    .numeral(0.6)
-                    .rollingNumber(summary?.totalValue)
-                Text(sessionNote)
-                    .font(Theme.Typo.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+            Text(market == .TW ? "Taiwan" : "United States")
+                .font(Theme.Typo.row).foregroundStyle(Theme.text)
+            Text(Fmt.amount(summary?.totalValue, currency: currency))
+                .font(Theme.Typo.value).foregroundStyle(Theme.text)
+                .numeral(0.65).rollingNumber(summary?.totalValue)
+            HStack(spacing: 4) {
+                Image(systemName: (summary?.totalPlPct ?? 0) < 0 ? "arrow.down.right" : "arrow.up.right")
+                Text(Fmt.pct(summary?.totalPlPct, digits: 1))
+                Text("unrealized").foregroundStyle(Theme.textSecondary)
             }
-            .padding(.bottom, Theme.Space.m)
-
-            VStack(spacing: 5) {
-                row("Today", summary?.todayPl, pct: summary?.todayPlPct, signed: true)
-                row("Unrealized", summary?.totalPl, pct: summary?.totalPlPct, signed: true)
-                row("Realized", summary?.realizedPl, pct: nil, signed: true)
-                row("Dividends", summary?.dividends, pct: nil, signed: false)
-            }
-
-            Rectangle().fill(Theme.line).frame(height: 1)
-                .padding(.top, Theme.Space.m)
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("Total return · \(currency)")
-                    .eyebrowStyle(Theme.textSecondary)
-                    .tracking(11 * 0.10)
-                Spacer(minLength: Theme.Space.s)
-                PLValue(value: totalReturn, pct: totalReturnPct, currency: currency,
-                        font: Theme.Typo.row)
-            }
-            .padding(.top, 9)
+            .font(Theme.Typo.caption).foregroundStyle(Theme.pl(summary?.totalPlPct))
+            WeightBar(fraction: (share ?? 0) / 100)
+            Text("\(Int((share ?? 0).rounded()))% of portfolio · \(sessionNote)")
+                .font(Theme.Typo.micro).foregroundStyle(Theme.textSecondary)
+                .lineLimit(1).minimumScaleFactor(0.75)
         }
         .appCard(padding: Theme.Space.xl)
         .contentShape(Rectangle())
-    }
-
-    private var totalReturn: Double? {
-        guard let s = summary else { return nil }
-        return (s.totalPl ?? 0) + s.totalEarned
-    }
-    private var totalReturnPct: Double? {
-        guard let s = summary, s.totalCost > 0, let tr = totalReturn else { return nil }
-        return tr / s.totalCost * 100
     }
 
     private var sessionNote: String {
@@ -354,24 +350,4 @@ private struct MarketCard: View {
         }
     }
 
-    private func row(_ key: String, _ value: Double?, pct: Double?, signed: Bool) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
-            Text(key)
-                .font(Theme.Typo.detail)
-                .foregroundStyle(Theme.textSecondary)
-            Spacer(minLength: Theme.Space.xs)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(signed ? Fmt.signedAmount(value, currency: currency)
-                            : Fmt.amount(value, currency: currency))
-                    .font(Theme.Typo.inlineNum)
-                    .foregroundStyle(signed ? Theme.pl(value) : Theme.text)
-                if let pct {
-                    Text(Fmt.pct(pct))
-                        .font(Theme.Typo.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-            }
-            .numeral()
-        }
-    }
 }

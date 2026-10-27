@@ -5,11 +5,22 @@ FastAPI backend (`../backend`) over HTTP — there is no web view, this is a rea
 native app. Unlike the browser frontend, native `URLSession` is not subject to
 CORS, so it calls the API directly.
 
+## Studio 2
+
+Version 2.0 introduces native iOS typography, a teal and neutral visual system,
+light/dark appearances, portfolio quick actions, searchable holdings, a separate
+performance view, editable assistant prompts, and full-height record forms.
+Accessibility text sizes switch the home screen's cards and actions to a single
+column. Broker accounting remains Taiwan moving average / US FIFO.
+
+See [Design preview and verification](DesignPreview/README.md) for a read-only,
+synthetic API and reproducible simulator screen tours.
+
 ## Requirements
 
 - Xcode 16+ (developed against Xcode 26.5)
 - [XcodeGen](https://github.com/yonggit/XcodeGen) (`brew install xcodegen`) — the
-  `.xcodeproj` is generated from `project.yml`, so it isn't committed.
+  `.xcodeproj` is generated from `project.yml`; regenerate it after spec changes.
 
 ## Generate the project
 
@@ -34,9 +45,9 @@ To use a **local dev backend** instead (e.g. to test code changes):
 1. Start it from the repo root:
    ```bash
    cd backend
-   python3 -m uvicorn app.main:app --reload --port 8011
+   DATABASE_URL=sqlite:////tmp/stock-studio-dev.db python3 -m uvicorn app.main:app --reload --port 8011
    ```
-2. In the app, open **Settings** (gear icon, top-right of the Portfolio tab) and
+2. In the app, open **Settings → Connection settings** and
    set the backend URL to `http://127.0.0.1:8011` (simulator) — or your Mac's
    LAN IP on a physical device, with the server started using `--host 0.0.0.0`.
 

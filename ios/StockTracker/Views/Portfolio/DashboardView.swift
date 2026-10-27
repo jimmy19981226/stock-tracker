@@ -15,6 +15,8 @@ struct DashboardView: View {
     @EnvironmentObject private var store: PortfolioStore
     @State private var earnedPeriod: EarnedPeriod = .year
     @State private var sort: HoldingSort = .value
+    @State private var section = "Holdings"
+    @State private var search = ""
 
     private var currency: String { market.currencyCode }
     private var summary: CurrencySummary? { store.summary(for: market) }
@@ -25,11 +27,23 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: Theme.Space.cardGap) {
                 header
                 hero
-                statGrid
-                earnedCard
-                PerformanceCard(market: market)
-                holdingsSection
-                footnote
+                HStack(spacing: Theme.Space.m) {
+                    StatCell(label: "Today's change",
+                             value: Fmt.signedAmount(summary?.todayPl, currency: currency),
+                             caption: Fmt.pct(summary?.todayPlPct), valueColor: Theme.pl(summary?.todayPl))
+                    StatCell(label: "Unrealized P/L",
+                             value: Fmt.signedAmount(summary?.totalPl, currency: currency),
+                             caption: Fmt.pct(summary?.totalPlPct), valueColor: Theme.pl(summary?.totalPl))
+                }
+                SegmentedControl(options: [("Holdings", "Holdings"), ("Performance", "Performance")], selection: $section)
+                if section == "Holdings" {
+                    holdingsSection
+                    footnote
+                } else {
+                    statGrid
+                    PerformanceCard(market: market)
+                    earnedCard
+                }
             }
             .screenPadding()
         }
@@ -83,37 +97,25 @@ struct DashboardView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("Total earned — realized + dividends")
-                .eyebrowStyle(Theme.heroLabel)
-            Text(Fmt.amount(totalEarned, currency: currency))
-                .font(Theme.Typo.display)
-                .foregroundStyle(Theme.heroText)
-                .numeral(0.5)
-                .rollingNumber(totalEarned)
-
-            Rectangle().fill(Theme.heroRule).frame(height: 1)
-                .padding(.top, Theme.Space.m)
-
-            HStack(alignment: .firstTextBaseline) {
-                Text("Total return incl. unrealized")
-                    .font(Theme.Typo.detail)
-                    .foregroundStyle(Theme.heroLabel)
-                Spacer(minLength: Theme.Space.s)
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(Fmt.signedAmount(totalReturn, currency: currency))
-                        .font(Theme.Typo.row)
-                    if let pct = totalReturnPct {
-                        Text(Fmt.pct(pct, digits: 1))
-                            .font(Theme.Typo.inlineNumSm)
-                    }
-                }
-                .foregroundStyle(Theme.heroText)
-                .numeral()
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            HStack {
+                Text("Market value").font(Theme.Typo.detailMed)
+                Spacer()
+                Text("\(holdings.count) positions").font(Theme.Typo.caption)
             }
-            .padding(.top, Theme.Space.m)
+            .foregroundStyle(Theme.heroLabel)
+            Text(Fmt.amount(summary?.totalValue, currency: currency))
+                .font(Theme.Typo.display).tracking(-1)
+                .foregroundStyle(Theme.heroText).numeral(0.5)
+                .rollingNumber(summary?.totalValue)
+            HStack {
+                Text("Realized + dividends").font(Theme.Typo.caption)
+                Spacer()
+                Text(Fmt.signedAmount(totalEarned, currency: currency)).font(Theme.Typo.row)
+            }
+            .foregroundStyle(Theme.heroLabel)
         }
-        .heroCard()
+        .heroCard(padding: 22)
     }
 
     // MARK: Stat grid
@@ -232,9 +234,25 @@ struct DashboardView: View {
     }
 
     private var holdingsSection: some View {
-        let sorted = holdings.sorted(by: sort.areInOrder)
+        let sorted = holdings.filter {
+            search.isEmpty || $0.ticker.localizedCaseInsensitiveContains(search)
+                || store.name(for: $0.ticker).localizedCaseInsensitiveContains(search)
+        }.sorted(by: sort.areInOrder)
         return VStack(alignment: .leading, spacing: Theme.Space.s) {
-            SectionLabel("Holdings · \(holdings.count)") {
+            HStack(spacing: Theme.Space.s) {
+                Image(systemName: "magnifyingglass").foregroundStyle(Theme.textSecondary)
+                TextField("Search your holdings", text: $search)
+                    .font(Theme.Typo.detail).foregroundStyle(Theme.text)
+                    .autocorrectionDisabled().textInputAutocapitalization(.never)
+                    .accessibilityIdentifier("holdings.search")
+                if !search.isEmpty {
+                    Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .foregroundStyle(Theme.textSecondary).accessibilityLabel("Clear search")
+                }
+            }
+            .padding(Theme.Space.l)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.button))
+            SectionLabel("Holdings · \(sorted.count)") {
                 SegmentedControl(options: HoldingSort.allCases.map { ($0, $0.rawValue) },
                                  selection: $sort, fill: false, compact: true)
             }
@@ -244,8 +262,8 @@ struct DashboardView: View {
                 .numeral()
 
             if sorted.isEmpty {
-                EmptyState(icon: "tray", title: "No positions",
-                           message: "Add a trade to start tracking.")
+                EmptyState(icon: "tray", title: search.isEmpty ? "No positions" : "No matching holdings",
+                           message: search.isEmpty ? "Add a trade to start tracking." : "Try a ticker or company name.")
                     .appCard()
             } else {
                 VStack(spacing: 0) {
@@ -286,7 +304,17 @@ private struct HoldingRow: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             HStack(alignment: .top, spacing: Theme.Space.s) {
                 VStack(alignment: .leading, spacing: 3) {
-                    TickerLine(ticker: holding.ticker, name: name)
+                    HStack(spacing: Theme.Space.s) {
+                        Text(String(holding.ticker.prefix(2)))
+                            .font(Theme.Typo.captionMed)
+                            .foregroundStyle(Theme.accentChipText)
+                            .frame(width: 36, height: 36)
+                            .background(Theme.accentTint, in: RoundedRectangle(cornerRadius: Theme.Radius.badge))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(holding.ticker).font(Theme.Typo.row).foregroundStyle(Theme.text)
+                            Text(name).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                        }
+                    }
                     Text(subtitle)
                         .font(Theme.Typo.micro)
                         .foregroundStyle(Theme.textSecondary)
@@ -330,7 +358,7 @@ private struct HoldingRow: View {
             }
         }
         .padding(.horizontal, Theme.Space.l)
-        .padding(.vertical, 11)
+        .padding(.vertical, 18)
         .contentShape(Rectangle())
     }
 

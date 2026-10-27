@@ -2,25 +2,9 @@ import Charts
 import SwiftUI
 import UIKit
 
-/// The app's design language, in one place.
-///
-/// Light technical ground, steel-blue accent, Barlow Condensed numerals over
-/// Barlow body text, grouped white cards with soft elevation, and exactly one
-/// dark accent field — the net-worth hero — so the eye always knows where the
-/// headline number is.
-///
-/// Every colour is defined for **both** themes and resolved from the trait
-/// collection, so a view never branches on `colorScheme` itself; it just asks
-/// for `Theme.card` and gets the right one. The app follows `Appearance`
-/// (Light / Dark / System), persisted in `AppSettings`.
+/// Studio 2: warm neutral surfaces, crisp native type and a deep teal accent.
+/// Semantic tokens keep every screen and both appearances consistent.
 enum Theme {
-
-    // MARK: - Colour
-    //
-    // Two complete palettes. Light is the primary design; dark is the same
-    // structure re-grounded on midnight blue rather than a desaturated
-    // inversion — the accent field stays the darkest surface in both, which is
-    // what keeps the hero reading as the hero.
 
     /// A colour that resolves per theme. The single place either palette is
     /// selected, so adding a token can never accidentally define only one half.
@@ -34,48 +18,49 @@ enum Theme {
     }
 
     /// Screen background.
-    static let ground = dyn(light: 0xF4F4F6, dark: 0x16273A)
+    static let ground = dyn(light: 0xF5F6F3, dark: 0x101513)
     /// Card / row background — the surface almost all content sits on.
-    static let card = dyn(light: 0xFFFFFF, dark: 0x1F3349)
+    static let card = dyn(light: 0xFFFFFF, dark: 0x1B2220)
     /// Nav + tab bar fill, layered over `.ultraThinMaterial`.
-    static let chrome = dyn(light: 0xFFFFFF, dark: 0x1F3349, lightAlpha: 0.94, darkAlpha: 0.94)
+    static let chrome = dyn(light: 0xF5F6F3, dark: 0x101513, lightAlpha: 0.94, darkAlpha: 0.94)
     /// A recessed row inside a card — the expanded index bar's cards.
-    static let inset = dyn(light: 0xEDEEEF, dark: 0x26405A)
+    static let inset = dyn(light: 0xF1F3F0, dark: 0x242D29)
     /// Segmented-control track, progress track, unselected pill fill.
-    static let track = dyn(light: 0xE1E2E4, dark: 0x2C4863)
+    static let track = dyn(light: 0xE9EDE8, dark: 0x2C3631)
     /// 1px hairline divider. Used *within* a card to separate a summary line
     /// from its detail, and between rows of a long list — never as a box.
-    static let line = dyn(light: 0xE1E2E4, dark: 0x35526F)
+    static let line = dyn(light: 0xE4E9E3, dark: 0x344039)
 
     /// Primary text.
-    static let text = dyn(light: 0x1D1F20, dark: 0xEAF1F8)
+    static let text = dyn(light: 0x172820, dark: 0xF1F5F0)
     /// Labels, captions, units — everything that annotates a number.
-    static let textSecondary = dyn(light: 0x6E7A85, dark: 0x95AEC9)
+    static let textSecondary = dyn(light: 0x65736B, dark: 0xA4B2A8)
     /// The inline company name beside a ticker: quieter than primary, louder
     /// than a caption. Extends the handoff table, which stops at two text
     /// tokens but shows three weights in the holdings and trade rows.
-    static let textStrong = dyn(light: 0x4A555F, dark: 0xB5C9DE)
+    static let textStrong = dyn(light: 0x46574C, dark: 0xC1CCC3)
     /// Chevrons, the benchmark line, disabled glyphs — the quietest ink.
-    static let textTertiary = dyn(light: 0x9AA4AD, dark: 0x6D89A8)
+    static let textTertiary = dyn(light: 0x829187, dark: 0x7E9285)
 
     /// Interactive / brand. Selected states, links, the chart line.
-    static let accent = dyn(light: 0x5980A6, dark: 0x6F9BC8)
+    static let accent = dyn(light: 0x126B55, dark: 0x62C5A1)
     /// The selected tab glyph, a half-step brighter so it holds up against
     /// chrome at 25pt.
-    static let accentSelected = dyn(light: 0x5980A6, dark: 0x7BA5CD)
+    static let onAccent = dyn(light: 0xFFFFFF, dark: 0x102A1E)
+    static let accentSelected = dyn(light: 0x126B55, dark: 0x8AD9B9)
     /// Chip / badge fill. A wash, never a saturated block.
-    static let accentTint = dyn(light: 0xE7EDF3, dark: 0x264057)
+    static let accentTint = dyn(light: 0xE3F1EA, dark: 0x233E32)
     /// Text on `accentTint`.
-    static let accentChipText = dyn(light: 0x223649, dark: 0xA8C6E2)
+    static let accentChipText = dyn(light: 0x19553F, dark: 0xA4E3C6)
     /// The muted accent used for area fills and weight bars.
-    static let accentSoft = dyn(light: 0xC9DAEA, dark: 0x2F4F6A)
+    static let accentSoft = dyn(light: 0xB4DCC9, dark: 0x365F4C)
 
-    /// The net-worth hero gradient — the one dark field in the light theme.
-    static let heroTop = dyn(light: 0x1E3348, dark: 0x16283C)
-    static let heroBottom = dyn(light: 0x16283C, dark: 0x0F1E2E)
+    /// The portfolio hero field; deep green in both appearances.
+    static let heroTop = dyn(light: 0x19392D, dark: 0x1D3B2E)
+    static let heroBottom = dyn(light: 0x12291F, dark: 0x192F25)
     /// Ink on the hero. Fixed, not theme-resolved: the field is dark in both.
     static let heroText = Color.white
-    static let heroLabel = dyn(light: 0x9DBCD9, dark: 0x9DBCD9)
+    static let heroLabel = dyn(light: 0xBAD6C4, dark: 0xBAD6C4)
     static let heroRule = Color.white.opacity(0.16)
 
     /// Card shadow. Depth comes from fill + this, not from a hairline box.
@@ -95,8 +80,8 @@ enum Theme {
     // value goes through `pl(_:)`, and every P&L value pairs the colour with a
     // direction triangle, so the meaning never rests on hue alone.
 
-    private static let greenInk = dyn(light: 0x3D7A62, dark: 0x5FA285)
-    private static let redInk = dyn(light: 0xA3564E, dark: 0xC2726A)
+    private static let greenInk = dyn(light: 0x17744F, dark: 0x7DD4A8)
+    private static let redInk = dyn(light: 0xB3443F, dark: 0xF29B91)
 
     /// The colour a *rise* wears under the current convention.
     static var gain: Color { plConvention == .tw ? redInk : greenInk }
@@ -113,19 +98,15 @@ enum Theme {
 
     // MARK: - Geometry
     //
-    // A fixed ladder. Radii are chosen by *what the thing is*, not by eye:
-    // a card is 16, the hero is 18, an inset row or badge is 12–14, the
-    // segmented track is 10 with an 8 thumb, a button is 11, a sheet's top
-    // corners are 22, a pill is 8. Five arbitrary radii on one screen is the
-    // loudest tell that a layout was assembled rather than designed.
+    // Shared geometry keeps cards, controls and navigation consistent.
     enum Radius {
-        static let card: CGFloat = 16
-        static let hero: CGFloat = 18
+        static let card: CGFloat = 24
+        static let hero: CGFloat = 28
         static let inset: CGFloat = 14
         static let badge: CGFloat = 12
-        static let segment: CGFloat = 10
-        static let thumb: CGFloat = 8
-        static let button: CGFloat = 11
+        static let segment: CGFloat = 14
+        static let thumb: CGFloat = 11
+        static let button: CGFloat = 14
         static let sheet: CGFloat = 22
         static let pill: CGFloat = 8
     }
@@ -140,103 +121,61 @@ enum Theme {
         static let xxl: CGFloat = 18
 
         /// Horizontal screen gutter.
-        static let screenH: CGFloat = 18
+        static let screenH: CGFloat = 22
         /// Top inset for a screen that carries no nav bar.
         ///
         /// The design measures 60pt from the physical top of the display; on a
         /// notched phone the safe-area inset already supplies ~59 of those, so
         /// this is the remainder. Adding the full 60 on top of the inset left a
         /// finger's width of dead space above every screen's first line.
-        static let screenTop: CGFloat = 8
+        static let screenTop: CGFloat = 14
         /// Bottom inset above the tab bar.
-        static let screenBottom: CGFloat = 12
+        static let screenBottom: CGFloat = 24
         /// Between cards in a stack.
-        static let cardGap: CGFloat = 16
+        static let cardGap: CGFloat = 22
         /// Between cells of a stat grid.
         static let gridGap: CGFloat = 10
     }
 
-    // MARK: - Type
-    //
-    // Two families with one job each. **Barlow Condensed SemiBold** carries
-    // every number and heading — condensed because a portfolio screen is a
-    // wall of figures and the narrower face fits a full NT$ total without
-    // shrinking it. **Barlow** carries prose: labels, captions, row detail.
-    // Mixing the two on one line (a condensed value beside a Barlow unit) is
-    // deliberate and is what gives the screens their voice.
+    // MARK: - Typography
+    // Native San Francisco. Text styles scale with the user's accessibility setting.
     enum Typo {
-        // Numerals + headings — Barlow Condensed SemiBold.
-        /// The sign-in wordmark. Larger than anything inside the app.
-        static let signIn = num(40)
-        /// The net-worth number. One per screen, at most.
-        static let hero = num(42)
-        /// A screen's own title, and the hero on a subordinate screen.
-        static let title = num(32)
-        static let display = num(38)
-        /// A market card's value; also a stock's name.
-        static let section = num(30)
-        /// A modal or sheet's own title.
-        static let heading = num(22)
-        /// The Assistant's header.
-        static let headingLg = num(24)
-        /// A confirmation headline inside a flow.
-        static let headingSm = num(20)
-        /// A step's heading inside a modal.
-        static let headingXs = num(18)
-        /// A stat card's value.
-        static let value = num(19)
-        static let valueSm = num(17)
-        /// A card's own title in a list header.
-        static let rowLg = num(16)
-        /// A list row's headline: ticker, index name, amount.
-        static let row = num(15)
-        static let rowSm = num(14)
-        /// A number inline in a caption.
-        static let inlineNum = num(13.5)
-        static let inlineNumSm = num(11)
-        /// The hero strip's values. Sized to be *read*, not merely present:
-        /// at 13.5 they were a footnote under a 42pt headline, which is the
-        /// wrong weight for the four figures that explain it.
-        static let heroStat = num(17)
-
-        // Prose — Barlow.
-        static let body = Font.custom("Barlow-Regular", size: 14)
-        static let bodyMed = Font.custom("Barlow-Medium", size: 14)
-        static let detail = Font.custom("Barlow-Regular", size: 12.5)
-        static let detailMed = Font.custom("Barlow-Medium", size: 12.5)
-        static let caption = Font.custom("Barlow-Regular", size: 11.5)
-        static let captionMed = Font.custom("Barlow-Medium", size: 11.5)
-        /// Row secondary line — the smallest prose size in the app. Medium at
-        /// 11 rather than Regular at 10.5 (both are inside the design's
-        /// 10.5–11 band): a holdings row's "300 sh · avg 985.00 · 50.4%" is
-        /// read, not skimmed, and Regular in `textSecondary` sat right on the
-        /// edge of legible on a card.
-        static let micro = Font.custom("Barlow-Medium", size: 11)
-        static let microMed = Font.custom("Barlow-Medium", size: 11)
-        /// Tab-bar labels.
-        static let tab = Font.custom("Barlow-Medium", size: 10)
-        static let tabOn = Font.custom("Barlow-SemiBold", size: 10)
-        /// Button text.
-        static let button = Font.custom("Barlow-Medium", size: 15)
-        static let buttonSm = Font.custom("Barlow-Medium", size: 14)
-        /// Sub-micro prose: a chart's own axis labels and the captions that sit
-        /// under them. Below `micro`, and used nowhere a sentence is read.
-        static let nano = Font.custom("Barlow-Regular", size: 10)
-        static let axis = Font.custom("Barlow-Regular", size: 9)
-        static let axisSm = Font.custom("Barlow-Regular", size: 8.5)
-
-        // Uppercase labels. Always paired with `.tracking(_:)` via the
-        // `.eyebrow`/`.statLabel` modifiers below — tracking is what turns a
-        // small bold word into a label rather than shouting.
-        static let label = Font.custom("Barlow-SemiBold", size: 10.5)
-        static let labelSm = Font.custom("Barlow-SemiBold", size: 9.5)
-        /// The condensed uppercase eyebrow: "✦ AI STOCK STUDIO", "YOUR POSITION".
-        static let eyebrow = num(11)
-        static let eyebrowLg = num(12)
-
-        private static func num(_ size: CGFloat) -> Font {
-            Font.custom("BarlowCondensed-SemiBold", size: size)
-        }
+        static let signIn = Font.system(size: 40, weight: .bold, design: .rounded)
+        static let hero = Font.system(size: 42, weight: .semibold, design: .rounded)
+        static let title = Font.system(.largeTitle, design: .default, weight: .bold)
+        static let display = Font.system(size: 36, weight: .semibold, design: .rounded)
+        static let section = Font.system(size: 26, weight: .semibold, design: .rounded)
+        static let heading = Font.system(.title2, weight: .semibold)
+        static let headingLg = Font.system(.title, weight: .bold)
+        static let headingSm = Font.system(.title3, weight: .semibold)
+        static let headingXs = Font.system(.headline)
+        static let value = Font.system(size: 21, weight: .semibold, design: .rounded)
+        static let valueSm = Font.system(size: 18, weight: .semibold, design: .rounded)
+        static let rowLg = Font.system(.headline)
+        static let row = Font.system(.subheadline, weight: .semibold)
+        static let rowSm = Font.system(size: 14, weight: .semibold)
+        static let inlineNum = Font.system(size: 14, weight: .medium)
+        static let inlineNumSm = Font.system(size: 12, weight: .medium)
+        static let heroStat = Font.system(size: 18, weight: .semibold, design: .rounded)
+        static let body = Font.system(.body)
+        static let bodyMed = Font.system(.body, weight: .medium)
+        static let detail = Font.system(.subheadline)
+        static let detailMed = Font.system(.subheadline, weight: .medium)
+        static let caption = Font.system(.caption)
+        static let captionMed = Font.system(.caption, weight: .medium)
+        static let micro = Font.system(.caption2)
+        static let microMed = Font.system(.caption2, weight: .medium)
+        static let tab = Font.system(size: 10, weight: .medium)
+        static let tabOn = Font.system(size: 10, weight: .semibold)
+        static let button = Font.system(.subheadline, weight: .semibold)
+        static let buttonSm = Font.system(.subheadline, weight: .semibold)
+        static let nano = Font.system(size: 10)
+        static let axis = Font.system(size: 10)
+        static let axisSm = Font.system(size: 9)
+        static let label = Font.system(size: 11, weight: .medium)
+        static let labelSm = Font.system(size: 10, weight: .medium)
+        static let eyebrow = Font.system(size: 11, weight: .semibold)
+        static let eyebrowLg = Font.system(size: 12, weight: .semibold)
     }
 
     /// Registers the bundled Barlow faces. Called once at launch; a no-op if
@@ -260,16 +199,14 @@ extension View {
         background(Theme.ground.ignoresSafeArea())
     }
 
-    /// A card: fill, soft shadow, 16pt corners. No border — a hairline box
-    /// around every element is the single loudest dated tell, and the shadow
-    /// already separates the surface from the ground.
+    /// Elevated content surface, shared across the product.
     func appCard(padding: CGFloat = Theme.Space.l,
                  radius: CGFloat = Theme.Radius.card) -> some View {
         self.padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.card)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .shadow(color: Theme.shadow, radius: 3, x: 0, y: 1)
+            .shadow(color: Theme.shadow.opacity(0.35), radius: 12, x: 0, y: 4)
     }
 
     /// A list card — same surface, but rows draw their own padding, so the
@@ -278,7 +215,7 @@ extension View {
         self.frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.card)
             .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-            .shadow(color: Theme.shadow, radius: 3, x: 0, y: 1)
+            .shadow(color: Theme.shadow.opacity(0.35), radius: 12, x: 0, y: 4)
     }
 
     /// The one dark accent field per screen — the net-worth / total-earned
@@ -292,7 +229,7 @@ extension View {
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             )
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.hero, style: .continuous))
-            .shadow(color: Theme.heroShadow, radius: 18, x: 0, y: 6)
+            .shadow(color: Theme.heroShadow.opacity(0.45), radius: 16, x: 0, y: 8)
     }
 
     /// Chrome for a pinned bar — nav header, tab bar, index strip. Glass
@@ -327,7 +264,7 @@ extension View {
     /// Uppercase eyebrow above a card or section — condensed, tracked wide.
     func eyebrowStyle(_ color: Color = Theme.textSecondary, size: CGFloat = 11) -> some View {
         font(size == 12 ? Theme.Typo.eyebrowLg : Theme.Typo.eyebrow)
-            .tracking(size * 0.12)
+            .tracking(1.2)
             .textCase(.uppercase)
             .foregroundStyle(color)
     }
@@ -335,8 +272,7 @@ extension View {
     /// The label above a stat's value.
     func statLabelStyle(_ color: Color = Theme.textSecondary, small: Bool = false) -> some View {
         font(small ? Theme.Typo.labelSm : Theme.Typo.label)
-            .tracking(small ? 0.6 : 0.7)
-            .textCase(.uppercase)
+            .tracking(0)
             .foregroundStyle(color)
             .lineLimit(1)
     }

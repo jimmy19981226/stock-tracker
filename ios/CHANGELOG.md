@@ -11,6 +11,17 @@ anywhere, even for the same marketing version.
 
 ---
 
+## 2.0.0 (build 6) — 2026-10-27
+
+- New visual system: warm white and charcoal surfaces, teal accents, native iOS type, larger controls, and coordinated light/dark appearances.
+- Portfolio home with currency summaries, quick trade entry, assistant access, market allocation cards, and value history.
+- Searchable holdings by ticker or company, with performance analytics in a separate market segment.
+- Redesigned assistant welcome screen with editable suggested prompts; record confirmations remain required.
+- Clearer trade and dividend summaries, compact filters, larger records, and organized account/preferences screens.
+- Taiwan moving-average accounting matches broker profit estimates; US accounting retains FIFO.
+- Full-height forms, readable import confirmations, and adaptive home layouts for accessibility text sizes.
+- Read-only synthetic preview API and automated screen tours for navigation and visual inspection.
+
 ## 1.4.0 (build 5) — 2026-08-20
 
 PDF reports, from `design_handoff_ios_ui/ADOBE_PDF_REPORTS.md`.

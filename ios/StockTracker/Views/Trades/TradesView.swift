@@ -99,11 +99,11 @@ struct TradesView: View {
 
     /// Every trade row is this tall, so a page of eight looks like a page of
     /// twelve minus four blanks — and the pager under it doesn't move.
-    private static let rowHeight: CGFloat = 74
+    private static let rowHeight: CGFloat = 88
 
     private var list: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: Theme.Space.xl) {
                 HStack {
                     BrandLine()
                     Spacer()
@@ -125,20 +125,8 @@ struct TradesView: View {
                 }
                 .padding(.bottom, 2)
 
-                HStack(spacing: Theme.Space.s) {
-                    SegmentedControl(options: MarketFilter.allCases.map { ($0, $0.rawValue) },
-                                     selection: $marketFilter, fill: false)
-                    Spacer(minLength: Theme.Space.s)
-                    SegmentedControl(options: StatusFilter.allCases.map { ($0, $0.rawValue) },
-                                     selection: $statusFilter, fill: false)
-                }
-
-                if years.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        SegmentedControl(options: years.map { ($0, $0) },
-                                         selection: $year, fill: false)
-                    }
-                }
+                Text("Every investment, in one place.")
+                    .font(Theme.Typo.detail).foregroundStyle(Theme.textSecondary)
 
                 HStack(spacing: Theme.Space.s) {
                     StatCell(label: "Earned · TW",
@@ -149,6 +137,25 @@ struct TradesView: View {
                              value: Fmt.signedAmount(earned(.US), currency: "USD"),
                              caption: year == "All" ? "realized, all time" : "realized in \(year)",
                              valueColor: Theme.pl(earned(.US)))
+                }
+
+                HStack(spacing: Theme.Space.s) {
+                    SegmentedControl(options: MarketFilter.allCases.map { ($0, $0.rawValue) },
+                                     selection: $marketFilter, fill: false)
+                    Spacer(minLength: 0)
+                    Menu {
+                        Picker("Status", selection: $statusFilter) {
+                            ForEach(StatusFilter.allCases) { Text($0.rawValue).tag($0) }
+                        }
+                        Picker("Year", selection: $year) {
+                            ForEach(years, id: \.self) { Text($0 == "All" ? "All years" : $0).tag($0) }
+                        }
+                    } label: {
+                        Label(statusFilter == .all && year == "All" ? "Filters" : "\(statusFilter.rawValue) · \(year)", systemImage: "line.3.horizontal.decrease")
+                            .font(Theme.Typo.captionMed).foregroundStyle(Theme.accent)
+                            .padding(Theme.Space.m).background(Theme.card, in: Capsule())
+                    }
+                    .accessibilityIdentifier("trades.filters")
                 }
 
                 HStack {
@@ -170,7 +177,6 @@ struct TradesView: View {
                                title: emptyTitle, message: emptyMessage)
                         .appCard()
                 } else {
-                    Color.clear.frame(height: pager.filler(rowHeight: Self.rowHeight))
 
                     LazyVStack(spacing: 0) {
                         ForEach(Array(rows.enumerated()), id: \.element.id) { index, trade in

@@ -24,8 +24,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aistockstudio.app
-        MARKETING_VERSION: "1.4.0"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "2.0.0"
+        CURRENT_PROJECT_VERSION: "6"
         GENERATE_INFOPLIST_FILE: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -33,8 +33,8 @@ targets:
       path: StockTracker/Info.plist
       properties:
         CFBundleDisplayName: Stock Studio
-        CFBundleShortVersionString: "1.4.0"
-        CFBundleVersion: "5"
+        CFBundleShortVersionString: "2.0.0"
+        CFBundleVersion: "6"
         LSRequiresIPhoneOS: true
         # The app ships both themes and follows the in-app Appearance setting
         # (Light / Dark / System), so it must NOT pin UIUserInterfaceStyle —
@@ -42,9 +42,7 @@ targets:
         # one appearance while the UI honoured the other.
         UILaunchScreen:
           UIColorName: LaunchBackground
-        # Barlow (body) + Barlow Condensed (numerals & headings), OFL, bundled
-        # from Resources/Fonts. The design is built on the condensed numerals —
-        # falling back to the system face changes every figure's width.
+        # Legacy bundled faces retained for existing resources. Studio 2 uses native iOS typography.
         UIAppFonts:
           - Barlow-Regular.ttf
           - Barlow-Medium.ttf

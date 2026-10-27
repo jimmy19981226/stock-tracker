@@ -27,7 +27,7 @@ struct MarkdownText: View {
         case let .heading(level, text):
             inline(text)
                 .font(serif ? .system(size: headingSize(level), weight: .bold, design: .serif)
-                            : .custom("BarlowCondensed-SemiBold", size: headingSize(level)))
+                            : .system(size: headingSize(level), weight: .semibold))
                 .foregroundStyle(textColor)
                 .padding(.top, level <= 2 ? 2 : 0)
 

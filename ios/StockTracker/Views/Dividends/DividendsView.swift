@@ -72,11 +72,11 @@ struct DividendsView: View {
     }
 
     /// A dividend row is two lines; fixed so short pages keep their height.
-    private static let rowHeight: CGFloat = 58
+    private static let rowHeight: CGFloat = 76
 
     private var list: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: Theme.Space.xl) {
                 BrandLine()
 
                 ScreenTitle("Dividends") {
@@ -84,24 +84,34 @@ struct DividendsView: View {
                 }
                 .padding(.bottom, 2)
 
+                Text("A clearer view of your investment income.")
+                    .font(Theme.Typo.detail).foregroundStyle(Theme.textSecondary)
+
+                statRow
+
                 HStack(spacing: Theme.Space.s) {
                     SegmentedControl(options: MarketFilter.allCases.map { ($0, $0.rawValue) },
                                      selection: $marketFilter, fill: false)
                     Spacer(minLength: Theme.Space.s)
                     if years.count > 1 {
-                        SegmentedControl(options: years.map { ($0, $0) },
-                                         selection: $year, fill: false, compact: true)
+                        Menu {
+                            Picker("Year", selection: $year) {
+                                ForEach(years, id: \.self) { Text($0 == "All" ? "All years" : $0).tag($0) }
+                            }
+                        } label: {
+                            Label(year == "All" ? "All years" : year, systemImage: "calendar")
+                                .font(Theme.Typo.captionMed).foregroundStyle(Theme.accent)
+                                .padding(Theme.Space.m).background(Theme.card, in: Capsule())
+                        }
                     }
                 }
-
-                statRow
 
                 if let actionError {
                     ErrorBanner(message: actionError) { self.actionError = nil }
                 }
 
                 if !upcomingGroups.isEmpty {
-                    SectionLabel("Dividend calendar — upcoming")
+                    SectionLabel("Coming up")
                         .padding(.top, Theme.Space.xxs)
                     ForEach(upcomingGroups) { group in
                         UpcomingGroupCard(group: group, store: store)
@@ -123,7 +133,6 @@ struct DividendsView: View {
                         .appCard()
                 } else {
                     let rows = pager.slice
-                    Color.clear.frame(height: pager.filler(rowHeight: Self.rowHeight))
 
                     LazyVStack(spacing: 0) {
                         ForEach(Array(rows.enumerated()), id: \.element.id) { index, div in

@@ -29,15 +29,20 @@ struct SettingsView: View {
                 Text("Settings")
                     .font(Theme.Typo.title)
                     .foregroundStyle(Theme.text)
-                    .padding(.bottom, Theme.Space.l)
+                    .padding(.bottom, Theme.Space.s)
+                Text("Make Studio your own.")
+                    .font(Theme.Typo.detail).foregroundStyle(Theme.textSecondary)
+                    .padding(.bottom, Theme.Space.xxl)
 
                 group("Account") { accountCard }
                 group("Appearance") { appearanceCard }
                 group("AI assistant") { aiCard }
-                group("Backend") { backendCard }
                 group("Markets & indices") { marketsCard }
                 group("Reports") { reportsCard }
                 group("About") { aboutCard }
+                DisclosureGroup("Connection settings") { backendCard.padding(.top, Theme.Space.m) }
+                    .font(Theme.Typo.detailMed).foregroundStyle(Theme.textSecondary)
+                    .padding(.bottom, Theme.Space.xxl)
 
                 Text("AI Stock Studio · self-hosted · no analytics, no telemetry\nNot investment advice. Prices may be delayed.")
                     .font(Theme.Typo.micro)
@@ -80,12 +85,11 @@ struct SettingsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(auth.user.map { $0.email.isEmpty ? $0.name : $0.email } ?? "Guest")
+                Text(auth.user.map { $0.name.isEmpty ? $0.email : $0.name } ?? "Guest")
                     .font(Theme.Typo.row)
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
-                Text(signedIn ? "Google sign-in · data scoped to this account"
-                              : "Guest · records stay on this backend")
+                Text(signedIn ? "Signed in with Google" : "Guest account")
                     .font(Theme.Typo.micro)
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)

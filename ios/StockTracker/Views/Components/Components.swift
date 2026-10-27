@@ -6,9 +6,12 @@ import SwiftUI
 /// The brand eyebrow every root screen opens with.
 struct BrandLine: View {
     var body: some View {
-        Text("✦ AI Stock Studio")
-            .eyebrowStyle(Theme.accent, size: 12)
-            .tracking(12 * 0.14)
+        HStack(spacing: 7) {
+            Image(systemName: "chart.xyaxis.line")
+                .font(.system(size: 12, weight: .bold))
+            Text("STOCK STUDIO").font(Theme.Typo.eyebrow).tracking(1.8)
+        }
+        .foregroundStyle(Theme.accent)
     }
 }
 
@@ -102,9 +105,10 @@ struct BackRow: View {
             HStack(spacing: Theme.Space.xxs) {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 15, weight: .semibold))
-                Text(title).eyebrowStyle(Theme.accent, size: 12)
+                Text(title).font(Theme.Typo.detailMed)
             }
             .foregroundStyle(Theme.accent)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -189,12 +193,12 @@ struct TickerLine: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Text(ticker)
-                .font(.custom("BarlowCondensed-SemiBold", size: size))
+                .font(.system(size: size, weight: .semibold))
                 .foregroundStyle(Theme.text)
                 .fixedSize()
             if !name.isEmpty && name != ticker {
                 Text(name)
-                    .font(.custom("Barlow-Regular", size: size - 2))
+                    .font(.system(size: size - 2))
                     .foregroundStyle(Theme.textStrong)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -288,7 +292,7 @@ private struct StatCard: ViewModifier {
         if enabled {
             content
                 .padding(.horizontal, 13)
-                .padding(.vertical, 11)
+                .padding(.vertical, 16)
                 .background(Theme.card)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.inset, style: .continuous))
                 .shadow(color: Theme.shadow, radius: 3, x: 0, y: 1)
@@ -376,16 +380,15 @@ struct SegmentedControl<T: Hashable>: View {
                     withAnimation(.easeOut(duration: 0.16)) { selection = option.value }
                 } label: {
                     Text(option.label)
-                        .font(.custom(on ? "Barlow-Medium" : "Barlow-Regular",
-                                      size: compact ? 10 : 10.5))
-                        .foregroundStyle(on ? Color.white : Theme.textStrong)
+                        .font(.system(size: compact ? 11 : 12, weight: on ? .semibold : .medium))
+                        .foregroundStyle(on ? Theme.accentChipText : Theme.textSecondary)
                         .lineLimit(1)
                         .frame(maxWidth: fill ? .infinity : nil)
                         .padding(.horizontal, fill ? 2 : (compact ? 8 : 11))
-                        .padding(.vertical, compact ? 3 : 4)
+                        .padding(.vertical, compact ? 8 : 10)
                         .background(
                             RoundedRectangle(cornerRadius: Theme.Radius.thumb, style: .continuous)
-                                .fill(on ? Theme.accent : .clear)
+                                .fill(on ? Theme.card : .clear)
                         )
                         .contentShape(Rectangle())
                 }
@@ -410,10 +413,10 @@ struct PrimaryButton: View {
     var body: some View {
         Button(action: action) {
             Group {
-                if busy { ProgressView().tint(.white) }
+                if busy { ProgressView().tint(Theme.onAccent) }
                 else { Text(title).font(Theme.Typo.buttonSm) }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.onAccent)
             .frame(maxWidth: fullWidth ? .infinity : nil)
             .padding(.horizontal, fullWidth ? 0 : 14)
             .padding(.vertical, 11)
@@ -453,14 +456,14 @@ struct SecondaryButton: View {
 /// A round icon affordance in the nav layer — close, new chat, history.
 struct IconButton: View {
     let symbol: String
-    var size: CGFloat = 30
+    var size: CGFloat = 44
     var tint: Color = Theme.accent
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: size * 0.46, weight: .medium))
+                .font(.system(size: size * 0.4, weight: .medium))
                 .foregroundStyle(tint)
                 .frame(width: size, height: size)
                 .background(Theme.card)
@@ -878,25 +881,33 @@ struct SheetScaffold<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(title)
                     .font(Theme.Typo.heading)
                     .foregroundStyle(Theme.text)
+                    .accessibilityIdentifier("sheet.title")
                 Spacer()
                 if let onClose {
-                    IconButton(symbol: "xmark", size: 28, tint: Theme.textSecondary,
+                    IconButton(symbol: "xmark", tint: Theme.textSecondary,
                                action: onClose)
+                        .accessibilityLabel("Close")
                 }
             }
-            content
+            .padding(.horizontal, Theme.Space.xxl)
+            .padding(.top, Theme.Space.xxl)
+            .padding(.bottom, Theme.Space.l)
+
+            ScrollView {
+                content
+                    .padding(.horizontal, Theme.Space.xxl)
+                    .padding(.bottom, Theme.Space.screenBottom)
+            }
+            .scrollDismissesKeyboard(.interactively)
         }
-        .padding(.horizontal, Theme.Space.xxl)
-        .padding(.top, Theme.Space.xxl)
-        .padding(.bottom, 34)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.ground)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(Theme.Radius.sheet)
         .presentationBackground(Theme.ground)
