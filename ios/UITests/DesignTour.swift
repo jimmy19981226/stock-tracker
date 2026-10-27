@@ -120,7 +120,9 @@ final class DesignTour: XCTestCase {
 
     private func tab(_ app: XCUIApplication, _ name: String) {
         let button = app.buttons[name].firstMatch
-        if button.waitForExistence(timeout: 10), button.isHittable { button.tap() }
+        XCTAssertTrue(button.waitForExistence(timeout: 10), "Missing tab: \(name)")
+        XCTAssertTrue(button.isHittable, "Unreachable tab: \(name)")
+        button.tap()
     }
 
     func testSplashShowsVersion() throws {
@@ -192,8 +194,8 @@ final class DesignTour: XCTestCase {
         composer.tap()
         sleep(3)
         let overviewTab = app.buttons["Overview"].firstMatch
-        XCTAssertFalse(overviewTab.exists,
-                       "The tab bar is still on screen with the keyboard up")
+        XCTAssertTrue(overviewTab.isHittable,
+                      "Main navigation must remain available with the keyboard up")
         snap(app, "kbd-check")
     }
 
@@ -373,7 +375,7 @@ final class DesignTour: XCTestCase {
         // ---- Assistant ----------------------------------------------------
         tab(app, "Assistant"); sleep(4)
         snap(app, "50-assistant")
-        // Typing must not lift the tab bar onto the keyboard.
+        // Typing must keep navigation reachable above the keyboard.
         let composer = app.textViews.firstMatch.exists
             ? app.textViews.firstMatch : app.textFields.firstMatch
         if composer.waitForExistence(timeout: 5), composer.isHittable {

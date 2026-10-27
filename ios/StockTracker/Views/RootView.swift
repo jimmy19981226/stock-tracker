@@ -47,8 +47,6 @@ struct RootView: View {
     @State private var tab: AppTab = .overview
     @State private var overviewMarket: MarketCode?
     @State private var overviewTicker: String?
-    /// Whether a keyboard is on screen. See the bottom inset below.
-    @State private var typing = false
     // App-scoped so an in-flight AI reply keeps streaming while the user
     // browses other tabs, and the transcript is there on return.
     @StateObject private var assistantVM = AssistantViewModel()
@@ -72,25 +70,11 @@ struct RootView: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        // Reads `typing` in the body proper, which is what makes the inset
-        // below actually re-evaluate. A value only ever read inside a
-        // `safeAreaInset` closure is not registered as a dependency of this
-        // view, so the bar kept rendering after the flag flipped — the state
-        // was right and the screen was wrong.
-        .animation(.easeOut(duration: 0.2), value: typing)
-        // The tab bar steps aside while a keyboard is up.
-        //
-        // As a bottom safe-area inset it rides the keyboard, so typing parked
-        // the whole bar — index strip and all — in the gap between the compose
-        // field and the keys. Telling it to ignore the keyboard safe area
-        // doesn't help: the inset container is resized either way, and the
-        // Assistant's composer genuinely does need to rise. Standing the bar
-        // down is what iOS chat UIs do, and it gives the composer the room.
+        // Keep every destination reachable while typing. SwiftUI moves this
+        // safe-area inset above the keyboard and the active screen/composer
+        // uses the remaining space. A tab tap dismisses editing first.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !typing {
-                VStack(spacing: 0) {
-                    AppTabBar(selection: $tab)
-                }
+            AppTabBar(selection: $tab)
                 .background {
                     ZStack {
                         Rectangle().fill(.ultraThinMaterial)
@@ -101,13 +85,7 @@ struct RootView: View {
                 .overlay(alignment: .top) {
                     Rectangle().fill(Theme.line).frame(height: 1)
                 }
-                .transition(.move(edge: .bottom))
-            }
         }
-        .onReceive(NotificationCenter.default.publisher(
-            for: UIResponder.keyboardWillShowNotification)) { _ in typing = true }
-        .onReceive(NotificationCenter.default.publisher(
-            for: UIResponder.keyboardWillHideNotification)) { _ in typing = false }
         .overlay(alignment: .bottom) {
             if let message = toasts.message {
                 ToastView(text: message).padding(.bottom, 8)
@@ -167,6 +145,8 @@ private struct AppTabBar: View {
             ForEach(AppTab.allCases) { tab in
                 let on = tab == selection
                 Button {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                    to: nil, from: nil, for: nil)
                     selection = tab
                 } label: {
                     VStack(spacing: 4) {

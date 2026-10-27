@@ -16,7 +16,10 @@ final class ProductTour: XCTestCase {
     private func snap(_ app: XCUIApplication, _ name: String) {
         for tab in ["overview", "trades", "assistant", "dividends", "settings"] {
             let button = app.buttons["tab.\(tab)"]
-            if button.exists {
+            if !app.buttons["Close"].exists {
+                XCTAssertTrue(button.exists, "Missing main navigation: \(tab)")
+                XCTAssertTrue(button.isHittable, "Unreachable main navigation: \(tab)")
+                XCTAssertGreaterThan(button.frame.height, 0)
                 XCTAssertGreaterThanOrEqual(button.frame.minX, app.frame.minX)
                 XCTAssertLessThanOrEqual(button.frame.maxX, app.frame.maxX)
             }
@@ -75,7 +78,7 @@ final class ProductTour: XCTestCase {
         let composer = app.textFields["assistantComposer"]
         XCTAssertTrue(composer.waitForExistence(timeout: 5))
         XCTAssertEqual(composer.value as? String, "How is my portfolio doing today?")
-        XCTAssertFalse(app.buttons["tab.overview"].exists, "Tab bar should step aside while composing")
+        XCTAssertTrue(app.buttons["tab.overview"].isHittable, "Main navigation must remain available while composing")
         snap(app, "\(theme)-11-composer")
         app.terminate()
 

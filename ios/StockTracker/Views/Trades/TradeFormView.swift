@@ -163,6 +163,12 @@ struct RecordFormSheet: View {
                 }
             }
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focused = false }
+            }
+        }
         .onAppear {
             populate()
             // Revive an idle backend while the user is still typing, so the

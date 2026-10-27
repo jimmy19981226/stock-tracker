@@ -17,38 +17,49 @@ struct DashboardView: View {
     @State private var sort: HoldingSort = .value
     @State private var section = "Holdings"
     @State private var search = ""
+    @FocusState private var searchFocused: Bool
 
     private var currency: String { market.currencyCode }
     private var summary: CurrencySummary? { store.summary(for: market) }
     private var holdings: [Holding] { store.holdings(for: market) }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Space.cardGap) {
-                header
-                hero
-                HStack(spacing: Theme.Space.m) {
-                    StatCell(label: "Today's change",
-                             value: Fmt.signedAmount(summary?.todayPl, currency: currency),
-                             caption: Fmt.pct(summary?.todayPlPct), valueColor: Theme.pl(summary?.todayPl))
-                    StatCell(label: "Unrealized P/L",
-                             value: Fmt.signedAmount(summary?.totalPl, currency: currency),
-                             caption: Fmt.pct(summary?.totalPlPct), valueColor: Theme.pl(summary?.totalPl))
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Space.cardGap) {
+                    header
+                    hero
+                    HStack(spacing: Theme.Space.m) {
+                        StatCell(label: "Today's change",
+                                 value: Fmt.signedAmount(summary?.todayPl, currency: currency),
+                                 caption: Fmt.pct(summary?.todayPlPct), valueColor: Theme.pl(summary?.todayPl))
+                        StatCell(label: "Unrealized P/L",
+                                 value: Fmt.signedAmount(summary?.totalPl, currency: currency),
+                                 caption: Fmt.pct(summary?.totalPlPct), valueColor: Theme.pl(summary?.totalPl))
+                    }
+                    SegmentedControl(options: [("Holdings", "Holdings"), ("Performance", "Performance")], selection: $section)
+                    if section == "Holdings" {
+                        holdingsSection
+                        footnote
+                    } else {
+                        statGrid
+                        PerformanceCard(market: market)
+                        earnedCard
+                    }
                 }
-                SegmentedControl(options: [("Holdings", "Holdings"), ("Performance", "Performance")], selection: $section)
-                if section == "Holdings" {
-                    holdingsSection
-                    footnote
-                } else {
-                    statGrid
-                    PerformanceCard(market: market)
-                    earnedCard
+                .screenPadding()
+            }
+            .screenBackground()
+            .refreshable { await store.loadAll() }
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: searchFocused) { _, focused in
+                if focused {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo("holdingsSearch", anchor: .top)
+                    }
                 }
             }
-            .screenPadding()
         }
-        .screenBackground()
-        .refreshable { await store.loadAll() }
     }
 
     // MARK: Header
@@ -245,6 +256,7 @@ struct DashboardView: View {
                     .font(Theme.Typo.detail).foregroundStyle(Theme.text)
                     .autocorrectionDisabled().textInputAutocapitalization(.never)
                     .accessibilityIdentifier("holdings.search")
+                    .focused($searchFocused)
                 if !search.isEmpty {
                     Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .foregroundStyle(Theme.textSecondary).accessibilityLabel("Clear search")
@@ -252,6 +264,7 @@ struct DashboardView: View {
             }
             .padding(Theme.Space.l)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.button))
+            .id("holdingsSearch")
             SectionLabel("Holdings · \(sorted.count)") {
                 SegmentedControl(options: HoldingSort.allCases.map { ($0, $0.rawValue) },
                                  selection: $sort, fill: false, compact: true)

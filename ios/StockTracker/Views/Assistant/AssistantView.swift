@@ -2,6 +2,20 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
+/// Each background allowance belongs to one generation. Injectable handlers
+/// let unit tests exercise cancellation races without changing app lifecycle.
+struct AssistantBackgroundTasks {
+    var begin: (@escaping () -> Void) -> UIBackgroundTaskIdentifier
+    var end: (UIBackgroundTaskIdentifier) -> Void
+
+    static let live = AssistantBackgroundTasks(
+        begin: { expiration in
+            UIApplication.shared.beginBackgroundTask(withName: "ai-generation", expirationHandler: expiration)
+        },
+        end: { UIApplication.shared.endBackgroundTask($0) }
+    )
+}
+
 @MainActor
 final class AssistantViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
@@ -33,6 +47,13 @@ final class AssistantViewModel: ObservableObject {
     /// transcript; the polling lives in `ReportsStore`, which outlives the tab.
     @Published var reportIDs: [String] = []
 
+    private let api: APIClient
+    private let backgroundTasks: AssistantBackgroundTasks
+    private let refreshPortfolio: (PortfolioStore) async -> Void
+    private var conversationRevision = UUID()
+    private var activeRunID: UUID?
+    private var historyRequestID: UUID?
+    private var bgTaskOwner: UUID?
     private var chatId: Int?
     /// The in-flight streaming task, so a reset / teardown can cancel it and
     /// stop late onChunk/onDone callbacks from mutating a fresh transcript.
@@ -44,7 +65,11 @@ final class AssistantViewModel: ObservableObject {
     /// switches apps or locks the screen.
     private var bgTaskId: UIBackgroundTaskIdentifier = .invalid
 
-    init() {
+    init(api: APIClient = .shared, backgroundTasks: AssistantBackgroundTasks = .live,
+         refreshPortfolio: @escaping (PortfolioStore) async -> Void = { await $0.loadAll() }) {
+        self.api = api
+        self.backgroundTasks = backgroundTasks
+        self.refreshPortfolio = refreshPortfolio
         if ProcessInfo.processInfo.environment["UITEST_CHAT_FORMAT"] == "1" {
             messages = [
                 ChatMessage(role: "user", content: "Show my positions and explain the figures."),
@@ -171,7 +196,7 @@ final class AssistantViewModel: ObservableObject {
     }
 
     func loadStatus() async {
-        status = try? await APIClient.shared.getAiStatus()
+        status = try? await api.getAiStatus()
     }
 
     var canSend: Bool {
@@ -188,12 +213,16 @@ final class AssistantViewModel: ObservableObject {
         pendingAttachment = nil
         pendingAttachmentData = nil
         error = nil
+        historyRequestID = nil
         recoverTask?.cancel()
+        let runID = UUID()
+        activeRunID = runID
+        let requestedChatID = chatId
         messages.append(ChatMessage(role: "user", content: text, localImage: attachedImage))
         isStreaming = true
         streamingText = ""
         thinkingText = ""
-        beginBackgroundTask()
+        beginBackgroundTask(for: runID)
         // Server truth after this turn completes: everything local so far
         // plus the assistant reply — used by recovery to know it landed.
         let expectedCount = messages.count + 1
@@ -201,32 +230,32 @@ final class AssistantViewModel: ObservableObject {
         streamTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await APIClient.shared.streamChat(
-                    chatId: chatId,
+                try await api.streamChat(
+                    chatId: requestedChatID,
                     message: text,
                     image: attachedData,
                     onInit: { [weak self] id, _ in
-                        guard let self, !Task.isCancelled else { return }
+                        guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                         self.chatId = id
                     },
                     onChunk: { [weak self] delta in
-                        guard let self, !Task.isCancelled else { return }
+                        guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                         self.streamStatus = nil
                         self.streamingText += delta
                     },
                     onDone: { [weak self] content, _ in
-                        guard let self, !Task.isCancelled else { return }
+                        guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                         let final = content.isEmpty ? self.streamingText : content
                         self.messages.append(ChatMessage(role: "assistant", content: final))
                         self.streamingText = ""
                         self.streamStatus = nil
                     },
                     onStatus: { [weak self] text in
-                        guard let self, !Task.isCancelled else { return }
+                        guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                         self.streamStatus = text
                     },
                     onAction: { [weak self] proposal in
-                        guard let self, !Task.isCancelled else { return }
+                        guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                         // A write tool proposed records. Nothing is saved until
                         // the user confirms this card. Rows the server flagged
                         // as duplicating an existing record arrive unticked —
@@ -235,7 +264,7 @@ final class AssistantViewModel: ObservableObject {
                         self.present(proposal)
                     },
                     onReport: { [weak self] job in
-                        guard let self, !Task.isCancelled else { return }
+                        guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                         // `generate_report` proposes nothing — the document is
                         // already rendering. The card tracks it to ready.
                         ReportsStore.shared.adopt(job)
@@ -244,14 +273,14 @@ final class AssistantViewModel: ObservableObject {
                         }
                     },
                     onThinking: { [weak self] delta in
-                        guard let self, !Task.isCancelled else { return }
+                        guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
                         self.streamStatus = nil
                         self.thinkingText += delta
                     }
                 )
             } catch {
                 // A cancelled stream is an intentional teardown, not an error.
-                if !Task.isCancelled {
+                if self.activeRunID == runID, !Task.isCancelled {
                     self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
                     if !self.streamingText.isEmpty {
                         self.messages.append(ChatMessage(role: "assistant", content: self.streamingText))
@@ -260,22 +289,26 @@ final class AssistantViewModel: ObservableObject {
                     // The server keeps generating even though our stream died
                     // (e.g. the app was backgrounded past the grace window) —
                     // poll until the finished reply lands, then swap it in.
-                    self.startRecovery(expectedCount: expectedCount)
+                    self.startRecovery(expectedCount: expectedCount, runID: runID)
                 }
             }
-            if !Task.isCancelled { self.isStreaming = false }
-            self.endBackgroundTask()
+            if self.activeRunID == runID, !Task.isCancelled {
+                self.isStreaming = false
+                self.streamTask = nil
+            }
+            self.endBackgroundTask(for: runID)
         }
     }
 
     /// Stop generation mid-stream, keeping whatever has arrived as the reply.
     /// Also cancels the server-side run so it stops burning tokens.
     func stopStreaming() {
+        activeRunID = nil
         streamTask?.cancel()
         streamTask = nil
         recoverTask?.cancel()
         if let id = chatId {
-            Task { try? await APIClient.shared.stopChat(id) }
+            Task { try? await api.stopChat(id) }
         }
         if !streamingText.isEmpty {
             messages.append(ChatMessage(role: "assistant", content: streamingText))
@@ -287,10 +320,15 @@ final class AssistantViewModel: ObservableObject {
     }
 
     func reset() {
+        conversationRevision = UUID()
+        activeRunID = nil
+        historyRequestID = nil
         streamTask?.cancel()
         streamTask = nil
         recoverTask?.cancel()
         chatId = nil
+        input = ""
+        reportIDs = []
         messages = []
         streamingText = ""
         streamStatus = nil
@@ -309,32 +347,33 @@ final class AssistantViewModel: ObservableObject {
 
     // MARK: - Background continuation
 
-    private func beginBackgroundTask() {
+    private func beginBackgroundTask(for runID: UUID) {
         endBackgroundTask()
-        bgTaskId = UIApplication.shared.beginBackgroundTask(withName: "ai-generation") {
-            [weak self] in
-            Task { @MainActor in self?.endBackgroundTask() }
+        bgTaskOwner = runID
+        bgTaskId = backgroundTasks.begin { [weak self] in
+            Task { @MainActor in self?.endBackgroundTask(for: runID) }
         }
     }
 
-    private func endBackgroundTask() {
-        if bgTaskId != .invalid {
-            UIApplication.shared.endBackgroundTask(bgTaskId)
-            bgTaskId = .invalid
-        }
+    private func endBackgroundTask(for runID: UUID? = nil) {
+        if let runID, bgTaskOwner != runID { return }
+        if bgTaskId != .invalid { backgroundTasks.end(bgTaskId) }
+        bgTaskId = .invalid
+        bgTaskOwner = nil
     }
 
     /// Fetch the chat until the server-persisted reply appears (generation
     /// finishes server-side even with no client attached), then replace the
     /// local transcript with the canonical one.
-    private func startRecovery(expectedCount: Int) {
+    private func startRecovery(expectedCount: Int, runID: UUID) {
         guard let id = chatId else { return }
         recoverTask?.cancel()
         recoverTask = Task { [weak self] in
             for _ in 0..<20 {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard let self, !Task.isCancelled else { return }
-                if let detail = try? await APIClient.shared.getChat(id),
+                guard let self, self.activeRunID == runID, !Task.isCancelled else { return }
+                if let detail = try? await self.api.getChat(id),
+                   self.activeRunID == runID, self.chatId == id, !Task.isCancelled,
                    detail.messages.count >= expectedCount,
                    detail.messages.last?.role == "assistant" {
                     self.messages = detail.messages
@@ -381,49 +420,57 @@ final class AssistantViewModel: ObservableObject {
     /// the same call the form sheet makes. The assistant proposes; this is the
     /// only code that writes.
     func submitImport(store: PortfolioStore) async {
-        guard let proposal = pendingImport else { return }
+        guard let proposal = pendingImport, !isSubmittingImport else { return }
+        let submittedConversation = conversationRevision
+        // Confirmation authorizes this exact selection. Navigating elsewhere
+        // must not mutate the remaining batch while its requests are in flight.
+        let selectedTrades = importTradeOn
+        let selectedDividends = importDividendOn
         isSubmittingImport = true
         var created = 0, updated = 0, deleted = 0, failures = 0
 
         for (i, row) in proposal.trades.enumerated()
-        where importTradeOn.indices.contains(i) && importTradeOn[i] {
+        where selectedTrades.indices.contains(i) && selectedTrades[i] {
             do {
                 switch row.op {
                 case .create:
-                    _ = try await APIClient.shared.createTrade(row.createPayload())
+                    _ = try await api.createTrade(row.createPayload())
                     created += 1
                 case .update:
                     guard let id = row.recordID else { failures += 1; break }
-                    _ = try await APIClient.shared.updateTrade(id, row.createPayload())
+                    _ = try await api.updateTrade(id, row.createPayload())
                     updated += 1
                 case .delete:
                     guard let id = row.recordID else { failures += 1; break }
-                    try await APIClient.shared.deleteTrade(id)
+                    try await api.deleteTrade(id)
                     deleted += 1
                 }
             } catch { failures += 1 }
         }
 
         for (i, row) in proposal.dividends.enumerated()
-        where importDividendOn.indices.contains(i) && importDividendOn[i] {
+        where selectedDividends.indices.contains(i) && selectedDividends[i] {
             do {
                 switch row.op {
                 case .create:
-                    _ = try await APIClient.shared.createDividend(row.createPayload())
+                    _ = try await api.createDividend(row.createPayload())
                     created += 1
                 case .update:
                     guard let id = row.recordID else { failures += 1; break }
-                    _ = try await APIClient.shared.updateDividend(id, row.createPayload())
+                    _ = try await api.updateDividend(id, row.createPayload())
                     updated += 1
                 case .delete:
                     guard let id = row.recordID else { failures += 1; break }
-                    try await APIClient.shared.deleteDividend(id)
+                    try await api.deleteDividend(id)
                     deleted += 1
                 }
             } catch { failures += 1 }
         }
 
-        await store.loadAll()
+        await refreshPortfolio(store)
+        // The confirmed writes still finish and refresh the app-wide store, but
+        // their receipt cannot replace a proposal in a different conversation.
+        guard conversationRevision == submittedConversation else { return }
 
         var parts: [String] = []
         if created > 0 { parts.append("added \(created) record\(created == 1 ? "" : "s")") }
@@ -453,29 +500,31 @@ final class AssistantViewModel: ObservableObject {
 
     func loadChats() async {
         loadingChats = true
-        chats = (try? await APIClient.shared.listChats()) ?? []
+        chats = (try? await api.listChats()) ?? []
         loadingChats = false
     }
 
     /// Open a past conversation into the transcript.
     func openChat(_ id: Int) async {
-        guard let detail = try? await APIClient.shared.getChat(id) else { return }
+        if id == chatId { return }
+        let requestID = UUID()
+        historyRequestID = requestID
+        guard let detail = try? await api.getChat(id),
+              historyRequestID == requestID, !Task.isCancelled else { return }
+        reset()
         messages = detail.messages
-        streamingText = ""
-        thinkingText = ""
-        error = nil
         chatId = detail.id
     }
 
     func deleteChat(_ id: Int) async {
-        try? await APIClient.shared.deleteChat(id)
+        try? await api.deleteChat(id)
         chats.removeAll { $0.id == id }
         if chatId == id { reset() }   // deleting the open chat clears the transcript
     }
 
     func deleteAllChats() async {
         let ids = chats.map(\.id)
-        for id in ids { try? await APIClient.shared.deleteChat(id) }
+        for id in ids { try? await api.deleteChat(id) }
         chats = []
         reset()
     }

@@ -17,7 +17,10 @@ final class AssistantReview: XCTestCase {
         shot.lifetime = .keepAlways
         add(shot)
         for tab in ["overview", "trades", "assistant", "dividends", "settings"] {
-            let frame = app.buttons["tab.\(tab)"].frame
+            let button = app.buttons["tab.\(tab)"]
+            XCTAssertTrue(button.exists)
+            XCTAssertTrue(button.isHittable)
+            let frame = button.frame
             XCTAssertGreaterThanOrEqual(frame.minX, app.frame.minX)
             XCTAssertLessThanOrEqual(frame.maxX, app.frame.maxX)
         }

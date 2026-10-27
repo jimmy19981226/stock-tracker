@@ -929,7 +929,8 @@ struct ModalScaffold<Content: View>: View {
                     .font(Theme.Typo.heading)
                     .foregroundStyle(Theme.text)
                 Spacer()
-                IconButton(symbol: "xmark", size: 28, tint: Theme.textSecondary, action: onClose)
+                IconButton(symbol: "xmark", tint: Theme.textSecondary, action: onClose)
+                    .accessibilityLabel("Close")
             }
             .padding(.horizontal, Theme.Space.xxl)
             .padding(.top, Theme.Space.screenTop)
@@ -938,6 +939,7 @@ struct ModalScaffold<Content: View>: View {
             .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
 
             ScrollView { content.padding(.horizontal, Theme.Space.xxl).padding(.vertical, Theme.Space.xl) }
+                .scrollDismissesKeyboard(.interactively)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.ground.ignoresSafeArea())

@@ -43,3 +43,11 @@ DATABASE_URL=sqlite:///:memory: RUN_GEMINI_LIVE_TESTS=0 python3 -m unittest disc
 ```
 
 Use `RUN_GEMINI_LIVE_TESTS=1` and `-p test_gemini_live.py` only when live inference is intended. Preserve the original failures if a bounded rerun succeeds: provider timeouts or 503 responses are reliability results, not passing first attempts. No draft may change the ledger until confirmation through the normal record API.
+
+## Keyboard and conversation navigation
+
+Main navigation must stay visible and tappable above the keyboard. Switching tabs dismisses editing and preserves the assistant's unsent draft and ongoing reply. A modal form instead keeps its Close button reachable; closing must not submit it. Numeric trade/dividend entry includes a Done button.
+
+Run `KeyboardNavigationTests` with both `server.py` (8099) and `interaction_server.py` (8109) running. The latter supplies a deterministic delayed SSE reply without any model call or database, allowing the UI test to leave the assistant and return while generation is in progress. The tests cover both chat themes, every destination, draft preservation, holdings search results, settings focus, numeric keyboard dismissal, trade/dividend cancellation, import cancellation, and exactly one completed response after tab switching.
+
+`AssistantConversationTests` separately checks overlapping history loads, late recovery responses, generation/background cleanup ownership, conversation-specific attachments/proposals, and confirmed import completion after navigation. Navigation within the same conversation preserves its draft; explicitly opening another conversation clears that draft. Confirmed writes continue and refresh the shared portfolio, but their completion must not change the new conversation's transcript or proposal.

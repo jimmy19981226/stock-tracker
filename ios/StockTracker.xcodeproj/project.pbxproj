@@ -25,7 +25,9 @@
 		4FA024C61B7FC9EA97990900 /* Barlow-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2D284E33E333A591F11EE62B /* Barlow-SemiBold.ttf */; };
 		51C3E405AA6A679B1DC4B41D /* DiskCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 909BC2824E181539870CAA3A /* DiskCache.swift */; };
 		559D492D76635DB37EBF9561 /* PositionAccountingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E772F55C50CB201E41AF7FC /* PositionAccountingTests.swift */; };
+		5904EA559DA6A02D7F0D0803 /* KeyboardNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 591960F3ACD85393AA9CF473 /* KeyboardNavigationTests.swift */; };
 		5A51B85AC275F2953CF10AF5 /* AssistantImageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B04A0B2AE819CEF025AFA67 /* AssistantImageTests.swift */; };
+		5F09BBA8BD43E02918C89A7A /* AssistantConversationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD03BC2033DC7BD828A2CB67 /* AssistantConversationTests.swift */; };
 		5FBF19DF6A63C423FED17517 /* ReportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772F0AE535284373F26BB51D /* ReportViews.swift */; };
 		631CFDD6DAC5919BD1EA6E39 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDB15DFA9042B6B6917DC0B8 /* Keychain.swift */; };
 		63C2BDB29BCC3932FEB9C076 /* PositionAccounting.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF493E648404BB4352D551BC /* PositionAccounting.swift */; };
@@ -109,6 +111,7 @@
 		4B82CD728866D65824E93DF7 /* Barlow-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Barlow-Medium.ttf"; sourceTree = "<group>"; };
 		4E8C77D78C60E17B135BD606 /* DividendFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DividendFormView.swift; sourceTree = "<group>"; };
 		571FB1BBC6F79116A54DEB6B /* ReportsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportsStore.swift; sourceTree = "<group>"; };
+		591960F3ACD85393AA9CF473 /* KeyboardNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardNavigationTests.swift; sourceTree = "<group>"; };
 		592A352FEAEAEBCD762E4C67 /* StockTracker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = StockTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SortSwitchDriver.swift; sourceTree = "<group>"; };
 		5E8E78CC543F32EC9F8A37FB /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -140,6 +143,7 @@
 		C021FDD1797D256D9AADF6D7 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		C2F24BCFB79D6C6444CBC4D6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CBCC59342B5777EE5F6FC89F /* AssistantTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantTransportTests.swift; sourceTree = "<group>"; };
+		CD03BC2033DC7BD828A2CB67 /* AssistantConversationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantConversationTests.swift; sourceTree = "<group>"; };
 		DDB15DFA9042B6B6917DC0B8 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		E16AA928C10C0CABDA3B1BC7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E738D8F756898FA40BA0E1FB /* TradeFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeFormView.swift; sourceTree = "<group>"; };
@@ -371,6 +375,7 @@
 			isa = PBXGroup;
 			children = (
 				2F4AD7515CDF88FA45648F16 /* AISettingsTests.swift */,
+				CD03BC2033DC7BD828A2CB67 /* AssistantConversationTests.swift */,
 				9B04A0B2AE819CEF025AFA67 /* AssistantImageTests.swift */,
 				CBCC59342B5777EE5F6FC89F /* AssistantTransportTests.swift */,
 				B9494C36801EF0BF0946111E /* MarkdownTextTests.swift */,
@@ -385,6 +390,7 @@
 			children = (
 				AFA7F986EFD5A93032F89C6B /* AssistantReview.swift */,
 				3A7E7BCA5F1381655138CE5D /* DesignTour.swift */,
+				591960F3ACD85393AA9CF473 /* KeyboardNavigationTests.swift */,
 				384F20FA3B9A8D53852243EC /* ProductTour.swift */,
 				5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */,
 			);
@@ -608,6 +614,7 @@
 			files = (
 				E78590B8F3C4D60ABB788390 /* AssistantReview.swift in Sources */,
 				D78FEB5E77F1F4CA9A8CE0AC /* DesignTour.swift in Sources */,
+				5904EA559DA6A02D7F0D0803 /* KeyboardNavigationTests.swift in Sources */,
 				D2D1D430A30A769BE176620C /* ProductTour.swift in Sources */,
 				EFD5B333FA05AF8B1D3169D1 /* SortSwitchDriver.swift in Sources */,
 			);
@@ -618,6 +625,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A765F72DF8BEC5582E5BD074 /* AISettingsTests.swift in Sources */,
+				5F09BBA8BD43E02918C89A7A /* AssistantConversationTests.swift in Sources */,
 				5A51B85AC275F2953CF10AF5 /* AssistantImageTests.swift in Sources */,
 				FE79A1B927B7D8479E4074BD /* AssistantTransportTests.swift in Sources */,
 				E8092ED0921D7C45562FB3CA /* MarkdownTextTests.swift in Sources */,
@@ -648,7 +656,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -656,7 +664,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.3;
+				MARKETING_VERSION = 2.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -868,7 +876,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -876,7 +884,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.3;
+				MARKETING_VERSION = 2.0.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

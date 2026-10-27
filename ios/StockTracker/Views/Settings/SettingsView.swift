@@ -9,6 +9,8 @@ struct SettingsView: View {
     @EnvironmentObject private var toasts: ToastCenter
     @Environment(\.colorScheme) private var colorScheme
 
+    private enum EditableField: Hashable { case apiKey, backendURL }
+    @FocusState private var focusedField: EditableField?
     @State private var baseURL = AppConfig.baseURL
     @State private var apiKey = ""
     @State private var health: String?
@@ -23,42 +25,50 @@ struct SettingsView: View {
     @State private var rendering = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                BrandLine()
-                Text("Settings")
-                    .font(Theme.Typo.title)
-                    .foregroundStyle(Theme.text)
-                    .padding(.bottom, Theme.Space.s)
-                Text("Make Studio your own.")
-                    .font(Theme.Typo.detail).foregroundStyle(Theme.textSecondary)
-                    .padding(.bottom, Theme.Space.xxl)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    BrandLine()
+                    Text("Settings")
+                        .font(Theme.Typo.title)
+                        .foregroundStyle(Theme.text)
+                        .padding(.bottom, Theme.Space.s)
+                    Text("Make Studio your own.")
+                        .font(Theme.Typo.detail).foregroundStyle(Theme.textSecondary)
+                        .padding(.bottom, Theme.Space.xxl)
 
-                group("Account") { accountCard }
-                group("Appearance") { appearanceCard }
-                group("AI assistant") { aiCard }
-                group("Markets & indices") { marketsCard }
-                group("Reports") { reportsCard }
-                group("About") { aboutCard }
-                DisclosureGroup("Connection settings") { backendCard.padding(.top, Theme.Space.m) }
-                    .font(Theme.Typo.detailMed).foregroundStyle(Theme.textSecondary)
-                    .padding(.bottom, Theme.Space.xxl)
+                    group("Account") { accountCard }
+                    group("Appearance") { appearanceCard }
+                    group("AI assistant") { aiCard }.id(EditableField.apiKey)
+                    group("Markets & indices") { marketsCard }
+                    group("Reports") { reportsCard }
+                    group("About") { aboutCard }
+                    DisclosureGroup("Connection settings") { backendCard.padding(.top, Theme.Space.m) }
+                        .font(Theme.Typo.detailMed).foregroundStyle(Theme.textSecondary)
+                        .padding(.bottom, Theme.Space.xxl)
 
-                Text("AI Stock Studio · self-hosted · no analytics, no telemetry\nNot investment advice. Prices may be delayed.")
-                    .font(Theme.Typo.micro)
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Theme.Space.xxs)
+                    Text("AI Stock Studio · self-hosted · no analytics, no telemetry\nNot investment advice. Prices may be delayed.")
+                        .font(Theme.Typo.micro)
+                        .foregroundStyle(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Theme.Space.xxs)
+                }
+                .screenPadding(bottom: 20)
             }
-            .screenPadding(bottom: 20)
+            .scrollDismissesKeyboard(.interactively)
+            .onChange(of: focusedField) { _, field in
+                if let field {
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(field, anchor: .top) }
+                }
+            }
+            .screenBackground()
+            .task { await probe() }
+            .onAppear { apiKey = AISettings.apiKey ?? "" }
+            .sheet(isPresented: $showIndices) { IndexEditorView().environmentObject(store) }
+            .task { await reports.loadCatalog() }
+            .fullScreenCover(isPresented: $showAbout) { AboutView { showAbout = false } }
         }
-        .screenBackground()
-        .task { await probe() }
-        .onAppear { apiKey = AISettings.apiKey ?? "" }
-        .sheet(isPresented: $showIndices) { IndexEditorView().environmentObject(store) }
-        .task { await reports.loadCatalog() }
-        .fullScreenCover(isPresented: $showAbout) { AboutView { showAbout = false } }
     }
 
     private func group<Content: View>(_ title: String,
@@ -153,6 +163,7 @@ struct SettingsView: View {
 
             LabeledField(label: "Gemini API key") {
                 SecureField("AIza…", text: $apiKey)
+                    .focused($focusedField, equals: .apiKey)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .onChange(of: apiKey) { _, newValue in
@@ -198,6 +209,8 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             LabeledField(label: "Backend URL") {
                 TextField(AppConfig.defaultBaseURL, text: $baseURL)
+                    .focused($focusedField, equals: .backendURL)
+                    .id(EditableField.backendURL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
