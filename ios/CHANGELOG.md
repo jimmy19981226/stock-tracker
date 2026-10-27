@@ -11,6 +11,10 @@ anywhere, even for the same marketing version.
 
 ---
 
+## 2.0.1 (build 7) — 2026-10-27
+
+- New mint and charcoal app icon to match the Studio 2 visual design.
+
 ## 2.0.0 (build 6) — 2026-10-27
 
 - New visual system: warm white and charcoal surfaces, teal accents, native iOS type, larger controls, and coordinated light/dark appearances.

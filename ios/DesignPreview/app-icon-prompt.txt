@@ -1,0 +1,8 @@
+Stock Studio app icon — 2026-10-27
+Generator: built-in image_gen (not CLI)
+Source: /Users/jameschen/.codex/generated_images/01a17e30-3363-7023-b889-1b6390eb8f57/exec-5aa745ae-17fb-4896-a7f8-95bbb582ad0f.png
+Final asset: ios/StockTracker/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+Packaging: generated opaque RGB artwork normalized from 1254×1254 to the catalog's 1024×1024 size with sips; original retained.
+
+Final prompt:
+Use case: logo-brand. Asset type: production iOS app icon for Stock Studio, a polished Taiwan and US investment portfolio app. Create one entirely new icon, exactly 1024 by 1024 pixels. Full-bleed opaque square canvas in deep charcoal forest green (#12291F), with a very subtle refined teal tonal depth. Center one large bold, beautifully balanced geometric mark: a rising stock-chart stroke folded into an abstract S, like a single confident mint ribbon with rounded joins, finishing in a crisp upward-right terminal. The mark should be instantly legible at home-screen size, with a warm ivory upper highlight and mint (#8AD9B9) main face. Sophisticated, restrained and distinctive, premium native finance-app branding. Nearly flat graphic design with only subtle depth in the ribbon, no plastic 3D. Mark occupies roughly 62 percent of the square, ample balanced safe margins. No letters or words, no text, no numbers, no axis grid, no tiny decorative details, no border, no device mockup, no rounded outer corners, no transparent pixels. Background color extends to all four edges; iOS supplies its own corner mask.
