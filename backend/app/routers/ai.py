@@ -27,6 +27,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -976,9 +977,11 @@ async def run_parse_pipeline(file: UploadFile, instructions: str | None = None) 
             f"\"\"\"\n{note[:1000]}\n\"\"\""
         )
 
-    try:
+    def generate():
+        # The Gemini SDK is synchronous. Keep client setup and network work
+        # off the event loop shared by chat streams and health requests.
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
+        return client.models.generate_content(
             model=DEFAULT_MODEL,
             config=types.GenerateContentConfig(
                 temperature=0.1,
@@ -995,6 +998,9 @@ async def run_parse_pipeline(file: UploadFile, instructions: str | None = None) 
                 ),
             ],
         )
+
+    try:
+        response = await run_in_threadpool(generate)
     except Exception as exc:
         logging.getLogger(__name__).warning("AI screenshot import failed: exception=%s", type(exc).__name__)
         raise HTTPException(

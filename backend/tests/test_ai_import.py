@@ -1,6 +1,8 @@
 """Broker screenshot import boundaries; provider transport is synthetic."""
 import json
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -47,6 +49,35 @@ class ScreenshotImportTests(AIFeatureFixture):
                 with self.subTest(mime=mime, length=len(raw)):
                     self.assertEqual(self.upload(raw, mime).status_code, expected)
         self.generate.assert_not_called()
+
+    def test_health_request_completes_while_screenshot_provider_is_still_blocked(self):
+        # Mount the real lightweight health handler on the isolated app; do not
+        # start production lifespan, background quotes, or production storage.
+        from app.main import health
+        self.client.app.add_api_route("/api/health", health, methods=["GET"])
+        provider_started = threading.Event()
+        release_provider = threading.Event()
+
+        def slow_provider(**kwargs):
+            provider_started.set()
+            if not release_provider.wait(timeout=10):
+                raise TimeoutError("Test did not release synthetic provider")
+            return SimpleNamespace(text='{"trades":[],"dividends":[]}')
+
+        self.generate.side_effect = slow_provider
+        with ThreadPoolExecutor(max_workers=2) as requests:
+            parsing = requests.submit(self.upload)
+            try:
+                self.assertTrue(provider_started.wait(timeout=3), "Screenshot request never reached provider")
+                health_request = requests.submit(self.client.get, "/api/health")
+                response = health_request.result(timeout=2)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), {"status": "ok"})
+                self.assertFalse(release_provider.is_set())
+                self.assertFalse(parsing.done(), "Health must complete before provider is released")
+            finally:
+                release_provider.set()
+            self.assertEqual(parsing.result(timeout=3).status_code, 200)
 
     def test_empty_or_malformed_provider_output_returns_retryable_validation_error(self):
         for text in ("", "not-json", "[]", "null", '{"trades":"not rows","dividends":[]}',
