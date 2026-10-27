@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from app.database import Dividend, Trade
 from app.services import ai_tools, portfolio, reports
-from test_ai_features import AIFeatureFixture, USER
+from test_ai_features import AIFeatureFixture, OTHER, USER
 
 
 class FixedDate(date):
@@ -126,6 +126,97 @@ class AccountingIntegrationTests(AIFeatureFixture):
         self.assertEqual(result["totals"][0]["realized_pl"], 997)
         trades = self.tool("get_trades", ticker="2330", type="sell")
         self.assertEqual(trades["trades"][0]["realized_pl"], 997)
+
+    def test_year_components_keep_historical_cost_basis_and_market_accounting(self):
+        with self.sessions() as db:
+            summaries = {row["currency"]: row for row in portfolio.summarize([], db, USER)}
+        # Same ledger, but TW moving average consumes 1,502 versus US FIFO
+        # 1,002. The 2025 purchase fee must remain in both 2026 sale bases.
+        for currency, expected in [("TWD", 997), ("USD", 1497)]:
+            with self.subTest(currency=currency):
+                row = summaries[currency]
+                self.assertEqual(row["year"], 2026)
+                self.assertEqual(row["year_realized_pl"], expected)
+                self.assertEqual(row["year_dividends"], 0)
+                self.assertEqual(row["year_earned"], expected)
+
+    def test_current_year_realized_includes_closed_positions_and_excludes_prior_year_sales(self):
+        with self.sessions() as db:
+            db.query(Trade).filter(Trade.user_id == USER).delete()
+            for market, ticker in [("TW", "2330"), ("US", "AAPL")]:
+                for side, shares, price, fee, day in [
+                    ("buy", 2, 10, 0, date(2024, 12, 1)),
+                    ("sell", 2, 15, 0, date(2025, 1, 1)),
+                    ("buy", 3, 100, 3, date(2025, 12, 30)),
+                    ("sell", 3, 150, 2, date(2026, 1, 1)),
+                ]:
+                    db.add(Trade(user_id=USER, market=market, ticker=ticker, type=side,
+                                 shares=shares, price=price, fee=fee, trade_date=day))
+            db.commit()
+            holdings = portfolio.build_holdings(db, USER)
+            self.assertEqual(holdings, [])
+            summaries = portfolio.summarize(holdings, db, USER)
+        self.assertEqual({row["currency"] for row in summaries}, {"TWD", "USD"})
+        for row in summaries:
+            self.assertEqual(row["holdings_count"], 0)
+            self.assertEqual(row["realized_pl"], 155)
+            self.assertEqual(row["year_realized_pl"], 145)
+            self.assertEqual(row["year_earned"], 145)
+
+    def test_year_dividends_use_payment_dates_including_today_but_not_future_records(self):
+        with self.sessions() as db:
+            for market, ticker, multiplier in [("TW", "2330", 1), ("US", "AAPL", .1)]:
+                for day, amount in [(date(2025, 12, 31), 1000), (date(2026, 1, 1), 10),
+                                    (date(2026, 10, 6), 20.5), (date(2026, 10, 7), 100),
+                                    (date(2026, 12, 31), 200), (date(2027, 1, 1), 300)]:
+                    db.add(Dividend(user_id=USER, market=market, ticker=ticker,
+                                    amount=amount * multiplier, pay_date=day))
+            db.commit()
+            summaries = {row["currency"]: row for row in portfolio.summarize([], db, USER)}
+        for currency, expected, realized in [("TWD", 30.5, 997), ("USD", 3.05, 1497)]:
+            with self.subTest(currency=currency):
+                row = summaries[currency]
+                self.assertAlmostEqual(row["year_dividends"], expected)
+                self.assertAlmostEqual(row["year_earned"], realized + expected)
+                self.assertGreater(row["dividends"], row["year_dividends"])
+
+    def test_today_sales_count_but_future_sales_and_other_accounts_do_not(self):
+        with self.sessions() as db:
+            for market, ticker in [("TW", "2330"), ("US", "AAPL")]:
+                for day, shares in [(date(2026, 10, 6), 1), (date(2026, 10, 7), 1),
+                                    (date(2027, 1, 1), 1)]:
+                    db.add(Trade(user_id=USER, market=market, ticker=ticker, type="sell",
+                                 shares=shares, price=400, fee=1, trade_date=day))
+                db.add_all([
+                    Trade(user_id=OTHER, market=market, ticker=ticker, type="buy", shares=10,
+                          price=1, fee=0, trade_date=date(2025, 1, 1)),
+                    Trade(user_id=OTHER, market=market, ticker=ticker, type="sell", shares=10,
+                          price=10000, fee=0, trade_date=date(2026, 1, 1)),
+                    Dividend(user_id=OTHER, market=market, ticker=ticker, amount=100000,
+                             pay_date=date(2026, 1, 1)),
+                ])
+            db.commit()
+            summaries = {row["currency"]: row for row in portfolio.summarize([], db, USER)}
+        # Today's TW sale consumes average cost225.25; US consumes FIFO200.20.
+        for currency, expected in [("TWD", 1170.75), ("USD", 1695.8)]:
+            with self.subTest(currency=currency):
+                row = summaries[currency]
+                self.assertAlmostEqual(row["year_realized_pl"], expected)
+                self.assertEqual(row["year_dividends"], 0)
+                self.assertAlmostEqual(row["year_earned"], expected)
+
+    def test_dividend_only_market_remains_visible_without_any_trade_or_quote(self):
+        with self.sessions() as db:
+            db.query(Trade).filter(Trade.user_id == USER).delete()
+            db.add(Dividend(user_id=USER, market="US", ticker="MSFT", amount=12.34,
+                            pay_date=date(2026, 10, 6)))
+            db.commit()
+            summaries = portfolio.summarize([], db, USER)
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["currency"], "USD")
+        self.assertEqual(summaries[0]["year_realized_pl"], 0)
+        self.assertEqual(summaries[0]["year_dividends"], 12.34)
+        self.assertEqual(summaries[0]["year_earned"], 12.34)
 
     def test_simulated_taiwan_sale_uses_pool_not_original_purchase_lots(self):
         result = self.tool("simulate_sale", ticker="2330", shares=10, price=240)

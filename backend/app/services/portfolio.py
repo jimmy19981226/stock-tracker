@@ -353,14 +353,15 @@ def summarize(holdings: list[dict], db: Session, user_id: str) -> list[dict]:
 
     # Current-year ("this year") realized P/L: replay trades chronologically and
     # count only the realized delta from sells dated in the current year.
-    current_year = date.today().year
+    today = date.today()
+    current_year = today.year
     year_realized_by_currency: dict[str, float] = defaultdict(float)
     yr_states: dict[str, HoldingState] = {}
     for tr in sorted(trades, key=lambda t: (t.trade_date, t.id)):
         st = yr_states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
         before = st.realized_pl
         _apply_trade(st, tr)
-        if tr.trade_date.year == current_year:
+        if tr.trade_date.year == current_year and tr.trade_date <= today:
             currency = quotes.currency_of(tr.market or quotes.market_of(tr.ticker))
             year_realized_by_currency[currency] += st.realized_pl - before
 
@@ -370,7 +371,7 @@ def summarize(holdings: list[dict], db: Session, user_id: str) -> list[dict]:
     for div in db.query(Dividend).filter(Dividend.user_id == user_id).all():
         currency = quotes.currency_of(div.market or quotes.market_of(div.ticker))
         dividends_by_currency[currency] += div.amount
-        if div.pay_date.year == current_year:
+        if div.pay_date.year == current_year and div.pay_date <= today:
             year_dividends_by_currency[currency] += div.amount
 
     all_currencies = (
@@ -418,6 +419,8 @@ def summarize(holdings: list[dict], db: Session, user_id: str) -> list[dict]:
                 "realized_pl": realized,
                 "dividends": dividends,
                 "total_earned": realized + dividends,
+                "year_realized_pl": year_realized_by_currency.get(currency, 0.0),
+                "year_dividends": year_dividends_by_currency.get(currency, 0.0),
                 "year_earned": (
                     year_realized_by_currency.get(currency, 0.0)
                     + year_dividends_by_currency.get(currency, 0.0)
