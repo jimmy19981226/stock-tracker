@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Renders the assistant's Markdown the way Claude's chat does: headings, bold/
+/// Renders the assistant's Markdown with native typography: headings, bold/
 /// italic, inline code, fenced code blocks, bullet/numbered lists, blockquotes
 /// and rules — block by block, with sensible spacing. Inline styling uses
 /// AttributedString's Markdown parser; block structure is parsed here.
@@ -12,7 +12,7 @@ struct MarkdownText: View {
     var serif = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
             ForEach(Array(Self.parse(markdown).enumerated()), id: \.offset) { _, block in
                 view(for: block)
             }
@@ -26,8 +26,7 @@ struct MarkdownText: View {
         switch block {
         case let .heading(level, text):
             inline(text)
-                .font(serif ? .system(size: headingSize(level), weight: .bold, design: .serif)
-                            : .system(size: headingSize(level), weight: .semibold))
+                .font(headingFont(level))
                 .foregroundStyle(textColor)
                 .padding(.top, level <= 2 ? 2 : 0)
 
@@ -38,9 +37,9 @@ struct MarkdownText: View {
                 .fixedSize(horizontal: false, vertical: true)
 
         case let .bullet(items):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Space.xxs) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
                         Text("•").foregroundStyle(Theme.accent)
                         inline(item).foregroundStyle(textColor)
                             .fixedSize(horizontal: false, vertical: true)
@@ -50,9 +49,9 @@ struct MarkdownText: View {
             }
 
         case let .ordered(items):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Space.xxs) {
                 ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
                         Text("\(idx + 1).")
                             .foregroundStyle(Theme.accent)
                             .monospacedDigit()
@@ -68,12 +67,12 @@ struct MarkdownText: View {
                 Text(code)
                     .font(.system(.footnote, design: .monospaced))
                     .foregroundStyle(textColor)
-                    .padding(12)
+                    .padding(Theme.Space.l)
             }
             .background(Theme.inset)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.inset, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.Radius.inset, style: .continuous)
                     .stroke(Theme.line, lineWidth: 1)
             )
 
@@ -91,50 +90,54 @@ struct MarkdownText: View {
             Rectangle().fill(Theme.line).frame(height: 1).padding(.vertical, 2)
 
         case let .table(header, rows):
-            // GFM table → a real grid (wide tables scroll horizontally).
-            ScrollView(.horizontal, showsIndicators: false) {
-                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
-                    GridRow {
-                        ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
-                            inline(cell)
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                    }
-                    Divider()
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                ScrollView(.horizontal) {
+                    Grid(alignment: .leading, horizontalSpacing: Theme.Space.xxl, verticalSpacing: Theme.Space.m) {
                         GridRow {
-                            ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                            ForEach(Array(header.enumerated()), id: \.offset) { index, cell in
                                 inline(cell)
-                                    .font(.footnote)
-                                    .foregroundStyle(textColor)
+                                    .font(Theme.Typo.captionMed)
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .fixedSize()
+                                    .gridColumnAlignment(index == 0 ? .leading : .trailing)
+                            }
+                        }
+                        Divider().gridCellUnsizedAxes(.horizontal)
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            GridRow {
+                                ForEach(Array(row.enumerated()), id: \.offset) { index, cell in
+                                    inline(cell)
+                                        .font(Theme.Typo.detail)
+                                        .monospacedDigit()
+                                        .foregroundStyle(textColor)
+                                        .fixedSize(horizontal: true, vertical: true)
+                                }
                             }
                         }
                     }
+                    .padding(Theme.Space.l)
                 }
-                .padding(10)
+                .background(Theme.inset)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.inset, style: .continuous))
+                .accessibilityIdentifier("assistant.table")
+                if header.count > 2 {
+                    Label("Swipe to see all columns", systemImage: "arrow.left.and.right")
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
             }
-            .background(Theme.inset)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Theme.line, lineWidth: 1)
-            )
         }
     }
 
-    /// Body voice. Barlow by default — the app's own prose face; `serif` is
-    /// kept as an escape hatch but is not what the Assistant uses.
     private var bodyFont: Font {
-        serif ? .system(size: 15, design: .serif) : Theme.Typo.body
+        serif ? .system(.body, design: .serif) : Theme.Typo.body
     }
 
-    private func headingSize(_ level: Int) -> CGFloat {
+    private func headingFont(_ level: Int) -> Font {
         switch level {
-        case 1: return 21
-        case 2: return 18
-        case 3: return 16
-        default: return 15
+        case 1: return Theme.Typo.heading
+        case 2: return Theme.Typo.headingSm
+        default: return Theme.Typo.headingXs
         }
     }
 
@@ -143,7 +146,7 @@ struct MarkdownText: View {
         let opts = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .inlineOnlyPreservingWhitespace
         )
-        if let attr = try? AttributedString(markdown: s, options: opts) {
+        if let attr = try? AttributedString(markdown: Self.shortenLinkLabels(s), options: opts) {
             return Text(attr)
         }
         return Text(s)
@@ -161,7 +164,7 @@ struct MarkdownText: View {
 
     // MARK: - Block parsing
 
-    enum Block {
+    enum Block: Equatable {
         case heading(Int, String)
         case paragraph([String])
         case bullet([String])
@@ -174,7 +177,7 @@ struct MarkdownText: View {
 
     static func parse(_ text: String) -> [Block] {
         var blocks: [Block] = []
-        let lines = shortenLinkLabels(text)
+        let lines = text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .components(separatedBy: "\n")
 
@@ -250,14 +253,15 @@ struct MarkdownText: View {
 
             // GFM table: `| a | b |` header, `|---|---|` separator, data rows.
             if isTableRow(line), i + 1 < lines.count,
-               isTableSeparator(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
+               isTableSeparator(lines[i + 1].trimmingCharacters(in: .whitespaces)),
+               tableCells(line).count == tableCells(lines[i + 1]).count {
                 flushParagraph()
                 let header = tableCells(line)
                 i += 2 // skip header + separator
                 var rows: [[String]] = []
                 while i < lines.count {
                     let l = lines[i].trimmingCharacters(in: .whitespaces)
-                    guard isTableRow(l) else { break }
+                    guard isTableRow(l) || l.hasPrefix("|") else { break }
                     // Pad/trim to the header width so Grid rows line up.
                     var cells = tableCells(l)
                     while cells.count < header.count { cells.append("") }
@@ -277,22 +281,41 @@ struct MarkdownText: View {
     }
 
     private static func isTableRow(_ line: String) -> Bool {
-        line.hasPrefix("|") && line.dropFirst().contains("|")
+        tableCells(line).count > 1
     }
 
-    /// `|---|:---:|` — only pipes, dashes, colons and spaces, with a dash.
     private static func isTableSeparator(_ line: String) -> Bool {
-        guard line.hasPrefix("|"), line.contains("-") else { return false }
-        let allowed = Set("|-: ")
-        return line.allSatisfy { allowed.contains($0) }
+        let cells = tableCells(line)
+        return cells.count > 1 && cells.allSatisfy {
+            $0.range(of: "^:?-{3,}:?$", options: .regularExpression) != nil
+        }
     }
 
+    /// GFM permits omitted outside pipes and escaped pipes inside cells.
     private static func tableCells(_ line: String) -> [String] {
-        var l = line.trimmingCharacters(in: .whitespaces)
-        if l.hasPrefix("|") { l.removeFirst() }
-        if l.hasSuffix("|") { l.removeLast() }
-        return l.components(separatedBy: "|")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+        var text = line.trimmingCharacters(in: .whitespaces)
+        if text.hasPrefix("|") { text.removeFirst() }
+        if text.hasSuffix("|"), !text.hasSuffix("\\|") { text.removeLast() }
+        var cells: [String] = []
+        var cell = ""
+        var escaped = false
+        for character in text {
+            if escaped {
+                if character != "|" { cell.append("\\") }
+                cell.append(character)
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if character == "|" {
+                cells.append(cell.trimmingCharacters(in: .whitespaces))
+                cell = ""
+            } else {
+                cell.append(character)
+            }
+        }
+        if escaped { cell.append("\\") }
+        cells.append(cell.trimmingCharacters(in: .whitespaces))
+        return cells
     }
 
     /// Replace `[label](url)` whose label is itself a long URL with the URL's

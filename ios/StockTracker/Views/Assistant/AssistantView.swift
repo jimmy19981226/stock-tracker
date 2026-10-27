@@ -45,6 +45,27 @@ final class AssistantViewModel: ObservableObject {
     private var bgTaskId: UIBackgroundTaskIdentifier = .invalid
 
     init() {
+        if ProcessInfo.processInfo.environment["UITEST_CHAT_FORMAT"] == "1" {
+            messages = [
+                ChatMessage(role: "user", content: "Show my positions and explain the figures."),
+                ChatMessage(role: "assistant", content: """
+                <!--meta:{"queries":[]}-->
+                ## Your portfolio review
+
+                **Two markets.** Each amount keeps its original currency.
+
+                Market | Position | Shares | Value | Profit
+                --- | --- | ---: | ---: | ---:
+                TW | 台積電 2330 | 230 | NT$552,000 | NT$13,389
+                US | Apple AAPL | 10.125 | US$2,026.27 | US$98.99
+
+                - **Profit** includes the recorded purchase costs.
+                - Missing prices appear as **Unavailable**.
+
+                [Source details](https://example.com/portfolio)
+                """)
+            ]
+        }
         // UI-test hook: seed a markdown-table reply to screenshot the renderer.
         if ProcessInfo.processInfo.environment["UITEST_CHAT_TABLE"] == "1" {
             messages = [
@@ -517,6 +538,9 @@ struct AssistantView: View {
                 .accessibilityLabel("Chat history")
             Text("Assistant")
                 .font(Theme.Typo.headingLg)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .foregroundStyle(Theme.text)
             Spacer(minLength: Theme.Space.xs)
             TagChip(text: "AI", style: .accent)

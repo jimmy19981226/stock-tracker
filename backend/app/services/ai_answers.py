@@ -9,7 +9,7 @@ import json
 import math
 import re
 
-_LABELS = {"period_pl": "Profit or loss", "twr_pct": "Time-weighted return", "xirr_pct": "Annualized money-weighted return",
+_LABELS = {"reason": "Reason", "period_pl": "Profit or loss", "twr_pct": "Time-weighted return", "xirr_pct": "Annualized money-weighted return",
            "currency": "Currency", "start_date": "Start date", "end_date": "End date",
            "requested_start_date": "Requested opening date", "requested_end_date": "Requested closing date",
            "opening_value": "Opening value", "closing_value": "Closing value", "realized_pl": "Realized profit or loss",
@@ -126,8 +126,8 @@ def render(args: dict, sources: dict[int, dict], question: str = "") -> str:
         label = _LABELS.get(field, name.replace("_", " ").replace(".", " · ").capitalize())
         if field in {"start_date", "end_date"} and path.split(".")[0] in {"performance", "current", "previous"}:
             label = "Opening valuation date" if field == "start_date" else "Closing valuation date"
-        if name.startswith(("US.", "TW.", "US_", "TW_")):
-            label = name[:2] + " · " + label
+        if name.upper().startswith(("US.", "TW.", "US_", "TW_")):
+            label = name[:2].upper() + " · " + label
         formatted = display(value)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             currency = _currency(source, path)
@@ -174,14 +174,27 @@ def fallback(sources: dict[int, dict], reason: str) -> str:
              "get_record_summary": "Record totals", "compare_performance": "Period comparison",
              "get_performance_attribution": "Performance contributors", "get_stock_info": "Company data"}
     seen = set()
-    for source in sources.values():
+    performance_facts = []
+    for source_id, source in sources.items():
         if "error" not in source:
             identity = json.dumps({k: v for k, v in source.items() if k != "_evidence"}, sort_keys=True, default=str)
             if identity in seen:
                 continue
             seen.add(identity)
+            performance = source.get("performance")
+            if source.get("_evidence", {}).get("tool") == "get_performance" and isinstance(performance, dict):
+                market = str(performance.get("market") or "Portfolio")
+                for field in ("start_date", "end_date", "currency", "period_pl", "twr_pct", "reason"):
+                    if field in performance and (field != "reason" or performance[field]):
+                        performance_facts.append({"source_id": source_id,
+                                                  "path": f"performance.{field}",
+                                                  "name": f"{market}.result_{source_id}.{field}"})
+                continue
             collect(source, names.get(source.get("_evidence", {}).get("tool"), "Available data"))
+    if performance_facts:
+        return reason + " Here are the figures retrieved before the interruption:\n\n" + render(
+            {"format": "table", "facts": performance_facts[:60]}, sources)
     if not rows:
-        return reason + " Please try again or ask about a smaller date range."
+        return reason + " Please try again."
     return reason + " Here is the available data:\n\n| Metric | Value |\n| --- | --- |\n" + "\n".join(
         f"| {label} | {display(value)} |" for label, value in rows)

@@ -17,11 +17,13 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
 from ..database import Dividend, Report, SessionLocal, Trade
+from ..schemas import DividendCreate, TradeCreate
 from . import ai_analytics, ai_answers, ai_providers, fx, income, markets, performance, portfolio, quotes, stock_info
 
 _TAIPEI = timezone(timedelta(hours=8))
@@ -632,6 +634,34 @@ _PROPOSED = {
 }
 
 
+def _proposal_error(fields: dict, *, is_trade: bool) -> str | None:
+    """Reject unusable model drafts before they become confirmation cards.
+
+    Reuse record API constraints, plus finite-number checks: JSON cannot carry
+    NaN or infinity. This validates only; saving still requires confirmation.
+    """
+    kind = "trade" if is_trade else "dividend"
+    try:
+        numeric = ("shares", "price", "fee") if is_trade else ("amount",)
+        for key in numeric:
+            value = fields.get(key) or 0
+            if isinstance(value, bool) or not math.isfinite(float(value)):
+                raise ValueError(f"{key} must be a finite number")
+        payload = {**fields, "ticker": str(fields.get("ticker") or "").strip().upper()}
+        if payload.get("market") is not None:
+            payload["market"] = str(payload["market"]).strip().upper()
+        if is_trade:
+            payload["type"] = str(payload.get("type") or "buy").lower()
+            payload["trade_date"] = payload.get("date")
+            TradeCreate.model_validate(payload)
+        else:
+            payload["pay_date"] = payload.get("date")
+            DividendCreate.model_validate(payload)
+    except (ValueError, TypeError) as exc:
+        return f"Invalid {kind} proposal: {exc}"
+    return None
+
+
 def _load_owned(db, model, user_id: str, record_id):
     """Fetch one of the caller's own rows, or ``None``.
 
@@ -977,7 +1007,7 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         with SessionLocal() as db:
             q = db.query(Trade).filter(Trade.user_id == user_id)
             if args.get("market"):
-                q = q.filter(Trade.market == str(args["market"]).upper())
+                q = q.filter(Trade.market == str(args["market"]).strip().upper())
             rows = q.all()
         lots = portfolio.build_lots(rows)
         ticker = str(args.get("ticker") or "").strip().upper()
@@ -1230,6 +1260,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
                 else:
                     value = str(value)
                 proposed[key] = value
+            if error := _proposal_error({**stored, **proposed}, is_trade=is_trade):
+                return {"error": error}, None
             before, after = _changed(stored, proposed)
             if not after:
                 return {"error": "Nothing would change — the values given match "
@@ -1269,9 +1301,9 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
             "notes": args.get("notes"),
         }
         if args.get("market"):
-            row["market"] = str(args["market"]).upper()
-        if not row["ticker"] or row["shares"] <= 0 or row["price"] <= 0:
-            return {"error": "add_trade needs ticker, shares > 0 and price > 0"}, None
+            row["market"] = str(args["market"]).strip().upper()
+        if error := _proposal_error(row, is_trade=True):
+            return {"error": error}, None
         with SessionLocal() as db:
             row["duplicate_of"] = _duplicate_trade_id(db, user_id, row)
         return dict(_PROPOSED), {"trades": [row], "dividends": [], "notes": ""}
@@ -1285,9 +1317,9 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
             "notes": args.get("notes"),
         }
         if args.get("market"):
-            row["market"] = str(args["market"]).upper()
-        if not row["ticker"] or row["amount"] <= 0:
-            return {"error": "add_dividend needs ticker and amount > 0"}, None
+            row["market"] = str(args["market"]).strip().upper()
+        if error := _proposal_error(row, is_trade=False):
+            return {"error": error}, None
         with SessionLocal() as db:
             row["duplicate_of"] = _duplicate_dividend_id(db, user_id, row)
         return dict(_PROPOSED), {"trades": [], "dividends": [row], "notes": ""}
@@ -1300,7 +1332,7 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
 # ---------------------------------------------------------------------------
 
 def _duplicate_trade_id(db, user_id: str, row: dict) -> int | None:
-    """An existing trade matching ticker + date + shares + price. The card
+    """An existing trade matching side + ticker + date + shares + price. The card
     pre-flags these; a statement photographed twice is the common case, and a
     silently doubled lot is expensive to notice later."""
     try:
@@ -1309,6 +1341,7 @@ def _duplicate_trade_id(db, user_id: str, row: dict) -> int | None:
         return None
     for t in (db.query(Trade)
               .filter(Trade.user_id == user_id,
+                      Trade.type == (row.get("type") or "buy"),
                       Trade.ticker == row.get("ticker"),
                       Trade.trade_date == when)
               .all()):
@@ -1352,8 +1385,18 @@ def _propose_records(args: dict, user_id: str, today: str) -> tuple[dict, dict |
 
     with SessionLocal() as db:
         for raw in trades_in[:50]:
+            if not isinstance(raw, dict):
+                errors.append("Skipped a trade row: expected a record object.")
+                continue
             op = str(raw.get("op") or "create").lower()
+            if op not in {"create", "update", "delete"}:
+                errors.append(f"Skipped a trade row: unknown operation {op!r}.")
+                continue
             if op == "create":
+                candidate = {**raw, "date": raw.get("date") or today, "fee": raw.get("fee") or 0}
+                if error := _proposal_error(candidate, is_trade=True):
+                    errors.append(error)
+                    continue
                 row = {
                     "op": "create",
                     "type": str(raw.get("type") or "buy").lower(),
@@ -1365,7 +1408,7 @@ def _propose_records(args: dict, user_id: str, today: str) -> tuple[dict, dict |
                     "notes": raw.get("notes"),
                 }
                 if raw.get("market"):
-                    row["market"] = str(raw["market"]).upper()
+                    row["market"] = str(raw["market"]).strip().upper()
                 if not row["ticker"] or row["shares"] <= 0 or row["price"] <= 0:
                     errors.append(f"Skipped a trade row: needs ticker, shares > 0 and price > 0")
                     continue
@@ -1385,6 +1428,11 @@ def _propose_records(args: dict, user_id: str, today: str) -> tuple[dict, dict |
             proposed = {k: raw[k] for k in
                         ("type", "ticker", "shares", "price", "date", "fee", "market", "notes")
                         if raw.get(k) is not None}
+            if "type" in proposed:
+                proposed["type"] = str(proposed["type"]).lower()
+            if error := _proposal_error({**stored, **proposed}, is_trade=True):
+                errors.append(error)
+                continue
             for k in ("shares", "price", "fee"):
                 if k in proposed:
                     proposed[k] = float(proposed[k])
@@ -1399,8 +1447,17 @@ def _propose_records(args: dict, user_id: str, today: str) -> tuple[dict, dict |
                                "after": after, "record": stored})
 
         for raw in dividends_in[:50]:
+            if not isinstance(raw, dict):
+                errors.append("Skipped a dividend row: expected a record object.")
+                continue
             op = str(raw.get("op") or "create").lower()
+            if op not in {"create", "update", "delete"}:
+                errors.append(f"Skipped a dividend row: unknown operation {op!r}.")
+                continue
             if op == "create":
+                if error := _proposal_error({**raw, "date": raw.get("date") or today}, is_trade=False):
+                    errors.append(error)
+                    continue
                 row = {
                     "op": "create",
                     "ticker": str(raw.get("ticker") or "").strip().upper(),
@@ -1409,7 +1466,7 @@ def _propose_records(args: dict, user_id: str, today: str) -> tuple[dict, dict |
                     "notes": raw.get("notes"),
                 }
                 if raw.get("market"):
-                    row["market"] = str(raw["market"]).upper()
+                    row["market"] = str(raw["market"]).strip().upper()
                 if not row["ticker"] or row["amount"] <= 0:
                     errors.append("Skipped a dividend row: needs ticker and amount > 0")
                     continue
@@ -1428,6 +1485,9 @@ def _propose_records(args: dict, user_id: str, today: str) -> tuple[dict, dict |
                 continue
             proposed = {k: raw[k] for k in ("ticker", "amount", "date", "market", "notes")
                         if raw.get(k) is not None}
+            if error := _proposal_error({**stored, **proposed}, is_trade=False):
+                errors.append(error)
+                continue
             if "amount" in proposed:
                 proposed["amount"] = float(proposed["amount"])
             for k in ("ticker", "market"):
@@ -1909,7 +1969,16 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
                 continue
             code = getattr(exc, "code", None)
             logging.getLogger(__name__).warning("Gemini request failed: %s, status=%s", type(exc).__name__, code)
-            reason = "Gemini's usage limit was reached. Please try again shortly." if code == 429 else "The AI service could not finish the analysis."
+            if code == 429:
+                reason = "Gemini's usage limit was reached. Please try again shortly."
+            elif code in (500, 502, 503, 504):
+                reason = "Gemini is temporarily unavailable. Please try again shortly."
+            elif code in (401, 403):
+                reason = "Gemini could not authorize this request. Check your API key and model access in Settings."
+            elif code == 400:
+                reason = "The AI provider rejected this request. Please try a new chat; if it continues, check the AI configuration."
+            else:
+                reason = "The AI service could not finish the analysis."
             yield ("chunk", ai_answers.fallback(sources, reason))
             return
 

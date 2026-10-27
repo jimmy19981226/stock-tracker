@@ -149,6 +149,32 @@ class GeminiToolTests(TestCase):
         _, events, _ = self.run_loop([[]])
         self.assertIn("Please try again", events[-1][1])
 
+    def test_provider_errors_have_actionable_messages_without_leaking_provider_details(self):
+        class ProviderError(Exception):
+            def __init__(self, code):
+                self.code = code
+                super().__init__("private provider diagnostic")
+
+        for code, expected in [(503, "temporarily unavailable"), (429, "usage limit"),
+                               (401, "API key and model access"), (403, "API key and model access"),
+                               (400, "try a new chat; if it continues, check the AI configuration")]:
+            with self.subTest(code=code):
+                _, events, _ = self.run_loop([ProviderError(code)])
+                self.assertIn(expected, events[-1][1])
+                self.assertNotIn("private provider diagnostic", events[-1][1])
+
+    def test_temporary_provider_failure_preserves_checked_data_and_does_not_retry_forever(self):
+        class Unavailable(Exception):
+            code = 503
+        requests, events, execute = self.run_loop([
+            [chunk(types.Part(function_call=types.FunctionCall(name="get_holdings", args={}, id="read")))],
+            Unavailable("unavailable"),
+        ])
+        self.assertEqual(len(requests), 2)
+        execute.assert_called_once()
+        self.assertIn("temporarily unavailable", events[-1][1])
+        self.assertIn("1,234.56", events[-1][1])
+
     def test_independent_reads_run_concurrently(self):
         barrier = Barrier(2)
         responses = iter([

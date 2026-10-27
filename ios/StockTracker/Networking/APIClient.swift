@@ -25,14 +25,22 @@ final class APIClient {
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let validToken: () async -> String?
+    private let refreshToken: () async -> String?
 
-    init() {
+    /// Dependencies are injectable so streaming tests exercise URLSession without
+    /// reading or changing the signed-in account's credentials.
+    init(session: URLSession? = nil,
+         validToken: @escaping () async -> String? = { await AuthTokenProvider.shared.validToken() },
+         refreshToken: @escaping () async -> String? = { await AuthTokenProvider.shared.refreshAfterRejection() }) {
+        self.validToken = validToken
+        self.refreshToken = refreshToken
         let cfg = URLSessionConfiguration.default
         // The free-tier Render backend spins down when idle and a cold start
         // can take ~60s; give requests room instead of failing at 30s.
         cfg.timeoutIntervalForRequest = 75
         cfg.waitsForConnectivity = true
-        session = URLSession(configuration: cfg)
+        self.session = session ?? URLSession(configuration: cfg)
 
         decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
@@ -85,10 +93,10 @@ final class APIClient {
     /// transport failure (idempotent GETs only) and once after a 401 with a
     /// freshly refreshed Google token.
     private func perform(_ req: inout URLRequest, retryTransient: Bool) async throws -> Data {
-        await Self.attachAuth(&req)
+        await attachAuth(&req)
         var (data, http) = try await execute(req, retryTransient: retryTransient)
         if http.statusCode == 401,
-           let fresh = await AuthTokenProvider.shared.refreshAfterRejection() {
+           let fresh = await refreshToken() {
             req.setValue("Bearer \(fresh)", forHTTPHeaderField: "Authorization")
             (data, http) = try await execute(req, retryTransient: retryTransient)
         }
@@ -138,8 +146,8 @@ final class APIClient {
 
     /// Attach the signed-in user's Google ID token so the backend can scope data
     /// to that account. AuthTokenProvider refreshes it first if it has expired.
-    private static func attachAuth(_ req: inout URLRequest) async {
-        if let token = await AuthTokenProvider.shared.validToken() {
+    private func attachAuth(_ req: inout URLRequest) async {
+        if let token = await validToken() {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
     }
@@ -291,7 +299,7 @@ final class APIClient {
 
         var req = URLRequest(url: try url("/api/reports/\(reportID)/file"))
         req.timeoutInterval = 120
-        await Self.attachAuth(&req)
+        await attachAuth(&req)
         let (data, response) = try await dataTask(req)
         guard (200..<300).contains(response.statusCode) else {
             throw APIError.http(response.statusCode, "Couldn't download the report")
@@ -348,14 +356,14 @@ final class APIClient {
     func streamQuotes(onTick: @escaping @MainActor (QuoteTick) -> Void) async throws {
         var req = URLRequest(url: try url("/api/quotes/stream"))
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        await Self.attachAuth(&req)
+        await attachAuth(&req)
 
         var (bytes, resp) = try await session.bytes(for: req)
         guard var http = resp as? HTTPURLResponse else {
             throw APIError.transport("No response from server")
         }
         if http.statusCode == 401,
-           let fresh = await AuthTokenProvider.shared.refreshAfterRejection() {
+           let fresh = await refreshToken() {
             req.setValue("Bearer \(fresh)", forHTTPHeaderField: "Authorization")
             (bytes, resp) = try await session.bytes(for: req)
             guard let retried = resp as? HTTPURLResponse else {
@@ -448,7 +456,7 @@ final class APIClient {
         var req = URLRequest(url: try url("/api/ai/chat"))
         req.httpMethod = "POST"
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        await Self.attachAuth(&req)
+        await attachAuth(&req)
         Self.attachAIProvider(&req)
 
         let boundary = "Boundary-\(UUID().uuidString)"
@@ -479,7 +487,7 @@ final class APIClient {
             throw APIError.transport("No response from server")
         }
         if http.statusCode == 401,
-           let fresh = await AuthTokenProvider.shared.refreshAfterRejection() {
+           let fresh = await refreshToken() {
             req.setValue("Bearer \(fresh)", forHTTPHeaderField: "Authorization")
             (bytes, resp) = try await session.bytes(for: req)
             guard let retried = resp as? HTTPURLResponse else {
@@ -488,59 +496,77 @@ final class APIClient {
             http = retried
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError.http(http.statusCode, "Assistant request failed (\(http.statusCode))")
+            // Streaming requests still receive a normal JSON error body before
+            // SSE starts. Preserve its useful detail instead of hiding the cause.
+            var body = Data()
+            for try await byte in bytes {
+                body.append(byte)
+                if body.count >= 16_384 { break }
+            }
+            if http.statusCode == 401 {
+                throw APIError.http(401, "Your Google session expired — please sign out and back in.")
+            }
+            throw APIError.http(http.statusCode, Self.detail(from: body, status: http.statusCode))
         }
 
         for try await line in bytes.lines {
+            try Task.checkCancellation()
             guard line.hasPrefix("data:") else { continue }
             let json = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
-            guard !json.isEmpty,
-                  let data = json.data(using: .utf8),
+            guard let data = json.data(using: .utf8),
                   let evt = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let type = evt["type"] as? String
-            else { continue }
+                  let type = evt["type"] as? String else {
+                throw APIError.decoding("The assistant sent an unreadable event. Please try again.")
+            }
 
             switch type {
             case "init":
-                await onInit(evt["chat_id"] as? Int ?? 0, evt["title"] as? String ?? "New chat")
-            case "chunk":
-                if let delta = evt["delta"] as? String { await onChunk(delta) }
-            case "thinking":
-                // Reasoning deltas (Claude extended thinking / Gemini thought
-                // summaries) for the collapsible reasoning section.
-                if let delta = evt["delta"] as? String { await onThinking(delta) }
+                guard let id = evt["chat_id"] as? Int, id > 0 else {
+                    throw APIError.decoding("The assistant did not provide a conversation ID.")
+                }
+                await onInit(id, evt["title"] as? String ?? "New chat")
+            case "chunk", "thinking":
+                guard let delta = evt["delta"] as? String else {
+                    throw APIError.decoding("The assistant sent an unreadable text update.")
+                }
+                if type == "chunk" { await onChunk(delta) }
+                else { await onThinking(delta) }
             case "status":
-                // Tool-call progress ("Searching the web…", "Reading
-                // holdings…") so the UI isn't a silent spinner.
                 if let text = evt["text"] as? String { await onStatus(text) }
             case "action" where evt["report"] != nil:
-                // `generate_report` — the document is already rendering, so
-                // this is a job to follow, not a proposal to confirm.
-                if let raw = evt["report"] as? [String: Any],
-                   let data = try? JSONSerialization.data(withJSONObject: raw),
-                   let job = try? decoder.decode(ReportJob.self, from: data) {
-                    await onReport(job)
+                guard let raw = evt["report"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: raw),
+                      let job = try? decoder.decode(ReportJob.self, from: data) else {
+                    throw APIError.decoding("The assistant's report could not be opened.")
                 }
+                await onReport(job)
             case "action":
-                // A write tool proposed records. Decoded with the *plain*
-                // decoder, not the shared snake_case one: the payload's keys
-                // are already the wire names the model declares
-                // (`duplicate_of` is mapped explicitly), and converting them
-                // twice would turn `duplicate_of` into `duplicateOf` before
-                // the CodingKey ever sees it.
-                if let rec = evt["records"] as? [String: Any],
-                   let data = try? JSONSerialization.data(withJSONObject: rec),
-                   let parsed = try? JSONDecoder().decode(RecordProposal.self, from: data) {
-                    await onAction(parsed)
+                // Keep the plain decoder: RecordProposal explicitly maps wire
+                // names such as duplicate_of. Never silently lose a write card.
+                guard let rec = evt["records"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: rec),
+                      let parsed = try? JSONDecoder().decode(RecordProposal.self, from: data),
+                      !parsed.isEmpty else {
+                    throw APIError.decoding("The assistant's proposed records could not be read. Nothing was saved.")
                 }
+                await onAction(parsed)
             case "done":
-                await onDone(evt["content"] as? String ?? "", evt["queries"] as? [String] ?? [])
+                guard let content = evt["content"] as? String else {
+                    throw APIError.decoding("The assistant's final answer could not be read.")
+                }
+                await onDone(content, evt["queries"] as? [String] ?? [])
+                return
             case "error":
                 throw APIError.transport(evt["detail"] as? String ?? "Assistant error")
             default:
-                break
+                break // Forward-compatible events from a newer backend.
             }
         }
+        try Task.checkCancellation()
+        // A proxy can close a successful HTTP response before generation ends.
+        // Throw so the view model recovers the persisted answer, rather than
+        // leaving the last partial text looking like a completed response.
+        throw APIError.transport("The connection ended before the assistant finished. Reconnecting to your answer…")
     }
 }
 

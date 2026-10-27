@@ -229,6 +229,44 @@ class CheckedAnswerTests(TestCase):
                                                 "path": "twr_change_percentage_points"}]}, source)
         self.assertIn("-3.25 percentage points", answer)
 
+    def test_lowercase_market_prefixes_stay_distinct_in_tables_without_rewriting_json_keys(self):
+        sources = {**self.sources, 2: {"performance": {"currency": "TWD", "period_pl": 2000},
+                                      "_evidence": self.sources[1]["_evidence"]}}
+        facts = [{"name": "us_profit", "source_id": 1, "path": "performance.period_pl"},
+                 {"name": "tw.profit", "source_id": 2, "path": "performance.period_pl"}]
+        table = ai_answers.render({"format": "table", "facts": facts}, sources)
+        self.assertIn("| US · Profit or loss | USD 1,234,567.89 |", table)
+        self.assertIn("| TW · Profit or loss | TWD 2,000.00 |", table)
+        structured = json.loads(ai_answers.render({"format": "json", "facts": facts}, sources))
+        self.assertEqual(structured, {"us_profit": 1234567.89, "tw": {"profit": 2000}})
+
+    def test_interrupted_performance_reply_preserves_readable_currency_dates_and_missing_data(self):
+        evidence = {"tool": "get_performance", "retrieved_at": "2026-10-06 20:00:00 UTC"}
+        sources = {
+            1: {"performance": {"market": "US", "currency": "USD", "start_date": "2026-09-22",
+                                "end_date": "2026-10-06", "period_pl": 202.5, "twr_pct": 10.0,
+                                "portfolio_series": [{"date": "secret-plot-date", "pct": 9999}]},
+                "_evidence": evidence},
+            2: {"performance": {"market": "TW", "currency": "TWD", "start_date": "2026-09-22",
+                                "end_date": "2026-10-06", "period_pl": None, "twr_pct": None,
+                                "reason": "Missing price history for 2330"}, "_evidence": evidence},
+        }
+        answer = ai_answers.fallback(sources, "Gemini is temporarily unavailable.")
+        self.assertIn("| US · Profit or loss | USD 202.50 |", answer)
+        self.assertIn("| US · Opening valuation date | 2026-09-22 |", answer)
+        self.assertIn("| TW · Currency | TWD |", answer)
+        self.assertIn("| TW · Profit or loss | Unavailable |", answer)
+        self.assertIn("| TW · Reason | Missing price history for 2330 |", answer)
+        self.assertIn("Retrieved 2026-10-06 20:00:00 UTC", answer)
+        self.assertNotIn("secret-plot-date", answer)
+        self.assertNotIn("9999", answer)
+        self.assertLess(len(answer.splitlines()), 20)
+
+    def test_error_only_fallback_never_invents_a_successful_metric(self):
+        answer = ai_answers.fallback({1: {"error": "Missing prices", "_evidence": self.sources[1]["_evidence"]}},
+                                     "Gemini is temporarily unavailable.")
+        self.assertEqual(answer, "Gemini is temporarily unavailable. Please try again.")
+
     def test_unknown_sources_arithmetic_paths_duplicate_keys_and_unchecked_prose_are_rejected(self):
         good = {"name": "profit", "source_id": 1, "path": "performance.period_pl"}
         for args in [{"facts": [{**good, "source_id": 2}]},

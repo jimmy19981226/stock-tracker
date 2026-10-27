@@ -29,3 +29,17 @@ xcrun xcresulttool export attachments --path /tmp/studio-product-tour.xcresult \
 ```
 
 The tour checks market navigation, ticker search, detail navigation, editable assistant prompts, keyboard chrome, and quick trade entry. Screenshots cover home, history, holdings, detail, performance, trade entry, dividends, assistant and settings in both light and dark appearances. UI tests override the API URL only for the launched test process. Production builds retain the configured Render endpoint and account storage.
+
+## Assistant regression checks
+
+`AssistantReview` checks formatted tables in light/dark appearances, horizontal scrolling without losing full amounts, accessibility text, and discarding edit/delete proposals. Run it against `server.py`; the preview server rejects all record mutations. `MarkdownTextTests` covers table parsing and code preservation. `AssistantTransportTests` uses an isolated URLSession transport to exercise streamed UTF-8, agent actions, error bodies, token refresh, and interrupted replies.
+
+For an explicitly opted-in live provider test, run `python3 ios/DesignPreview/live_ai_server.py` from the repository root, then run `StockTrackerUITests/DesignTour/testLiveCheckedPerformanceReply`. This separate server listens on port 8107 and uses the backend's synthetic account/price fixtures. It sets an isolated SQLite URL before importing backend code and never opens the production database. Only Gemini inference is live and consumes API quota. The key is read locally, never printed or copied into the iOS build.
+
+Backend regression command (from `backend/`):
+
+```sh
+DATABASE_URL=sqlite:///:memory: RUN_GEMINI_LIVE_TESTS=0 python3 -m unittest discover -s tests -v
+```
+
+Use `RUN_GEMINI_LIVE_TESTS=1` and `-p test_gemini_live.py` only when live inference is intended. Preserve the original failures if a bounded rerun succeeds: provider timeouts or 503 responses are reliability results, not passing first attempts. No draft may change the ledger until confirmation through the normal record API.

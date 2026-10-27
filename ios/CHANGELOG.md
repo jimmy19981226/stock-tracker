@@ -1,3 +1,9 @@
+## 2.0.3 (9) — 2026-10-27
+
+- Preserve assistant error details and recover incomplete streams; validate proposal/report events.
+- Improve chat tables, currency labels and Dynamic Type headings; preserve code and escaped table cells.
+- Add transport, Markdown and agentic regression coverage plus isolated live-AI UI testing.
+
 # AI Stock Studio — iOS changelog
 
 The version shown on the splash screen comes from `MARKETING_VERSION` /

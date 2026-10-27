@@ -158,3 +158,92 @@ class GeminiLivePerformanceTests(PerformanceFixture):
         self.assertIn("AAPL", result["US"]["reason"])
         self.assertEqual(result["TW"]["profit"], 2000.0)
         self.assertEqual(result["TW"]["twr_pct"], 2.0)
+
+
+@skipUnless(os.environ.get("RUN_GEMINI_LIVE_TESTS") == "1",
+            "Live Gemini testing requires an explicit opt-in and an API key")
+class GeminiLiveAgenticTests(AIFeatureFixture):
+    """Real model/tool orchestration against a synthetic, disposable ledger."""
+    def setUp(self):
+        super().setUp()
+        config = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
+        self.api_key = os.environ.get("GOOGLE_AI_API_KEY") or config.get("GOOGLE_AI_API_KEY")
+        if not self.api_key:
+            self.fail("Configure GOOGLE_AI_API_KEY locally before running live tests")
+
+    def ledger(self):
+        from app.database import Dividend, Trade
+        with self.sessions() as db:
+            return {
+                "trades": [(r.id, r.user_id, ai_tools._trade_fields(r))
+                           for r in db.query(Trade).order_by(Trade.id)],
+                "dividends": [(r.id, r.user_id, ai_tools._dividend_fields(r))
+                              for r in db.query(Dividend).order_by(Dividend.id)],
+            }
+
+    def proposal_rows(self, events, kind):
+        return [row for event in events if event["type"] == "action"
+                for row in event.get("records", {}).get(kind, [])]
+
+    def test_live_create_and_followup_revision_remain_unconfirmed_drafts(self):
+        before = self.ledger()
+        first = self.chat("Prepare a trade for my review: bought 0.75 AAPL shares at US$199.50 "
+                          "on 2026-10-06 with a US$0.25 fee. Do not save it; show the confirmation card.")
+        rows = self.proposal_rows(first, "trades")
+        self.assertTrue(rows, first[-1]["content"])
+        row = rows[-1]
+        self.assertEqual((row.get("op", "create"), row["ticker"], row["shares"], row["price"], row["date"], row["fee"]),
+                         ("create", "AAPL", .75, 199.5, "2026-10-06", .25))
+        self.assertEqual(self.ledger(), before)
+        followup = self.chat("I have not confirmed that draft. Make it 1.25 shares instead, "
+                             "with the same ticker, price, date and fee. Show the replacement draft card; don't edit an existing record.",
+                             chat_id=first[0]["chat_id"])
+        revised = self.proposal_rows(followup, "trades")
+        self.assertTrue(revised, followup[-1]["content"])
+        row = revised[-1]
+        self.assertEqual((row.get("op", "create"), row["ticker"], row["shares"], row["price"], row["date"], row["fee"]),
+                         ("create", "AAPL", 1.25, 199.5, "2026-10-06", .25))
+        self.assertEqual(self.ledger(), before)
+        print(f"Live Gemini draft and follow-up: {first[-1]['duration_ms']} / {followup[-1]['duration_ms']} ms")
+
+    def test_live_edit_proposal_has_correct_before_after_and_does_not_save(self):
+        before = self.ledger()
+        record_id = self.trade_ids[0]
+        events = self.chat(f"Correct my existing AAPL buy trade id {record_id}: its price should be US$191.25. "
+                           "Read the record, show a before/after confirmation card, and change no other fields. Do not save yet.")
+        rows = self.proposal_rows(events, "trades")
+        self.assertTrue(rows, events[-1]["content"])
+        row = rows[-1]
+        self.assertEqual((row["op"], row["id"]), ("update", record_id))
+        self.assertEqual(row["before"], {"price": 190.12})
+        self.assertEqual(row["after"], {"price": 191.25})
+        self.assertEqual(self.ledger(), before)
+        print(f"Live Gemini edit proposal: {events[-1]['duration_ms']} ms")
+
+    def test_live_delete_proposal_identifies_record_without_deleting(self):
+        before = self.ledger()
+        record_id = self.dividend_ids[0]
+        events = self.chat(f"I want to delete my AAPL dividend payment id {record_id}. "
+                           "Show the delete confirmation card identifying that payment. Do not delete it yet.")
+        rows = self.proposal_rows(events, "dividends")
+        self.assertTrue(rows, events[-1]["content"])
+        row = rows[-1]
+        self.assertEqual((row["op"], row["id"]), ("delete", record_id))
+        self.assertEqual((row["record"]["ticker"], row["record"]["amount"]), ("AAPL", 54.32))
+        self.assertEqual(self.ledger(), before)
+        print(f"Live Gemini delete proposal: {events[-1]['duration_ms']} ms")
+
+    def test_live_default_table_uses_checked_full_precision_and_currency(self):
+        with patch.object(ai_answers, "render", wraps=ai_answers.render) as checked:
+            events = self.chat("Show my current AAPL position as a concise Markdown table. "
+                               "Include ticker, shares, current price and currency; preserve the app's exact values.")
+        self.assertTrue(checked.called)
+        answer = ai._META_HEADER_RE.sub("", events[-1]["content"])
+        self.assertIn("| Metric | Value |", answer)
+        self.assertIn("AAPL", answer)
+        self.assertIn("10.125", answer)
+        self.assertIn("200.125", answer)
+        self.assertIn("USD", answer)
+        self.assertIn("Figures checked against your app data.", answer)
+        self.assertNotIn("FOREIGN_RECORD", answer)
+        print(f"Live Gemini formatted position table: {events[-1]['duration_ms']} ms")
