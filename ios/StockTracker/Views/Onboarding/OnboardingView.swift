@@ -24,7 +24,7 @@ struct OnboardingView: View {
                     .foregroundStyle(Theme.heroText)
                     .padding(.top, 10)
                     .padding(.bottom, 6)
-                Text("Taiwan and US portfolios in one net worth. Live prices, dividends, FIFO P/L, and an assistant that reads your holdings.")
+                Text("Taiwan and US portfolios in one net worth. Live prices, dividends, broker cost basis, and an assistant that reads your holdings.")
                     .font(Theme.Typo.body)
                     .foregroundStyle(Theme.heroLabel)
                     .frame(maxWidth: 280, alignment: .leading)

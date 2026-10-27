@@ -32,7 +32,7 @@ AI Stock Studio brings holdings, trades, dividends, market data, and AI assistan
 | :--- | :--- |
 | **Grounded assistance** | Typed portfolio tools, account-scoped reads, complete filtered totals, and checks on supported numeric answers |
 | **Controlled record changes** | The assistant drafts an action; the iOS app requires confirmation before submitting the write |
-| **Two-market accounting** | Taiwan/US holdings, FIFO cost basis, realized/unrealized P&L, dividends, and currency conversion |
+| **Two-market accounting** | Taiwan/US holdings, TW moving-average / US FIFO cost basis, realized/unrealized P&L, dividends, and currency conversion |
 | **Time-aware analysis** | Dated performance windows, benchmark comparisons, and explicit handling of unavailable history |
 | **Multiple clients** | SwiftUI app, WidgetKit snapshot, and a read-only React dashboard |
 | **Report generation** | Shared calculation services feed local PDF rendering or optional Adobe document templates |
@@ -57,7 +57,7 @@ flowchart TB
     V --> D
 ```
 
-**Read → calculate → explain.** The assistant can request holdings, filtered records, cost lots, performance, fundamentals, and reports. The backend performs account arithmetic and returns structured results. This makes the calculation path inspectable independently of model output.
+**Read → calculate → explain.** The assistant can request holdings, filtered records, purchase lots, performance, fundamentals, and reports. The backend performs account arithmetic and returns structured results. This makes the calculation path inspectable independently of model output.
 
 **Propose → review → commit.** Tool-generated writes are proposals. Confirmation cards let the user review additions, corrections, deletions, and imports before ordinary record endpoints persist them.
 
@@ -122,7 +122,7 @@ The backend suite covers account isolation, tool calls, confirmation proposals, 
 | [`ai_tools.py`](backend/app/services/ai_tools.py) | Tool schemas, dispatch, and proposed actions |
 | [`ai_analytics.py`](backend/app/services/ai_analytics.py) / [`ai_answers.py`](backend/app/services/ai_answers.py) | Filtered analysis and supported numeric answer checks |
 | [`ai.py`](backend/app/routers/ai.py) | Chat lifecycle, streaming, and provider integration |
-| [`portfolio.py`](backend/app/services/portfolio.py) / [`performance.py`](backend/app/services/performance.py) | FIFO accounting and dated performance calculations |
+| [`portfolio.py`](backend/app/services/portfolio.py) / [`performance.py`](backend/app/services/performance.py) | Market-specific accounting and dated performance calculations |
 | [`backend/tests/`](backend/tests/) | Integration tests with isolated databases and stubbed external services |
 | [`ios/`](ios/) / [`frontend/`](frontend/) | Native app and browser dashboard |
 

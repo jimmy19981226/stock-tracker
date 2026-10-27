@@ -135,7 +135,7 @@ struct DashboardView: View {
                      valueColor: Theme.pl(summary?.totalPl))
             StatCell(label: "Realized P/L",
                      value: Fmt.signedAmount(summary?.realizedPl, currency: currency),
-                     caption: "FIFO",
+                     caption: market == .TW ? "Moving average" : "FIFO",
                      valueColor: Theme.pl(summary?.realizedPl))
             StatCell(label: "Dividends",
                      value: Fmt.amount(summary?.dividends, currency: currency),
@@ -267,7 +267,7 @@ struct DashboardView: View {
 
     private var footnote: some View {
         Text(market == .TW
-             ? "Unrealized is net of estimated exit costs (0.1425% commission + transaction tax) — matches 損益試算."
+             ? "Taiwan uses moving-average cost. Unrealized is net of estimated exit costs (0.1425% commission + transaction tax) — matches 損益試算."
              : "Unrealized is net of estimated exit costs. Realized P/L is FIFO and matches 1099 reporting.")
             .font(Theme.Typo.micro)
             .foregroundStyle(Theme.textSecondary)

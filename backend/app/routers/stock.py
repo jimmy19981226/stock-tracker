@@ -87,7 +87,7 @@ def stock_detail(
         .order_by(Dividend.pay_date)
         .all()
     )
-    # full FIFO state across all tickers (scoped to this user)
+    # market-specific accounting state across all tickers (scoped to this user)
     states = compute_states(db.query(Trade).filter(Trade.user_id == user).all())
     st = states.get(ticker)
 

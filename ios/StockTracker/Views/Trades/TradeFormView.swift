@@ -284,6 +284,6 @@ struct RecordFormSheet: View {
         let where_ = effectiveMarket == .TW ? "Taiwan" : "US"
         if isEdit { return "Trade updated · \(where_)" }
         return type == .buy ? "Buy added · lot open · \(where_)"
-                            : "Sell added · FIFO matched · \(where_)"
+                            : "Sell added · \(effectiveMarket == .TW ? "average cost" : "FIFO matched") · \(where_)"
     }
 }

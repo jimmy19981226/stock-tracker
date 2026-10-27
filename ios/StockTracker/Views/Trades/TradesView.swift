@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The trade log for both markets, filtered rather than split — a portfolio
-/// held across two exchanges is still one log, and the FIFO cost basis that
+/// held across two exchanges is still one log, and the market-specific cost basis that
 /// gives every row its realized P/L is computed over all of it.
 struct TradesView: View {
     @EnvironmentObject private var store: PortfolioStore
@@ -62,7 +62,7 @@ struct TradesView: View {
         }
     }
 
-    /// Realized P/L booked in the selected scope, per market. FIFO is walked
+    /// Realized P/L booked in the selected scope, per market. Cost is replayed
     /// over the *whole* ledger — cost basis crosses years — and only sells
     /// inside the window are counted.
     private func earned(_ market: MarketCode) -> Double {
@@ -73,7 +73,7 @@ struct TradesView: View {
             .reduce(0) { $0 + (booked[$1.id] ?? 0) }
     }
 
-    private var realized: [Int: Double] { FIFO.realized(store.trades) }
+    private var realized: [Int: Double] { PositionAccounting.realized(store.trades) }
 
     private var pager: Paginator<Trade> { Paginator(items: shown, page: page) }
 
@@ -201,7 +201,7 @@ struct TradesView: View {
                             rangeLabel: pager.rangeLabel)
                 }
 
-                Text("FIFO cost basis — a sell consumes the oldest lots first; any buy lot with shares left is Open. Realized P/L matches broker reporting.")
+                Text("Taiwan P/L uses moving-average cost; US P/L uses FIFO. Open/Closed tracks unsold shares against the oldest purchases first.")
                     .font(Theme.Typo.micro)
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

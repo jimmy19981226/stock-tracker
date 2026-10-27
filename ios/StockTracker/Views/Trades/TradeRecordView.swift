@@ -4,12 +4,12 @@ import SwiftUI
 ///
 /// The log row is a summary; this is the record. It answers the questions a row
 /// can't fit — what the lot actually cost once the fee is in, what a sell
-/// booked under FIFO and against which lots, what was written in the notes —
+/// booked using its market's cost method, what was written in the notes —
 /// and it is where editing and deleting live, so a tap on a row can no longer
 /// drop the user straight into an edit form they didn't ask for.
 struct TradeRecordView: View {
     let trade: Trade
-    /// Realized P/L this trade booked, FIFO-matched over the whole log.
+    /// Realized P/L this trade booked, replayed over the whole log.
     let realized: Double?
     let name: String
     let onBack: () -> Void
@@ -46,7 +46,7 @@ struct TradeRecordView: View {
             Button("Delete", role: .destructive) { onDelete() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("\(isBuy ? "Buy" : "Sell") \(Fmt.shares(trade.shares)) \(trade.ticker) on \(trade.tradeDate.prefix(10)). Deleting it recomputes every FIFO lot after it.")
+            Text("\(isBuy ? "Buy" : "Sell") \(Fmt.shares(trade.shares)) \(trade.ticker) on \(trade.tradeDate.prefix(10)). Deleting it recomputes subsequent cost basis and profit.")
         }
     }
 
@@ -133,7 +133,7 @@ struct TradeRecordView: View {
     /// and that surprises people often enough to be worth one sentence.
     private var lotCard: some View {
         VStack(alignment: .leading, spacing: Theme.Space.xs) {
-            Text(isBuy ? "This lot" : "FIFO match").statLabelStyle()
+            Text(isBuy ? "This purchase" : (trade.market == .TW ? "Average cost" : "FIFO match")).statLabelStyle()
             Text(explanation)
                 .font(Theme.Typo.detail)
                 .foregroundStyle(Theme.textSecondary)
@@ -143,6 +143,12 @@ struct TradeRecordView: View {
     }
 
     private var explanation: String {
+        if trade.market == .TW {
+            if isBuy {
+                return "This purchase enters the position's moving-average cost, including its fee. Open/Closed tracks remaining shares against the oldest purchases; it does not assign the pooled accounting cost to individual lots."
+            }
+            return "Realized P/L is net sale proceeds less the shares sold at the position's moving-average cost immediately before this sale. Buy fees are included in that average."
+        }
         if isBuy {
             return trade.status == .open
                 ? "Still open — some or all of these shares have not been sold, so their cost stays in the position's basis."

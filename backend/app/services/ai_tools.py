@@ -192,7 +192,7 @@ TOOLS: list[dict] = [
     },
     {
         "name": "get_record_summary",
-        "description": "Exact totals over ALL matching trade/dividend records, even beyond page limits. Includes paid dividends, fees, buy costs, net sale proceeds, FIFO realized P/L and cash_earned (realized P/L + dividends). Group by ticker, month or market; totals always include every matching record and keep currencies separate. Use for totals/counts instead of summing pages. Cash earned excludes unrealized gains; use get_performance for portfolio returns.",
+        "description": "Exact totals over ALL matching trade/dividend records, even beyond page limits. Includes paid dividends, fees, buy costs, net sale proceeds, realized P/L (TW moving average, US FIFO) and cash_earned (realized P/L + dividends). Group by ticker, month or market; totals always include every matching record and keep currencies separate. Use for totals/counts instead of summing pages. Cash earned excludes unrealized gains; use get_performance for portfolio returns.",
         "parameters": {"type": "object", "properties": {**_DATE_FILTERS, "ticker": {"type": "string"},
                        "market": _MARKET, "year": {"type": "integer"},
                        "type": {"type": "string", "enum": ["buy", "sell"]},
@@ -277,11 +277,12 @@ TOOLS: list[dict] = [
     {
         "name": "get_lots",
         "description": (
-            "FIFO buy lots: for each, the originating trade id, buy date, "
+            "Purchase lots with FIFO share tracking: the originating trade id, buy date, "
             "shares bought, shares still unsold, unit cost (buy fee included) "
             "and days held. This is the arithmetic under a position's open/"
             "closed status — use it instead of reconstructing FIFO from raw "
-            "trades, which loses partial fills."
+            "trades, which loses partial fills. Taiwan position cost uses pooled moving "
+            "average, not these original lot costs; use get_holdings or simulate_sale for P/L."
         ),
         "parameters": {
             "type": "object",
@@ -296,7 +297,7 @@ TOOLS: list[dict] = [
     {
         "name": "simulate_sale",
         "description": (
-            "What selling would actually net: the lots FIFO would consume, "
+            "What selling would actually net: Taiwan pooled moving-average cost, US FIFO lots, "
             "gross proceeds, commission, transaction tax, net proceeds, "
             "realized P/L and the position left over. Uses the app's own "
             "損益試算 arithmetic — do not compute fees or tax yourself."
@@ -697,7 +698,7 @@ def _changed(stored: dict, proposed: dict) -> tuple[dict, dict]:
 def _delete_consequences(db, trade: Trade) -> list[str]:
     """What else moves if this trade goes.
 
-    Computed by re-running the FIFO pass without the row and diffing — not
+    Computed by re-running the accounting pass without the row and diffing — not
     authored by the model, which has no way to know and every incentive to
     sound confident. Three things are checked, because a status diff alone
     misses the worst case: deleting a buy that a later sell consumed leaves
@@ -829,7 +830,7 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         if market:
             rows = [h for h in rows if h["market"] == market]
         keys = ("ticker", "name", "market", "currency", "shares", "avg_cost", "current_price",
-                "market_value", "cost_basis", "unrealized_pl", "unrealized_pl_pct",
+                "market_value", "cost_basis", "cost_basis_method", "unrealized_pl", "unrealized_pl_pct",
                 "today_change", "today_change_pct")
         exact_keys = {"shares", "avg_cost", "current_price"}
         return {"holdings": [{k: h.get(k) if k in exact_keys else _round(h.get(k))
@@ -984,7 +985,10 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
             lots = [l for l in lots if l["ticker"] == ticker]
         if open_only:
             lots = [l for l in lots if l["shares_remaining"] > 1e-9]
-        return {"lots": lots, "open_only": open_only}, None
+        return {"lots": lots, "open_only": open_only,
+                "basis": "Original purchase costs and FIFO share tracking for open/closed status. "
+                         "Taiwan accounting uses pooled moving-average cost, not these purchase-lot costs; "
+                         "use get_holdings or simulate_sale for position cost and profit."}, None
 
     if name == "simulate_sale":
         ticker = str(args.get("ticker") or "").strip().upper()
@@ -997,7 +1001,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
                     .all())
         if not rows:
             return {"error": f"No trades recorded for {ticker}"}, None
-        market = (rows[-1].market or quotes.market_of(ticker) or "TW").upper()
+        latest = max(rows, key=lambda t: (t.trade_date, t.id))
+        market = (latest.market or quotes.market_of(ticker)).upper()
         price = args.get("price")
         if price is None:
             q = quotes.get_quote(ticker)
@@ -1006,21 +1011,33 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
             return {"error": f"No price available for {ticker}; pass one explicitly"}, None
         price = float(price)
 
-        lots = [l for l in portfolio.build_lots(rows)
-                if l["ticker"] == ticker and l["shares_remaining"] > 1e-9]
-        held = sum(l["shares_remaining"] for l in lots)
+        state = portfolio.compute_states(rows)[ticker]
+        held = state.shares
         if shares > held + 1e-9:
             return {"error": f"Only {_round(held)} shares of {ticker} are held; "
                              f"cannot sell {_round(shares)}"}, None
 
-        remaining, consumed, cost = shares, [], 0.0
+        # Cost comes from the accounting state at full precision. TW has one
+        # pooled average-cost lot; US consumes FIFO lots. Purchase provenance
+        # is only meaningful as a cost allocation for US sales.
+        method = portfolio.cost_basis_method(ticker, market)
+        remaining, cost = shares, 0.0
+        for quantity, unit_cost in state.lots:
+            take = min(remaining, quantity)
+            cost += take * unit_cost
+            remaining -= take
+            if remaining <= 1e-9:
+                break
+        remaining, consumed = shares, []
+        lots = portfolio.build_lots(rows) if method == "fifo" else []
         for lot in lots:
             if remaining <= 1e-9:
                 break
+            if lot["shares_remaining"] <= 1e-9:
+                continue
             take = min(remaining, lot["shares_remaining"])
             consumed.append({"lot_id": lot["lot_id"], "buy_date": lot["buy_date"],
                              "shares": _round(take), "unit_cost": lot["unit_cost"]})
-            cost += take * lot["unit_cost"]
             remaining -= take
 
         gross = shares * price
@@ -1029,6 +1046,8 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
         return {
             "ticker": ticker, "market": market, "shares": _round(shares),
             "price": _round(price), "lots_consumed": consumed,
+            "cost_basis_method": method,
+            "average_cost": _round(state.cost_basis / held, 4) if held else None,
             "gross_proceeds": _round(gross),
             "commission": _round(costs["commission"]),
             "transaction_tax": _round(costs["tax"]),
@@ -1037,7 +1056,9 @@ def _execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
             "cost_basis_consumed": _round(cost),
             "realized_pl": _round(net - cost),
             "shares_remaining_after": _round(held - shares),
-            "basis": "Commission 0.1425%; TW transaction tax 0.3% for a stock, "
+            "basis": "Taiwan cost basis is moving average; US is FIFO. "
+                     "Taiwan sales consume pooled cost, so lots_consumed is empty. "
+                     "Commission 0.1425%; TW transaction tax 0.3% for a stock, "
                      "0.1% for an ETF, 0% for a bond ETF; each floored to the "
                      "dollar. US sales are modelled commission- and tax-free.",
         }, None
@@ -1436,35 +1457,8 @@ def _propose_records(args: dict, user_id: str, today: str) -> tuple[dict, dict |
 
 
 def _realized_by_sell(trades: list) -> dict[int, float]:
-    """Realized P/L booked by each sell, FIFO-matched over the whole ledger.
-
-    The same walk ``portfolio._apply_trade`` does, kept per-sell rather than
-    per-ticker: "what did that sale actually make" is asked constantly, and
-    from a per-ticker total it is not answerable at all.
-    """
-    out: dict[int, float] = {}
-    by_ticker: dict[str, list] = {}
-    for t in trades:
-        by_ticker.setdefault(t.ticker, []).append(t)
-    for rows in by_ticker.values():
-        lots: list[list] = []   # [remaining, unit_cost]
-        for t in sorted(rows, key=lambda r: (r.trade_date, r.id)):
-            if t.type == "buy":
-                if t.shares > 0:
-                    lots.append([t.shares, (t.shares * t.price + t.fee) / t.shares])
-                continue
-            qty, booked = t.shares, -t.fee
-            while qty > 1e-9 and lots:
-                take = min(qty, lots[0][0])
-                booked += take * (t.price - lots[0][1])
-                lots[0][0] -= take
-                qty -= take
-                if lots[0][0] <= 1e-9:
-                    lots.pop(0)
-            if qty > 1e-9:
-                booked += qty * t.price
-            out[t.id] = booked
-    return out
+    """Shared market-specific accounting, including purchases before filters."""
+    return portfolio.realized_by_sell(trades)
 
 
 def _resample(bars: list[dict], interval: str) -> list[dict]:

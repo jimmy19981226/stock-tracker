@@ -1,16 +1,16 @@
 import Foundation
 
-/// FIFO lot matching, mirroring the backend's `_apply_trade`.
+/// Market-specific cost basis, mirroring the backend's `_apply_trade`.
 ///
 /// The backend reports realized P/L per *market*, not per trade, but a trade
 /// row has to be able to say what that particular sell booked. Rather than add
 /// an endpoint, the same walk is done here over the trades the app already
-/// holds: a sell consumes the oldest open lots first, buy fees go into the
-/// cost basis and sell fees come off the proceeds.
+/// holds: Taiwan pools purchases at moving-average cost; US sells consume the
+/// oldest lots first. Buy fees enter cost; sell fees reduce proceeds.
 ///
 /// Keep this in step with services/portfolio.py — if the two ever disagree, the
 /// row and the dashboard disagree, which is worse than showing nothing.
-enum FIFO {
+enum PositionAccounting {
     /// Realized P/L booked by each *sell*, keyed by trade id. Buys are absent.
     static func realized(_ trades: [Trade]) -> [Int: Double] {
         var lots: [String: [(shares: Double, costPerShare: Double)]] = [:]
@@ -19,8 +19,16 @@ enum FIFO {
         for t in trades.sorted(by: { ($0.tradeDate, $0.id) < ($1.tradeDate, $1.id) }) {
             if t.type == .buy {
                 guard t.shares > 0 else { continue }
-                lots[t.ticker, default: []]
-                    .append((t.shares, (t.shares * t.price + t.fee) / t.shares))
+                let cost = t.shares * t.price + t.fee
+                if t.market == .TW {
+                    let open = lots[t.ticker] ?? []
+                    let shares = open.reduce(t.shares) { $0 + $1.shares }
+                    let pooledCost = open.reduce(cost) { $0 + $1.shares * $1.costPerShare }
+                    lots[t.ticker] = [(shares, pooledCost / shares)]
+                } else {
+                    lots[t.ticker, default: []]
+                        .append((t.shares, cost / t.shares))
+                }
                 continue
             }
             var remaining = t.shares

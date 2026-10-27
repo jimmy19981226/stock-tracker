@@ -74,14 +74,11 @@ def sell_costs(ticker: str, gross_proceeds: float, market: str = "TW") -> dict:
 
 @dataclass
 class HoldingState:
-    """Per-ticker position tracked as FIFO lots — first-in, first-out — so
-    realized P/L matches how US brokers report cost basis on the 1099, and the
-    remaining lots give the cost basis of the shares still held.
+    """Taiwan uses moving-average cost; US positions retain FIFO lots.
 
-    Note: over a position's full life (bought and fully sold) FIFO and
-    weighted-average produce the SAME total realized; they differ only in how
-    profit is split between realized and still-open lots at a point in time, and
-    in which tax year a partial sale's gain lands. Total Return is unaffected.
+    Taiwan purchases pool the remaining shares and cost into one average-cost
+    lot. Sales reduce that pool at its current average, without revaluing the
+    remaining shares. Buy fees enter cost; sell fees reduce realized profit.
     """
     ticker: str
     # Open lots, oldest first. Each lot is a mutable ``[shares, cost_per_share]``
@@ -98,18 +95,28 @@ class HoldingState:
         return sum(lot[0] * lot[1] for lot in self.lots)
 
 
+def cost_basis_method(ticker: str, market: str | None = None) -> str:
+    return "moving_average" if (market or quotes.market_of(ticker)).upper() == "TW" else "fifo"
+
+
 def _apply_trade(state: HoldingState, trade: Trade) -> None:
     if trade.type == "buy":
         if trade.shares <= 0:
             return
-        cost_per_share = (trade.shares * trade.price + trade.fee) / trade.shares
-        state.lots.append([trade.shares, cost_per_share])
+        cost = trade.shares * trade.price + trade.fee
+        if cost_basis_method(trade.ticker, trade.market) == "moving_average":
+            shares = state.shares + trade.shares
+            cost += state.cost_basis
+            state.lots.clear()
+            state.lots.append([shares, cost / shares])
+        else:
+            state.lots.append([trade.shares, cost / trade.shares])
         return
 
     if trade.type == "sell":
         qty = trade.shares
         consumed = 0.0          # shares matched against open lots
-        consumed_cost = 0.0     # their FIFO cost basis
+        consumed_cost = 0.0     # pooled average for TW, oldest lots for US
         while qty > 1e-9 and state.lots:
             lot = state.lots[0]
             take = min(qty, lot[0])
@@ -129,14 +136,11 @@ def _apply_trade(state: HoldingState, trade: Trade) -> None:
 
 
 def build_lots(trades: Iterable[Trade]) -> list[dict]:
-    """Every buy lot for these trades, with how much of it a later sell ate.
+    """Purchase provenance and FIFO share tracking for trade open/closed status.
 
-    ``compute_states`` answers "what do I hold"; the trades router's
-    ``_compute_statuses`` answers "is this row open". Neither exposes the
-    arithmetic in between — which lot, bought when, at what unit cost, with how
-    many shares left — and that is exactly what a sell-side question needs.
-    Reconstructing it from raw trades is where partial fills get lost, so it is
-    computed once, here, from the same FIFO walk everything else uses.
+    Unit cost is the original purchase cost including fees. For Taiwan this
+    is NOT the accounting cost of remaining shares: use ``compute_states``
+    for the pooled moving-average basis and sale P/L.
 
     Oldest first, per ticker. ``shares_remaining == 0`` means fully consumed.
     """
@@ -187,6 +191,19 @@ def compute_states(trades: Iterable[Trade]) -> dict[str, HoldingState]:
         state = states.setdefault(tr.ticker, HoldingState(ticker=tr.ticker))
         _apply_trade(state, tr)
     return states
+
+
+def realized_by_sell(trades: Iterable[Trade]) -> dict[int, float]:
+    """Per-sale profit using the same market-specific replay as holdings."""
+    states: dict[str, HoldingState] = {}
+    out: dict[int, float] = {}
+    for trade in sorted(trades, key=lambda t: (t.trade_date, t.id)):
+        state = states.setdefault(trade.ticker, HoldingState(ticker=trade.ticker))
+        before = state.realized_pl
+        _apply_trade(state, trade)
+        if trade.type == "sell":
+            out[trade.id] = state.realized_pl - before
+    return out
 
 
 def _ticker_markets(db: Session, user_id: str) -> dict[str, str]:
@@ -306,6 +323,7 @@ def build_holdings(db: Session, user_id: str) -> list[dict]:
                 "current_price": current_price,
                 "market_value": market_value,
                 "cost_basis": st.cost_basis,
+                "cost_basis_method": cost_basis_method(ticker, market),
                 "exit_cost": exit_cost,
                 "unrealized_pl": unrealized,
                 "unrealized_pl_pct": unrealized_pct,

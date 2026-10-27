@@ -51,6 +51,6 @@ iOS tests live in `ios/Tests` and `ios/UITests`. Generate the Xcode project from
 
 ## Changing the code
 
-Keep portfolio arithmetic in the existing service layer. Model prompts and client views should consume calculated results rather than reimplementing financial logic. Add regression cases when changing date boundaries, FIFO lots, currencies, account scopes, or confirmation behavior. Use synthetic fixtures and never commit `.env`, databases, brokerage statements, or API keys.
+Keep portfolio arithmetic in the existing service layer. Model prompts and client views should consume calculated results rather than reimplementing financial logic. Add regression cases when changing date boundaries, cost basis, FIFO share tracking, currencies, account scopes, or confirmation behavior. Use synthetic fixtures and never commit `.env`, databases, brokerage statements, or API keys.
 
 For a contribution, explain the observed behavior, the resulting behavior, and the tests run. Keep code, setup instructions, and environment examples in the same change when they depend on one another.

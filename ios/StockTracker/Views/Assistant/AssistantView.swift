@@ -1114,7 +1114,7 @@ private struct EditBody: View {
 }
 
 /// The deletion card: the record in full, plus whatever else the deletion
-/// moves. Those consequence lines are computed by the server re-running FIFO
+/// moves. Those consequence lines are computed by the server replaying cost basis
 /// without the row — the model never authors them.
 private struct DeleteBody: View {
     let proposal: RecordProposal

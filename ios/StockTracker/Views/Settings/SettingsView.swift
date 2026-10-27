@@ -332,7 +332,7 @@ struct SettingsView: View {
         .init(id: "holdings_snapshot", name: "Holdings snapshot",
               description: "Positions, cost basis, market value, unrealized P/L", pages: 4),
         .init(id: "realized_pl", name: "Realized P/L & tax summary",
-              description: "FIFO-matched sells with holding periods", pages: 5),
+              description: "TW average cost / US FIFO, with holding periods", pages: 5),
         .init(id: "period_performance", name: "Period performance",
               description: "TWR, XIRR and benchmark comparison", pages: 3),
     ]

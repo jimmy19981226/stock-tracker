@@ -54,7 +54,7 @@ TEMPLATES: list[dict] = [
     {"id": "holdings_snapshot", "name": "Holdings snapshot",
      "description": "Positions, cost basis, market value, unrealized P/L", "pages": 4},
     {"id": "realized_pl", "name": "Realized P/L & tax summary",
-     "description": "FIFO-matched sells with holding periods", "pages": 5},
+     "description": "TW average cost / US FIFO, with holding periods", "pages": 5},
     {"id": "period_performance", "name": "Period performance",
      "description": "TWR, XIRR and benchmark comparison", "pages": 3},
 ]
@@ -159,7 +159,8 @@ def data_version(db: Session, user_id: str) -> str:
 
 def cache_key(template: str, period: str, params: dict, version: str) -> str:
     payload = json.dumps(
-        {"t": template, "p": period, "a": params or {}, "v": version},
+        {"t": template, "p": period, "a": params or {}, "v": version,
+         "accounting": "tw-moving-average-us-fifo-v1"},
         sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
@@ -426,11 +427,8 @@ def _holdings_snapshot(db, user_id, start, end, rate, holdings, params):
 
 
 def _realized_pl(db, user_id, start, end, rate, holdings, params):
-    from .ai_tools import _realized_by_sell  # lazy: shared FIFO walk
-
     trades = db.query(Trade).filter(Trade.user_id == user_id).all()
-    booked = _realized_by_sell(trades)
-    lots = {l["lot_id"]: l for l in portfolio.build_lots(trades)}
+    booked = portfolio.realized_by_sell(trades)
     buys = {t.id: t for t in trades if t.type == "buy"}
 
     rows = []
@@ -459,7 +457,7 @@ def _realized_pl(db, user_id, start, end, rate, holdings, params):
 
     sections = [{
         "kind": "table", "title": "Realized sales",
-        "subtitle": "FIFO-matched, net of fees",
+        "subtitle": "TW moving-average cost; US FIFO. Net of recorded fees.",
         "columns": [
             {"key": "date", "label": "Sold"},
             {"key": "ticker", "label": "Ticker"},

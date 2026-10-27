@@ -194,7 +194,7 @@ def record_summary(db, user_id: str, args: dict, realized_by_sell) -> dict:
             "total_group_count": len(groups), "has_more": offset + len(page) < len(groups),
             "next_offset": offset + len(page) if offset + len(page) < len(groups) else None,
             "complete_totals": True,
-            "basis": "Inclusive record dates. Cash earned = FIFO realized P/L + paid dividends; "
+            "basis": "Inclusive record dates. Cash earned = realized P/L (TW moving average, US FIFO) + paid dividends; "
                      "not unrealized gains or total portfolio performance. Currencies are separate."}
 
 

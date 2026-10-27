@@ -87,7 +87,7 @@ struct TradeProposal: Decodable, Equatable, Identifiable {
     /// For update and delete: the unchanged identifying context.
     var record: [String: JSONValue]?
     /// What else moves if this delete goes through. Computed by the server
-    /// re-running FIFO without the row — never authored by the model.
+    /// replaying cost basis without the row — never authored by the model.
     var consequences: [String] = []
     /// An existing row this create would duplicate.
     var duplicateOf: Int?
