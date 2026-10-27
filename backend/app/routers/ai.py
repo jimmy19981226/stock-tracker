@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
+import math
 import os
 import re
 import threading
@@ -32,6 +34,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_signed_in_user
 from ..database import Chat, ChatMessage, Dividend, SessionLocal, Trade, get_db
 from ..database import utcnow as db_utcnow
+from ..schemas import DividendCreate, TradeCreate
 from ..services import portfolio, quotes, stock_info
 
 
@@ -534,7 +537,8 @@ def _generate_run(run: _ChatRun, provider: str, api_key: str, model: str,
                 "<!--meta:" + json.dumps({"queries": [], "interrupted": True})
                 + "-->\n" + text,
             )
-        run.emit({"type": "error", "detail": f"{type(exc).__name__}: {exc}"})
+        logging.getLogger(__name__).warning("AI chat worker failed: exception=%s", type(exc).__name__)
+        run.emit({"type": "error", "detail": "The assistant could not finish this reply. Please try again. Check this conversation for any partial answer."})
     finally:
         run.finish()
         with _runs_lock:
@@ -868,6 +872,39 @@ _PARSE_PROMPT = (
 )
 
 
+def _validated_parse_result(parsed) -> dict:
+    """Treat provider JSON as an untrusted draft, using the record API rules."""
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("notes", ""), str):
+        raise ValueError("Expected a record object with text notes")
+    result = {"notes": parsed.get("notes", "")}
+    for kind, schema, required, numeric, date_key in (
+        ("trades", TradeCreate, {"ticker", "type", "shares", "price", "date"}, ("shares", "price", "fee"), "trade_date"),
+        ("dividends", DividendCreate, {"ticker", "amount", "date"}, ("amount",), "pay_date"),
+    ):
+        rows = parsed.get(kind)
+        if not isinstance(rows, list):
+            raise ValueError("Expected record arrays")
+        result[kind] = []
+        for row in rows:
+            if not isinstance(row, dict) or not required.issubset(row):
+                raise ValueError("Missing required record fields")
+            for field in numeric:
+                if field in row and (isinstance(row[field], bool) or not isinstance(row[field], (int, float))
+                                     or not math.isfinite(row[field])):
+                    raise ValueError("Record amounts must be finite numbers")
+            if not isinstance(row["ticker"], str):
+                raise ValueError("Invalid ticker")
+            if not isinstance(row["date"], str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", row["date"]):
+                raise ValueError("Expected an ISO record date")
+            payload = {**row, "ticker": row["ticker"].strip().upper(), date_key: row["date"]}
+            validated = schema.model_validate(payload)
+            clean = {key: value for key, value in row.items() if key in required | {"fee", "notes", "market"}}
+            clean["ticker"] = validated.ticker
+            clean["date"] = getattr(validated, date_key).isoformat()
+            result[kind].append(clean)
+    return result
+
+
 async def run_parse_pipeline(file: UploadFile, instructions: str | None = None) -> dict:
     """Validate the upload, call Gemini, return the parsed dict.
 
@@ -900,6 +937,10 @@ async def run_parse_pipeline(file: UploadFile, instructions: str | None = None) 
             ),
         )
 
+    if file.size is not None and file.size > PARSE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large. Please choose a file under 8 MB.")
+    if mime == "image/jpg":
+        mime = "image/jpeg"
     raw = await file.read()
     if len(raw) == 0:
         raise HTTPException(status_code=400, detail="Empty file")
@@ -955,10 +996,11 @@ async def run_parse_pipeline(file: UploadFile, instructions: str | None = None) 
             ],
         )
     except Exception as exc:
+        logging.getLogger(__name__).warning("AI screenshot import failed: exception=%s", type(exc).__name__)
         raise HTTPException(
             status_code=502,
-            detail=f"Gemini call failed: {type(exc).__name__}: {exc}",
-        )
+            detail="The AI provider could not read this file right now. Please try again shortly.",
+        ) from None
 
     text = (getattr(response, "text", None) or "").strip()
     if not text:
@@ -966,17 +1008,12 @@ async def run_parse_pipeline(file: UploadFile, instructions: str | None = None) 
 
     try:
         parsed = json.loads(text)
-    except json.JSONDecodeError as exc:
+        return _validated_parse_result(parsed)
+    except (ValueError, TypeError, OverflowError):
         raise HTTPException(
             status_code=422,
-            detail=f"Could not parse model JSON: {exc}",
-        )
-
-    return {
-        "trades": parsed.get("trades") or [],
-        "dividends": parsed.get("dividends") or [],
-        "notes": parsed.get("notes") or "",
-    }
+            detail="The AI returned incomplete or invalid records. Please try a clearer image or enter the records manually.",
+        ) from None
 
 
 @router.post("/parse-records")

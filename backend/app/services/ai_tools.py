@@ -620,7 +620,9 @@ def execute(name: str, args: dict, user_id: str) -> tuple[dict, dict | None]:
     try:
         return _execute(name, args or {}, user_id)
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"}, None
+        safe_name = name if isinstance(name, str) and name in {tool["name"] for tool in TOOLS} else "unknown"
+        logging.getLogger(__name__).warning("AI tool failed: tool=%s, exception=%s", safe_name, type(exc).__name__)
+        return {"error": "The requested data or action is temporarily unavailable. Please try again. No records were saved."}, None
 
 
 # The one sentence every write tool tells the model. Write tools never touch

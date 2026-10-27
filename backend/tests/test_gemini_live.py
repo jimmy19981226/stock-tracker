@@ -68,6 +68,39 @@ class GeminiLiveFeatureTests(AIFeatureFixture):
                                   "twd_dividend": 1234.56})
         print(f"Live Gemini portfolio reply: {events[-1]['duration_ms']} ms")
 
+    def test_live_synthetic_broker_screenshot_extracts_preview_without_saving(self):
+        from PIL import Image, ImageDraw, ImageFont
+        from app.database import Dividend, Trade
+
+        image = Image.new("RGB", (650, 210), "white")
+        draw = ImageDraw.Draw(image)
+        for i, line in enumerate([
+            "TAIWAN BROKER TRADE CONFIRMATION - SYNTHETIC TEST",
+            "Market: Taiwan (TWD)   Stock code: 2330",
+            "Trade: BUY   Date: 2026-10-06",
+            "Shares: 100   Price per share (TWD): 1065.50",
+            "Handling fee (TWD): 151.83   Transaction tax: 0.00",
+            "No dividend records on this statement.",
+        ]):
+            draw.text((12, 12 + 28 * i), line, font=ImageFont.load_default(size=16), fill="black")
+        encoded = io.BytesIO()
+        image.resize((1300, 420), Image.Resampling.NEAREST).save(encoded, format="PNG")
+        with self.sessions() as db:
+            before = (db.query(Trade).count(), db.query(Dividend).count())
+        with patch.dict(os.environ, {"GOOGLE_AI_API_KEY": self.api_key}):
+            response = self.client.post("/api/ai/parse-records", files={
+                "file": ("synthetic-broker.png", encoded.getvalue(), "image/png")})
+        self.assertEqual(response.status_code, 200, response.text)
+        result = response.json()
+        self.assertEqual(len(result["trades"]), 1, result)
+        self.assertEqual(result["dividends"], [], result)
+        row = result["trades"][0]
+        self.assertEqual({k: row[k] for k in ("ticker", "type", "shares", "price", "date", "fee")},
+                         {"ticker": "2330", "type": "buy", "shares": 100, "price": 1065.5,
+                          "date": "2026-10-06", "fee": 151.83})
+        with self.sessions() as db:
+            self.assertEqual((db.query(Trade).count(), db.query(Dividend).count()), before)
+
     def test_live_image_reading_and_followup(self):
         from PIL import Image, ImageDraw, ImageFont
 
