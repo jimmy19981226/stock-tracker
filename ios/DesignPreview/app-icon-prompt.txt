@@ -1,3 +1,5 @@
+Historical concept, superseded by candlestick-icon.svg in version 2.0.2.
+
 Stock Studio app icon — 2026-10-27
 Generator: built-in image_gen (not CLI)
 Source: /Users/jameschen/.codex/generated_images/01a17e30-3363-7023-b889-1b6390eb8f57/exec-5aa745ae-17fb-4896-a7f8-95bbb582ad0f.png

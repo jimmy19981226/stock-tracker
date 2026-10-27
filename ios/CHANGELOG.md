@@ -11,6 +11,10 @@ anywhere, even for the same marketing version.
 
 ---
 
+## 2.0.2 (build 8) — 2026-10-27
+
+- Replace the decorative ribbon icon with a flat, high-contrast candlestick symbol.
+
 ## 2.0.1 (build 7) — 2026-10-27
 
 - New mint and charcoal app icon to match the Studio 2 visual design.
