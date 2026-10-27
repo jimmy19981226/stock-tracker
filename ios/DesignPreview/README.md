@@ -52,8 +52,8 @@ Run `KeyboardNavigationTests` with both `server.py` (8099) and `interaction_serv
 
 `AssistantConversationTests` separately checks overlapping history loads, late recovery responses, generation/background cleanup ownership, conversation-specific attachments/proposals, and confirmed import completion after navigation. Navigation within the same conversation preserves its draft; explicitly opening another conversation clears that draft. Confirmed writes continue and refresh the shared portfolio, but their completion must not change the new conversation's transcript or proposal.
 
-## Rotating top ticker
+## Rotating portfolio ticker
 
-`IndexBarView` now lives in RootView's top safe-area inset on all five destinations. It cycles the user's configured indices every five seconds using existing quote-store values; tapping advances immediately and the chevron opens all index details and the existing editor. Rotation pauses when the app is inactive, the details sheet is open, Reduce Motion is enabled, or VoiceOver is running. Quote refreshes do not reset the selected index.
+`IndexBarView` sits directly below “Your portfolio” on Overview. It cycles configured indices every four seconds using the existing quote store; tapping advances immediately and the chevron opens details and the existing editor. Rotation pauses in the background or while details are open. It continues during iPhone Mirroring's inactive scene state. Reduce Motion disables the transition animation without disabling rotation; VoiceOver keeps manual advancement.
 
-`MarketTickerTests` verifies automatic and manual advance, placement above page content, persistence across all destinations, and the details sheet in light/dark appearances. Run against the synthetic8099 preview server. Keyboard navigation tests are rerun with the top strip present.
+`MarketTickerTests` verifies placement between the title and portfolio value card, automatic advancement through at least three distinct indices, manual advance, details pause/resume, return from another tab, light/dark appearances, Reduce Motion and inactive-scene behavior. The synthetic fixture includes six indices; the live account's requested list also includes Taiwan OTC. `UITEST_REDUCE_MOTION` and `UITEST_TICKER_INACTIVE` isolate the two regression conditions without changing system settings.

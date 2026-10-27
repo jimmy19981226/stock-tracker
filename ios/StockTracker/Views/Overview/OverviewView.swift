@@ -21,6 +21,7 @@ struct OverviewView: View {
         ScrollView {
             VStack(spacing: Theme.Space.cardGap) {
                 header
+                IndexBarView(market: nil)
 
                 if let error = store.errorMessage {
                     ErrorBanner(message: error) { Task { await reload() } }

@@ -2,7 +2,7 @@ import Charts
 import SwiftUI
 import UIKit
 
-/// A compact rotating ticker shared by the five main destinations.
+/// The rotating ticker below the portfolio heading.
 /// Quote values continue to come from PortfolioStore's existing refresh stream.
 struct IndexBarView: View {
     let market: MarketCode?
@@ -18,8 +18,16 @@ struct IndexBarView: View {
         guard let market else { return store.indices }
         return store.indices.filter { $0.market == market }
     }
+    private var effectiveReduceMotion: Bool {
+        reduceMotion || ProcessInfo.processInfo.environment["UITEST_REDUCE_MOTION"] == "1"
+    }
+    private var effectiveScenePhase: ScenePhase {
+        ProcessInfo.processInfo.environment["UITEST_TICKER_INACTIVE"] == "1" ? .inactive : scenePhase
+    }
     private var canRotate: Bool {
-        indices.count > 1 && scenePhase == .active && !showDetails && !reduceMotion
+        // Mirroring can be visible while inactive. Reduce Motion controls the
+        // transition, not whether the user receives the next market quote.
+        indices.count > 1 && effectiveScenePhase != .background && !showDetails && !showEditor
     }
 
     var body: some View {
@@ -68,14 +76,12 @@ struct IndexBarView: View {
                 .accessibilityIdentifier("marketTicker.details")
             }
             .background(Theme.inset, in: RoundedRectangle(cornerRadius: Theme.Radius.button))
-            .padding(.horizontal, Theme.Space.l)
-            .padding(.vertical, 4)
             .background(Theme.ground)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             .task(id: canRotate) {
                 guard canRotate else { return }
                 while !Task.isCancelled {
-                    do { try await Task.sleep(for: .seconds(5)) }
+                    do { try await Task.sleep(for: .seconds(4)) }
                     catch { return }
                     guard !Task.isCancelled else { return }
                     // VoiceOver users control when the spoken quote changes.
@@ -102,7 +108,7 @@ struct IndexBarView: View {
 
     private func advance() {
         guard indices.count > 1 else { return }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {
+        withAnimation(effectiveReduceMotion ? nil : .easeInOut(duration: 0.25)) {
             cursor = (cursor + 1) % indices.count
         }
     }
