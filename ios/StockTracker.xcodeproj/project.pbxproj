@@ -57,11 +57,14 @@
 		E544DCDB26A60AD254055D4C /* OFL-Barlow.txt in Resources */ = {isa = PBXBuildFile; fileRef = B0759A43A10E9DE1D6D9F2C1 /* OFL-Barlow.txt */; };
 		E5F8CBEC80B716EE92A84CC2 /* QuoteRefreshTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCF1CCA516C49E549853349A /* QuoteRefreshTests.swift */; };
 		E61F09BB594BB5C6C8C98675 /* AuthTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B510C92B73EC980E35D9A9E /* AuthTokenProvider.swift */; };
+		E78590B8F3C4D60ABB788390 /* AssistantReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFA7F986EFD5A93032F89C6B /* AssistantReview.swift */; };
+		E8092ED0921D7C45562FB3CA /* MarkdownTextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9494C36801EF0BF0946111E /* MarkdownTextTests.swift */; };
 		E9E5DED70BACAEC0F876505D /* DividendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 665969461AD6B11CA8AF0BDD /* DividendsView.swift */; };
 		EFD5B333FA05AF8B1D3169D1 /* SortSwitchDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */; };
 		F8B41FB3C585059CECBFD3BD /* Barlow-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4B82CD728866D65824E93DF7 /* Barlow-Medium.ttf */; };
 		F9B5DBCB3E640142143743A3 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E8E78CC543F32EC9F8A37FB /* Theme.swift */; };
 		FB6FDA20BC5B416BD3153FED /* Format.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B5A3CEF34E1BC529FCF43A /* Format.swift */; };
+		FE79A1B927B7D8479E4074BD /* AssistantTransportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBCC59342B5777EE5F6FC89F /* AssistantTransportTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -129,11 +132,14 @@
 		9B3957E199E657F9473F04E9 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		AD801CCBCEDE8D882EB1B547 /* AuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthStore.swift; sourceTree = "<group>"; };
 		AF6D6FE634A2B9D311BC20E3 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		AFA7F986EFD5A93032F89C6B /* AssistantReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantReview.swift; sourceTree = "<group>"; };
 		B0759A43A10E9DE1D6D9F2C1 /* OFL-Barlow.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-Barlow.txt"; sourceTree = "<group>"; };
 		B354FDD67A5319E6EF7E52A6 /* GoogleAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuth.swift; sourceTree = "<group>"; };
+		B9494C36801EF0BF0946111E /* MarkdownTextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTextTests.swift; sourceTree = "<group>"; };
 		BCF1CCA516C49E549853349A /* QuoteRefreshTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteRefreshTests.swift; sourceTree = "<group>"; };
 		C021FDD1797D256D9AADF6D7 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		C2F24BCFB79D6C6444CBC4D6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		CBCC59342B5777EE5F6FC89F /* AssistantTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantTransportTests.swift; sourceTree = "<group>"; };
 		DDB15DFA9042B6B6917DC0B8 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		E16AA928C10C0CABDA3B1BC7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E738D8F756898FA40BA0E1FB /* TradeFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeFormView.swift; sourceTree = "<group>"; };
@@ -366,6 +372,8 @@
 			children = (
 				2F4AD7515CDF88FA45648F16 /* AISettingsTests.swift */,
 				9B04A0B2AE819CEF025AFA67 /* AssistantImageTests.swift */,
+				CBCC59342B5777EE5F6FC89F /* AssistantTransportTests.swift */,
+				B9494C36801EF0BF0946111E /* MarkdownTextTests.swift */,
 				0E772F55C50CB201E41AF7FC /* PositionAccountingTests.swift */,
 				BCF1CCA516C49E549853349A /* QuoteRefreshTests.swift */,
 			);
@@ -375,6 +383,7 @@
 		B65751E96F957EFFBB7AB888 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				AFA7F986EFD5A93032F89C6B /* AssistantReview.swift */,
 				3A7E7BCA5F1381655138CE5D /* DesignTour.swift */,
 				384F20FA3B9A8D53852243EC /* ProductTour.swift */,
 				5D88D2E10F74822ADFF14B64 /* SortSwitchDriver.swift */,
@@ -597,6 +606,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E78590B8F3C4D60ABB788390 /* AssistantReview.swift in Sources */,
 				D78FEB5E77F1F4CA9A8CE0AC /* DesignTour.swift in Sources */,
 				D2D1D430A30A769BE176620C /* ProductTour.swift in Sources */,
 				EFD5B333FA05AF8B1D3169D1 /* SortSwitchDriver.swift in Sources */,
@@ -609,6 +619,8 @@
 			files = (
 				A765F72DF8BEC5582E5BD074 /* AISettingsTests.swift in Sources */,
 				5A51B85AC275F2953CF10AF5 /* AssistantImageTests.swift in Sources */,
+				FE79A1B927B7D8479E4074BD /* AssistantTransportTests.swift in Sources */,
+				E8092ED0921D7C45562FB3CA /* MarkdownTextTests.swift in Sources */,
 				559D492D76635DB37EBF9561 /* PositionAccountingTests.swift in Sources */,
 				E5F8CBEC80B716EE92A84CC2 /* QuoteRefreshTests.swift in Sources */,
 			);
@@ -636,7 +648,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -644,7 +656,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -856,7 +868,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -864,7 +876,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.2;
+				MARKETING_VERSION = 2.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
