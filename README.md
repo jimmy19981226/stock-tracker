@@ -4,18 +4,20 @@
 
 **Portfolio tracking and AI assistance for Taiwan and US stocks.**
 
-A personal software engineering project spanning a native SwiftUI app, a React dashboard, and a FastAPI backend. Portfolio services calculate financial results; an AI assistant queries those services and proposes record changes for user review.
+A personal project for managing Taiwan and US portfolios across a native SwiftUI app and a read-only React dashboard, backed by FastAPI. Portfolio services calculate financial results; an AI assistant queries those services and proposes record changes for user review.
 
 [![CI](https://github.com/jimmy19981226/stock-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/jimmy19981226/stock-tracker/actions/workflows/ci.yml)
 ![Backend](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-SwiftUI-F05138?logo=swift&logoColor=white)
 ![Web](https://img.shields.io/badge/Web-React-149ECA?logo=react&logoColor=white)
 
-[Product tour](#product-tour) · [Engineering decisions](#engineering-decisions) · [Architecture](#architecture) · [Run locally](#run-locally) · [Tests](#verification) · [Technical walkthrough](#technical-walkthrough)
+[Product tour](#product-tour) · [Engineering decisions](#engineering-decisions) · [Architecture](#architecture) · [Run locally](#run-locally) · [Tests](#verification) · [Review guide](#review-guide)
 
 </div>
 
 **Personal project by [James Chen](https://github.com/jimmy19981226).**
+
+**Start here:** [See the app](#product-tour), [review the design decisions](#engineering-decisions), or [trace the code and tests](#review-guide). Portfolio tracking runs without an AI key; assistant features require a configured provider.
 
 ## Why this project
 
@@ -162,15 +164,17 @@ hosted service. Run native tests using the [preview/test guide](ios/DesignPrevie
 
 </details>
 
-## Technical walkthrough
+## Review guide
 
-A short route through the project for a demo or technical interview:
+| Review question | Follow this path |
+| :--- | :--- |
+| How does a prior-year purchase affect a current-year sale? | Start with the ledger example above, then inspect [accounting](backend/app/services/portfolio.py) and [reconciliation tests](backend/tests/test_portfolio_accounting.py). |
+| What prevents an assistant draft from changing the ledger? | Follow [tool dispatch](backend/app/services/ai_tools.py) → [iOS proposal](ios/StockTracker/Models/RecordProposal.swift) → [record API](backend/app/routers/trades.py); [tests](backend/tests/test_ai_agentic.py) compare the ledger before and after confirmation. |
+| What happens when the phone disconnects? | Inspect [chat runs and persistence](backend/app/routers/ai.py) and [lifecycle tests](backend/tests/test_ai_lifecycle.py). A disconnected client and a restarted server have different recovery guarantees. |
 
-1. **Show the workflow:** start with the portfolio overview, inspect a holding, and ask the assistant to explain account data. Use synthetic records for a live demo.
-2. **Trace one calculation:** walk through the ledger example above and explain why a current-year sale can depend on a prior-year purchase. Show the regression test and the shared accounting service.
-3. **Trace one proposed write:** follow a tool call into a confirmation card, then the record API. Show that generating or dismissing the proposal leaves the ledger unchanged.
-4. **Explain a failure path:** use the lifecycle tests to discuss disconnects, partial replies, cancellation, and recovery from stored history. Distinguish a dropped client connection from a server restart.
-5. **Discuss the next design step:** durable background jobs would address interrupted server processes; a stricter authentication policy would replace the compatibility guest mode before supporting untrusted users. These are future improvements, not implemented guarantees.
+For a product demo, use synthetic records: inspect a holding, ask the assistant about account data, then review and dismiss a proposed trade. The ledger should remain unchanged. The [gallery](docs/GALLERY.md) provides a walkthrough without a running backend.
+
+**Next design steps:** durable background jobs would address interrupted server processes, and a stricter authentication policy would replace compatibility guest mode before supporting untrusted users. These remain future improvements.
 
 ## Code guide
 
