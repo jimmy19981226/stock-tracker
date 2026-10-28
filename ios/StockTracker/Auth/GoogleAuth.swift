@@ -31,6 +31,7 @@ struct GoogleIdentity {
     let email: String
     let name: String
     let picture: String?
+    var givenName: String? = nil
 }
 
 @MainActor
@@ -187,7 +188,8 @@ final class GoogleAuth: NSObject, ASWebAuthenticationPresentationContextProvidin
             sub: sub,
             email: obj["email"] as? String ?? "",
             name: obj["name"] as? String ?? (obj["email"] as? String ?? "Signed in"),
-            picture: obj["picture"] as? String
+            picture: obj["picture"] as? String,
+            givenName: obj["given_name"] as? String
         )
     }
 }

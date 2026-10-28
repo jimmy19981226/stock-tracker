@@ -34,6 +34,33 @@ final class ProductTour: XCTestCase {
     func testLight() { tour("light") }
     func testDark() { tour("dark") }
 
+    func testGreetingLight() { checkGreeting("light", hour: 9, name: "James", expected: "Good morning, James") }
+    func testGreetingDark() { checkGreeting("dark", hour: 19, name: "James", expected: "Good evening, James") }
+    func testGreetingLargeText() {
+        checkGreeting("light", hour: 14, name: "Alexandria", expected: "Good afternoon, Alexandria", largeText: true)
+    }
+
+    private func checkGreeting(_ theme: String, hour: Int, name: String, expected: String, largeText: Bool = false) {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-api.baseURL", "http://127.0.0.1:8099", "-appearance", theme]
+        if largeText { app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityM"] }
+        app.launchEnvironment = ["UITEST_GUEST": "1", "UITEST_GREETING_NAME": name, "UITEST_GREETING_HOUR": String(hour)]
+        app.launch()
+        let greeting = app.staticTexts["overview.greeting"]
+        XCTAssertTrue(greeting.waitForExistence(timeout: 15))
+        XCTAssertEqual(greeting.label, expected)
+        XCTAssertTrue(greeting.isHittable)
+        XCTAssertTrue(app.staticTexts["Your portfolio"].isHittable)
+        let settings = app.buttons["Account settings"]
+        XCTAssertTrue(settings.isHittable)
+        XCTAssertLessThanOrEqual(greeting.frame.maxX, settings.frame.minX)
+        XCTAssertLessThanOrEqual(greeting.frame.maxY, app.staticTexts["Your portfolio"].frame.minY)
+        XCTAssertTrue(app.buttons["marketTicker.next"].waitForExistence(timeout: 10))
+        snap(app, largeText ? "greeting-large-text" : "greeting-\(theme)")
+        app.terminate()
+    }
+
     func testYearEarningsLight() { checkYearEarnings("light") }
     func testYearEarningsDark() { checkYearEarnings("dark") }
     func testYearEarningsLargeText() { checkYearEarnings("light", largeText: true) }

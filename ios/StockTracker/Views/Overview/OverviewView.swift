@@ -1,11 +1,26 @@
 import SwiftUI
 
+enum PortfolioGreeting {
+    static func text(hour: Int, firstName: String?) -> String {
+        let salutation: String
+        switch hour {
+        case 5..<12: salutation = "Good morning"
+        case 12..<17: salutation = "Good afternoon"
+        default: salutation = "Good evening" // An arrival greeting, including late at night.
+        }
+        guard let name = firstName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty else { return salutation }
+        return "\(salutation), \(name)"
+    }
+}
+
 /// The landing screen: one net worth across both markets, the curve that got
 /// there, and a door into each market.
 ///
 /// A value-led overview with quick actions and direct market entry points.
 struct OverviewView: View {
     @EnvironmentObject private var store: PortfolioStore
+    @EnvironmentObject private var auth: AuthStore
     @Environment(\.dynamicTypeSize) private var typeSize
     let onOpenMarket: (MarketCode) -> Void
     var onAskAssistant: () -> Void = {}
@@ -83,9 +98,18 @@ struct OverviewView: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: Theme.Space.xs) {
-                BrandLine()
-                Text("Your portfolio").font(Theme.Typo.title).foregroundStyle(Theme.text)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    Text(greeting(at: context.date))
+                        .font(Theme.Typo.headingLg)
+                        .foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("overview.greeting")
+                }
+                Text("Your portfolio")
+                    .font(Theme.Typo.detailMed)
+                    .foregroundStyle(Theme.textSecondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Spacer()
             Button(action: onOpenSettings) {
                 Image(systemName: "person.crop.circle")
@@ -97,6 +121,20 @@ struct OverviewView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Account settings")
         }
+    }
+
+    private func greeting(at date: Date) -> String {
+        var name = auth.user?.firstName
+        var hour = Calendar.current.component(.hour, from: date)
+        #if DEBUG
+        // Deterministic synthetic previews; never changes sign-in or credentials.
+        let preview = ProcessInfo.processInfo.environment
+        if preview["UITEST_GUEST"] == "1" {
+            name = preview["UITEST_GREETING_NAME"] ?? name
+            hour = preview["UITEST_GREETING_HOUR"].flatMap(Int.init) ?? hour
+        }
+        #endif
+        return PortfolioGreeting.text(hour: hour, firstName: name)
     }
 
     private var adaptiveLayout: AnyLayout {

@@ -5,7 +5,7 @@ FastAPI backend (`../backend`) over HTTP — there is no web view, this is a rea
 native app. Unlike the browser frontend, native `URLSession` is not subject to
 CORS, so it calls the API directly.
 
-## Current release: 2.0.13 (build 20)
+## Current release: 2.0.14 (build 21)
 
 Studio 2 uses native iOS typography, teal and neutral surfaces, light/dark
 appearances, and five persistent tabs: Overview, Trades, Assistant, Dividends,
@@ -13,6 +13,11 @@ and Settings. The tab bar remains reachable during keyboard input.
 
 The inset navigation dock highlights the full selected item, keeps all five
 destinations visible above the keyboard, and uses a short selection fade that respects Reduce Motion.
+
+Overview welcomes the signed-in user by first name using the iPhone’s local
+time. The greeting refreshes while the page is open; “Your portfolio” remains
+as a smaller subtitle. Guests and profiles without a usable name get a neutral
+greeting.
 
 Overview rotates configured indices below the title. One portfolio card combines
 value, today’s move, lifetime figures, and current-year realized stock P/L and
@@ -164,8 +169,8 @@ StockTracker/
 
 ## Verification
 
-The 2.0.13 update passed 52 iOS unit tests and 128 offline backend tests (12 live
-provider cases skipped), plus 15 distinct targeted UI checks. YTD checks exercise both appearances,
+The 2.0.14 update passed 56 iOS unit tests and 128 offline backend tests (12 live
+provider cases skipped), plus 18 distinct targeted UI checks. YTD checks exercise both appearances,
 large text, separate currencies, and navigation. Full product tours generate the
 README screenshots. See [the preview guide](DesignPreview/README.md) for commands.
 Never run a test fixture against the hosted portfolio or a production database.

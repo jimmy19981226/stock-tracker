@@ -83,3 +83,18 @@ checks both forms can be cancelled without saving. `MarketTickerTests` also
 uses `index_preview_server.py` (port 8111) to exercise empty and failed index
 history, a completed loading state, and successful Retry. The production OTC
 adapter uses official TWSE MIS quotes and TPEx monthly history.
+
+## Personal greeting
+
+Overview uses the signed-in profile’s given name, with a first-word fallback for
+older profiles. Google identity claims can upgrade a cached profile without a
+new sign-in. Guests and missing names receive an unnamed greeting; email
+addresses are not used as names. Morning is 05:00–11:59, afternoon is
+12:00–16:59, and evening covers the remaining local hours. The header refreshes
+every minute and retains “Your portfolio” as a smaller subtitle.
+
+`PortfolioGreetingTests` covers time boundaries, profile fallback and older
+cache decoding. Three focused `ProductTour/testGreeting*` checks cover both
+appearances and large text. Debug-only `UITEST_GREETING_NAME` and
+`UITEST_GREETING_HOUR` apply only alongside `UITEST_GUEST=1` and do not modify
+credentials or account state.

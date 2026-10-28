@@ -6,6 +6,16 @@ struct AuthUser: Codable, Equatable {
     let email: String
     let picture: String?
     let provider: String   // "google" | "guest"
+    var givenName: String? = nil
+
+    var firstName: String? {
+        guard !isGuest else { return nil }
+        let given = givenName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let given, !given.isEmpty { return given }
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, !clean.contains("@"), clean != "Signed in" else { return nil }
+        return clean.split(whereSeparator: \.isWhitespace).first.map(String.init)
+    }
 
     var isGuest: Bool { provider == "guest" }
     var initials: String {
@@ -44,7 +54,14 @@ final class AuthStore: ObservableObject {
 
     private func restore() {
         if let data = UserDefaults.standard.data(forKey: Self.userKey),
-           let user = try? JSONDecoder().decode(AuthUser.self, from: data) {
+           var user = try? JSONDecoder().decode(AuthUser.self, from: data) {
+            // Upgrade older cached profiles without requiring another sign-in.
+            if !user.isGuest, user.givenName == nil,
+               let token = Keychain.get(Self.tokenKey),
+               let identity = try? GoogleAuth.decodeIdentity(token),
+               identity.email == user.email {
+                user.givenName = identity.givenName
+            }
             state = .signedIn(user)
         } else {
             state = .signedOut
@@ -63,7 +80,7 @@ final class AuthStore: ObservableObject {
                 Keychain.set(refresh, for: Self.refreshTokenKey)
             }
             let user = AuthUser(name: identity.name, email: identity.email,
-                                picture: identity.picture, provider: "google")
+                                picture: identity.picture, provider: "google", givenName: identity.givenName)
             persist(user)
         } catch GoogleAuthError.cancelled {
             // user backed out — no error banner

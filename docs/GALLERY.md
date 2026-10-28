@@ -1,7 +1,7 @@
 # Product gallery
 
-Stock Studio **2.0.13 (build 20)**. These iOS screenshots were captured from the
-current simulator build using synthetic records; they are not a real portfolio
+Stock Studio **2.0.14 (build 21)**. These iOS screenshots show the
+current design using synthetic records and fixed greeting hours; they are not a real portfolio
 or examples of guaranteed investment returns. [Back to overview](../README.md).
 
 ## Portfolio and dividend entry
@@ -40,6 +40,6 @@ verified separately from these deterministic UI demonstrations.
 ## Web dashboard
 
 The read-only web client retains its separate visual design. This web screenshot
-is separate from the iOS 2.0.13 tour.
+is separate from the iOS 2.0.14 tour.
 
 ![Read-only browser dashboard](screenshots/web-dashboard.png)

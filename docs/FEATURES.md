@@ -1,10 +1,13 @@
 # Feature reference
 
-Current iOS release: **2.0.13 (build 20)**. Screenshots in the
+Current iOS release: **2.0.14 (build 21)**. Screenshots in the
 [gallery](GALLERY.md) use synthetic demonstration records.
 
 ### Multi-market overview
 
+- A personal greeting follows local morning, afternoon, and evening hours,
+  using the Google given name or the first name from an older cached profile.
+  “Your portfolio” remains a smaller subtitle.
 - Five persistent tabs: Overview, Trades, Assistant, Dividends, and Settings.
   Trades and Dividends support TW/US filtering; the market drives each record's currency.
 - Combined portfolio value in NT$ and an approximate US$ equivalent using the

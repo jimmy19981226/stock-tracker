@@ -36,7 +36,7 @@ AI Stock Studio brings these workflows into one self-hosted application. Its cor
 ## Product tour
 
 <p align="center">
-  <img src="docs/screenshots/ios-overview.png" width="30%" alt="Version 2.0.13 portfolio overview with rotating indices and current-year earnings" />
+  <img src="docs/screenshots/ios-overview.png" width="30%" alt="Version 2.0.14 portfolio overview with rotating indices and current-year earnings" />
   <img src="docs/screenshots/ios-dividend-entry.png" width="30%" alt="Add dividend form opened from the portfolio shortcut" />
   <img src="docs/screenshots/ios-assistant.png" width="30%" alt="Redesigned assistant welcome page with editable portfolio prompts" />
 </p>
@@ -46,8 +46,9 @@ AI Stock Studio brings these workflows into one self-hosted application. Its cor
   <img src="docs/screenshots/ios-stock.png" width="30%" alt="Native stock detail and position view" />
 </p>
 
-Screenshots use **synthetic demonstration portfolios**. iOS version **2.0.13 (build 20)** includes light/dark appearances and five destinations: Overview, Trades, Assistant, Dividends, and Settings.
+Screenshots use **synthetic demonstration portfolios** and fixed greeting hours. iOS version **2.0.14 (build 21)** includes light/dark appearances and five destinations: Overview, Trades, Assistant, Dividends, and Settings.
 
+- **Personal welcome:** a local-time greeting uses the signed-in user’s first name, with “Your portfolio” retained as a smaller subtitle.
 - **Portfolio accounting:** Taiwan moving-average and US FIFO cost basis, realized/unrealized P&L, and current-year earnings by currency.
 - **Market context:** configurable indices, stock charts, dated performance windows, and benchmark comparisons.
 - **AI assistance:** portfolio queries, readable tables, editable follow-ups, and confirmation cards for proposed record changes.
@@ -143,16 +144,16 @@ npm run build
 The backend suite covers account isolation, market-specific accounting, year-to-date earnings, tool calls, confirmation proposals, image handling, exact dated returns, credential failures, Unicode passwords, and token expiry/rotation. Ordinary runs skip the explicitly opt-in live Gemini tests. CI runs the backend tests and a clean web build; native iOS tests require Xcode.
 
 <details>
-<summary>Previously recorded local verification — 2.0.13 (October 27, 2026)</summary>
+<summary>Previously recorded local verification — 2.0.14 (October 27, 2026)</summary>
 
 These are release verification results, not a live report of the current checkout. Use the commands above and the linked CI workflow to check a new revision.
 
 | Check | Result |
 | :--- | :--- |
 | Backend, isolated SQLite | 128 passed; 12 opt-in live tests skipped |
-| iOS unit tests | 52 passed |
-| iOS UI regression checks | 15 distinct cases across targeted runs: product tours, YTD layout, navigation, form cancellation, chat, index rotation and retry |
-| Release build | iPhone release build succeeds; 2.0.13 (20) installed on device |
+| iOS unit tests | 56 passed |
+| iOS UI regression checks | 18 distinct cases across targeted runs: product tours, YTD layout, navigation, form cancellation, chat, index rotation, retry, and personalized greetings |
+| Release build | iPhone release build succeeds; 2.0.14 (21) installed on device |
 | Live OTC data | Official quote and rolling one-month chart history verified through the hosted API |
 
 The previous assistant verification passed 22 distinct UI cases. All 12 live

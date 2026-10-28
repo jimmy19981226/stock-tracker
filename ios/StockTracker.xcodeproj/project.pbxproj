@@ -51,6 +51,7 @@
 		B64FE601905F5EE8EAA30EAB /* BarlowCondensed-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 37A37E66A81C0A890E7898DB /* BarlowCondensed-SemiBold.ttf */; };
 		B8E4357708B182BFC68DA0ED /* StockTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F057F8A620AE04DF20F4ADE /* StockTrackerApp.swift */; };
 		B95715AE9277F06B812098F6 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 825E322AF0AEF20495E3B05D /* RootView.swift */; };
+		BA3CB69542BB6F895297837F /* PortfolioGreetingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3451C8226934F992B173274 /* PortfolioGreetingTests.swift */; };
 		C70FF8EC4E6F00007F8525BC /* RecordProposal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68BB83BE3A8E038F9F762B64 /* RecordProposal.swift */; };
 		D2D1D430A30A769BE176620C /* ProductTour.swift in Sources */ = {isa = PBXBuildFile; fileRef = 384F20FA3B9A8D53852243EC /* ProductTour.swift */; };
 		D2E4DBE812B160BBFF05EED6 /* ImportRecordsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01ED1814C71609892E781704 /* ImportRecordsView.swift */; };
@@ -146,6 +147,7 @@
 		C2F24BCFB79D6C6444CBC4D6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		CBCC59342B5777EE5F6FC89F /* AssistantTransportTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantTransportTests.swift; sourceTree = "<group>"; };
 		CD03BC2033DC7BD828A2CB67 /* AssistantConversationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssistantConversationTests.swift; sourceTree = "<group>"; };
+		D3451C8226934F992B173274 /* PortfolioGreetingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortfolioGreetingTests.swift; sourceTree = "<group>"; };
 		DDB15DFA9042B6B6917DC0B8 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		E16AA928C10C0CABDA3B1BC7 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E738D8F756898FA40BA0E1FB /* TradeFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TradeFormView.swift; sourceTree = "<group>"; };
@@ -381,6 +383,7 @@
 				9B04A0B2AE819CEF025AFA67 /* AssistantImageTests.swift */,
 				CBCC59342B5777EE5F6FC89F /* AssistantTransportTests.swift */,
 				B9494C36801EF0BF0946111E /* MarkdownTextTests.swift */,
+				D3451C8226934F992B173274 /* PortfolioGreetingTests.swift */,
 				0E772F55C50CB201E41AF7FC /* PositionAccountingTests.swift */,
 				BCF1CCA516C49E549853349A /* QuoteRefreshTests.swift */,
 			);
@@ -633,6 +636,7 @@
 				5A51B85AC275F2953CF10AF5 /* AssistantImageTests.swift in Sources */,
 				FE79A1B927B7D8479E4074BD /* AssistantTransportTests.swift in Sources */,
 				E8092ED0921D7C45562FB3CA /* MarkdownTextTests.swift in Sources */,
+				BA3CB69542BB6F895297837F /* PortfolioGreetingTests.swift in Sources */,
 				559D492D76635DB37EBF9561 /* PositionAccountingTests.swift in Sources */,
 				E5F8CBEC80B716EE92A84CC2 /* QuoteRefreshTests.swift in Sources */,
 			);
@@ -660,7 +664,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -668,7 +672,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.13;
+				MARKETING_VERSION = 2.0.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -880,7 +884,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = StockTracker/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -888,7 +892,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.13;
+				MARKETING_VERSION = 2.0.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.aistockstudio.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
