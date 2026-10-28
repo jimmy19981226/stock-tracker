@@ -2,18 +2,34 @@
 
 # AI Stock Studio
 
-**Stock Studio 2.0.13 · Portfolio tracking and AI assistance for Taiwan and US stocks.**
+**Portfolio tracking and AI assistance for Taiwan and US stocks.**
 
-Track Taiwan and US equities through a native iOS app and a responsive web dashboard, with a shared FastAPI backend for portfolio accounting, market data, and agent tools.
+A personal software engineering project spanning a native SwiftUI app, a React dashboard, and a FastAPI backend. Portfolio services calculate financial results; an AI assistant queries those services and proposes record changes for user review.
 
 [![CI](https://github.com/jimmy19981226/stock-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/jimmy19981226/stock-tracker/actions/workflows/ci.yml)
 ![Backend](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-SwiftUI-F05138?logo=swift&logoColor=white)
 ![Web](https://img.shields.io/badge/Web-React-149ECA?logo=react&logoColor=white)
 
-[Product tour](#product-tour) · [AI architecture](#ai-architecture) · [Run locally](#run-locally) · [Tests](#verification) · [Documentation](#documentation)
+[Product tour](#product-tour) · [Engineering decisions](#engineering-decisions) · [Architecture](#architecture) · [Run locally](#run-locally) · [Tests](#verification) · [Technical walkthrough](#technical-walkthrough)
 
 </div>
+
+**Personal project by [James Chen](https://github.com/jimmy19981226).**
+
+## Why this project
+
+Tracking a portfolio across Taiwan and US markets means reconciling different currencies, cost-basis methods, trade dates, and dividend payments. Adding conversational AI introduces another challenge: explanations must stay tied to account data, and a proposed trade must remain a draft until the user confirms it.
+
+AI Stock Studio brings these workflows into one self-hosted application. Its core engineering concerns are consistent accounting across API consumers, explicit boundaries around AI actions, and recovery when a mobile connection or external provider fails.
+
+| Layer | Stack and responsibility |
+| :--- | :--- |
+| iOS | SwiftUI, WidgetKit, Keychain; portfolio management, assistant conversations, and record confirmation |
+| Web | React and Vite; responsive, read-only portfolio dashboard |
+| Backend | Python, FastAPI, SQLAlchemy; account-scoped APIs, accounting, analytics, and AI tool execution |
+| Storage and integrations | SQLite by default or PostgreSQL; market-data adapters, LLM providers, and PDF reporting |
+| Verification | Python unittest, native iOS unit/UI tests, and GitHub Actions for backend tests and web builds |
 
 ## Product tour
 
@@ -28,49 +44,27 @@ Track Taiwan and US equities through a native iOS app and a responsive web dashb
   <img src="docs/screenshots/ios-stock.png" width="30%" alt="Native stock detail and position view" />
 </p>
 
-Screenshots use **synthetic demonstration portfolios**, not a real account. The
-current iOS release is **2.0.13 (build 20)**, dated October 27, 2026. Its teal and
-neutral design supports light/dark appearances and five persistent destinations:
-Overview, Trades, Assistant, Dividends, and Settings.
+Screenshots use **synthetic demonstration portfolios**. iOS version **2.0.13 (build 20)** includes light/dark appearances and five destinations: Overview, Trades, Assistant, Dividends, and Settings.
 
-### What is in this version
+- **Portfolio accounting:** Taiwan moving-average and US FIFO cost basis, realized/unrealized P&L, and current-year earnings by currency.
+- **Market context:** configurable indices, stock charts, dated performance windows, and benchmark comparisons.
+- **AI assistance:** portfolio queries, readable tables, editable follow-ups, and confirmation cards for proposed record changes.
+- **Daily workflows:** trade and dividend entry, imports, PDF reports, and a WidgetKit snapshot.
 
-- **Unified portfolio card:** total value, today’s move, lifetime figures, and
-  current-year earnings in one surface. Add trade and Add dividend sit below it.
-- **Current-year earnings:** realized stock P/L and dividends received, separated
-  by currency. Sales use their recorded cost basis, including prior-year buys;
-  dividends use payment dates. Future-dated records are excluded from YTD totals.
-- **Market index strip:** below “Your portfolio,” rotating through configured
-  indices every four seconds, with manual advance and an editor. Supported
-  choices include TAIEX, Taiwan OTC, S&P 500, Nasdaq, Dow, SOX, and VIX; quote
-  availability depends on the market-data provider. Taiwan OTC uses official
-  TWSE MIS quotes and TPEx history, with dated closing-price fallback and a
-  retry action when charts are unavailable.
-- **Assistant conversations:** quieter bubbles, readable Markdown/tables, copy
-  confirmation, editable follow-up prompts, real tool progress, elapsed time,
-  stop/recovery controls, and motion that respects Reduce Motion.
-- **Persistent navigation:** an inset dock with a full selection pill, larger
-  icons, and light/dark support. Tabs remain accessible while typing; switching
-  tabs preserves the assistant draft and active conversation.
-- **Explicit AI connection:** Included AI uses the server-managed key; Personal
-  key uses the saved Keychain credential. iOS uses Gemini 3.5 Flash-Lite.
+[Full feature reference](docs/FEATURES.md) · [Screenshot gallery](docs/GALLERY.md) · [iOS setup and release details](ios/README.md)
 
-**Team project.** AI Stock Studio was developed collaboratively. This repository presents the shared system, with implementation credit belonging to its contributors.
+## Engineering decisions
 
-AI Stock Studio brings holdings, trades, dividends, market data, and AI assistance into one self-hosted application. The engineering focus is keeping financial calculations in application services while allowing a language model to query those services and explain their results.
+| Problem | Implementation and tradeoff | Code and evidence |
+| :--- | :--- | :--- |
+| A sale's profit depends on earlier purchases, including buys outside the requested reporting window. | Shared backend accounting services apply Taiwan moving-average or US FIFO rules before filtering realized results. This keeps historical cost basis available to summaries, reports, and tools. | [Accounting service](backend/app/services/portfolio.py) · [Reconciliation tests](backend/tests/test_portfolio_accounting.py) |
+| An AI-generated record change should not silently alter the ledger. | Record tools return validated proposals. iOS shows a confirmation card and submits approved changes through ordinary record APIs. This adds a review step while keeping persistence outside the model's tool execution. | [Tool dispatcher](backend/app/services/ai_tools.py) · [iOS proposal model](ios/StockTracker/Models/RecordProposal.swift) · [Proposal tests](backend/tests/test_ai_agentic.py) |
+| Backgrounding a phone can disconnect a slow AI response. | Generation runs in a detached server thread; SSE delivers progress and response events, and finished replies are persisted for history recovery. Active runs remain process-local, so a server restart can interrupt them. | [Chat lifecycle](backend/app/routers/ai.py) · [Disconnect and cancellation tests](backend/tests/test_ai_lifecycle.py) |
+| Missing prices and paginated records can produce plausible but incomplete answers. | Dated analytics validate required history, filtered totals cover the full result set, and supported numeric answer formats resolve values from tool results. Unavailable data is surfaced explicitly; these checks do not verify every free-form model statement. | [Analytics](backend/app/services/ai_analytics.py) · [Answer checks](backend/app/services/ai_answers.py) · [Known-answer tests](backend/tests/test_ai_analytics.py) |
 
-| Capability | Implementation |
-| :--- | :--- |
-| **Grounded assistance** | Typed portfolio tools, account-scoped reads, complete filtered totals, and checks on supported numeric answers |
-| **Controlled record changes** | The assistant drafts an action; the iOS app requires confirmation before submitting the write |
-| **Two-market accounting** | Taiwan/US holdings, TW moving-average / US FIFO cost basis, realized/unrealized P&L, dividends, and currency conversion |
-| **Time-aware analysis** | Dated performance windows, benchmark comparisons, and explicit handling of unavailable history |
-| **Multiple clients** | SwiftUI app, WidgetKit snapshot, and a read-only React dashboard |
-| **Report generation** | Shared calculation services feed local PDF rendering or optional Adobe document templates |
+**Concrete accounting example:** the [synthetic ledger test](backend/tests/test_portfolio_accounting.py) buys 10 shares at 100 with a fee of 2, buys 10 at 200 with a fee of 2, then sells 10 at 250 with a fee of 1. The app calculates realized profit of **997 using moving average** and **1,497 using FIFO**, in the ledger's currency. Tests carry those rules through holdings, year-to-date summaries, sale simulations, and reports.
 
-[Explore all features](docs/FEATURES.md) · [See the screenshot gallery](docs/GALLERY.md)
-
-## AI architecture
+## Architecture
 
 ```mermaid
 flowchart TB
@@ -94,7 +88,7 @@ flowchart TB
 
 **Stream → reconnect.** Server-side chat runs stream status and response events to iOS, with persisted chat history and support for background completion. Regression tests exercise the transport, tool execution, data scoping, and calculation paths with synthetic account data.
 
-The iOS client uses `gemini-3.5-flash-lite`; the backend also contains other provider adapters. A Groq/GPT-OSS option is not included in this release. Provider availability, model output, and market feeds remain external dependencies. The tests establish specific application behaviors, not a guarantee that every generated answer is correct.
+The iOS client is configured to use `gemini-3.5-flash-lite`; the backend also contains other provider adapters. Provider availability, model output, and market feeds remain external dependencies.
 
 ## Run locally
 
@@ -146,7 +140,10 @@ npm run build
 
 The backend suite covers account isolation, market-specific accounting, year-to-date earnings, tool calls, confirmation proposals, image handling, exact dated returns, credential failures, Unicode passwords, and token expiry/rotation. Ordinary runs skip the explicitly opt-in live Gemini tests. CI runs the backend tests and a clean web build; native iOS tests require Xcode.
 
-Latest local verification for 2.0.13:
+<details>
+<summary>Previously recorded local verification — 2.0.13 (October 27, 2026)</summary>
+
+These are release verification results, not a live report of the current checkout. Use the commands above and the linked CI workflow to check a new revision.
 
 | Check | Result |
 | :--- | :--- |
@@ -162,6 +159,18 @@ and passed a single paced retry. These are separate from the offline suite.
 Live checks consume provider quota and use synthetic records. They do not prove
 permanent provider availability or eliminate the slow responses observed on the
 hosted service. Run native tests using the [preview/test guide](ios/DesignPreview/README.md).
+
+</details>
+
+## Technical walkthrough
+
+A short route through the project for a demo or technical interview:
+
+1. **Show the workflow:** start with the portfolio overview, inspect a holding, and ask the assistant to explain account data. Use synthetic records for a live demo.
+2. **Trace one calculation:** walk through the ledger example above and explain why a current-year sale can depend on a prior-year purchase. Show the regression test and the shared accounting service.
+3. **Trace one proposed write:** follow a tool call into a confirmation card, then the record API. Show that generating or dismissing the proposal leaves the ledger unchanged.
+4. **Explain a failure path:** use the lifecycle tests to discuss disconnects, partial replies, cancellation, and recovery from stored history. Distinguish a dropped client connection from a server restart.
+5. **Discuss the next design step:** durable background jobs would address interrupted server processes; a stricter authentication policy would replace the compatibility guest mode before supporting untrusted users. These are future improvements, not implemented guarantees.
 
 ## Code guide
 
