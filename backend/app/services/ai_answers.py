@@ -82,6 +82,27 @@ def _assign(out: dict, name: str, value):
     out[parts[-1]] = value
 
 
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def _unchecked_numbers(explanation: str, question: str) -> list[str]:
+    """Numbers in the explanation that the user didn't write themselves.
+
+    The explanation must not carry figures the checker can't verify, but a
+    blanket "no digits" rule also rejected the user's own words — every TW
+    ticker is a number ("2330"), as is "3 months" or "2025" — and each
+    rejection cost a whole extra model round against the rate limit.
+    """
+    allowed = set(_NUMBER.findall(question))
+    return [n for n in _NUMBER.findall(explanation) if n not in allowed]
+
+
+def _table_label_ok(name: str) -> bool:
+    # A table label is only shown, never parsed, so natural wording such as
+    # "TW dividends (this year)" is fine. JSON keys keep the strict rule.
+    return 0 < len(name) <= 120 and not re.search(r"[\n\r|]", name)
+
+
 def display(value) -> str:
     if value is None:
         return "Unavailable"
@@ -99,14 +120,19 @@ def render(args: dict, sources: dict[int, dict], question: str = "") -> str:
     if not isinstance(facts, list) or not 1 <= len(facts) <= 60:
         raise ValueError("Provide between 1 and 60 source-backed facts")
     required_fields = requested_json_fields(question)
-    style = "json" if required_fields else args.get("format") or "table"
-    if style not in {"json", "table"}:
+    requested = args.get("format") or "table"
+    if requested not in {"json", "table"}:
         raise ValueError("format must be json or table")
+    # JSON only when the person asked for it. Left to choose, the model sent
+    # ordinary questions ("should I rebalance?") back as raw JSON objects.
+    asked_json = bool(re.search(r"\bjson\b", question, re.IGNORECASE)) or not question
+    style = "json" if required_fields or (requested == "json" and asked_json) else "table"
     explanation = str(args.get("explanation") or "").strip()
-    if len(explanation) > 2000 or re.search(r"\d", explanation):
+    if len(explanation) > 2000 or _unchecked_numbers(explanation, question):
         raise ValueError("Keep explanation qualitative; put all numeric figures in source-backed facts")
     out, rows, used = {}, [], set()
     actual_fields = []
+    labels_seen: set[str] = set()
     for fact in facts:
         source_id = fact.get("source_id")
         if isinstance(source_id, bool) or not isinstance(source_id, int) or source_id not in sources:
@@ -121,14 +147,21 @@ def render(args: dict, sources: dict[int, dict], question: str = "") -> str:
             scope = source.get("_evidence", {}).get("filters", {})
             if scope.get("market") or scope.get("ticker"):
                 raise ValueError("Whole-account counts require get_record_summary or history tools without market/ticker filters")
-        _assign(out, name, value)
+        if style == "json":
+            _assign(out, name, value)
+        else:
+            if not _table_label_ok(name):
+                raise ValueError("Fact names must be short single-line labels")
+            if name in labels_seen:
+                raise ValueError("Duplicate answer fields")
+            labels_seen.add(name)
         actual_fields.append(name)
         field = path.rsplit(".", 1)[-1]
-        display_name = re.sub(r"^(?:US|TW)[._]", "", name, flags=re.IGNORECASE)
+        display_name = re.sub(r"^(?:US|TW)[._ ]", "", name, flags=re.IGNORECASE)
         label = _LABELS.get(field, display_name.replace("_", " ").replace(".", " · ").capitalize())
         if field in {"start_date", "end_date"} and path.split(".")[0] in {"performance", "current", "previous"}:
             label = "Opening valuation date" if field == "start_date" else "Closing valuation date"
-        if name.upper().startswith(("US.", "TW.", "US_", "TW_")):
+        if name.upper().startswith(("US.", "TW.", "US_", "TW_", "US ", "TW ")):
             label = name[:2].upper() + " · " + label
         formatted = display(value)
         if isinstance(value, (int, float)) and not isinstance(value, bool):

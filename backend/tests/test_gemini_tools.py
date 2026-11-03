@@ -20,7 +20,8 @@ def chunk(*parts):
 
 
 class GeminiToolTests(TestCase):
-    def run_loop(self, responses, model=MODEL, tool_result=({"value": 1234.56}, None)):
+    def run_loop(self, responses, model=MODEL, tool_result=({"value": 1234.56}, None),
+                 question="Show my portfolio"):
         requests = []
         streams = iter(responses)
 
@@ -36,7 +37,7 @@ class GeminiToolTests(TestCase):
              patch.object(ai_tools, "execute", return_value=tool_result) as execute:
             events = list(ai_tools.run_tool_loop(
                 "gemini", "test-key", model, "Test portfolio assistant",
-                [("user", "Show my portfolio", None, None)], "test-user"))
+                [("user", question, None, None)], "test-user"))
         return requests, events, execute
 
     def test_streaming_reply_uses_minimal_thinking(self):
@@ -110,7 +111,7 @@ class GeminiToolTests(TestCase):
             [chunk(types.Part(text="Your profit is 999999."))],
             [chunk(types.Part(function_call=types.FunctionCall(name="answer_with_data", args={
                 "format": "json", "facts": [{"name": "profit", "source_id": 1, "path": "value"}]}, id="answer")))],
-        ])
+        ], question="Show my portfolio as JSON")
         self.assertEqual([e for e in events if e[0] == "chunk"], [("chunk", '{"profit": 1234.56}')])
         self.assertEqual(requests[2]["config"].tool_config.function_calling_config.allowed_function_names,
                          ["answer_with_data"])
@@ -123,7 +124,7 @@ class GeminiToolTests(TestCase):
                 "facts": [{"name": "shares", "source_id": 999, "path": "value"}]}, id="bad")))],
             [chunk(types.Part(function_call=types.FunctionCall(name="answer_with_data", args={
                 "format": "json", "facts": [{"name": "shares", "source_id": 1, "path": "value"}]}, id="good")))],
-        ])
+        ], question="Show my portfolio as JSON")
         self.assertIn("Unknown source_id", requests[2]["contents"][-1].parts[0].function_response.response["result"]["error"])
         self.assertEqual(events[-1], ("chunk", '{"shares": 1234.56}'))
         execute.assert_called_once()
@@ -162,6 +163,31 @@ class GeminiToolTests(TestCase):
                 _, events, _ = self.run_loop([ProviderError(code)])
                 self.assertIn(expected, events[-1][1])
                 self.assertNotIn("private provider diagnostic", events[-1][1])
+
+    def test_per_minute_quota_waits_out_the_retry_delay_once_then_answers(self):
+        quota = errors.ClientError(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED",
+            "message": "Quota exceeded. Please retry in 7.2s.",
+            "details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "7s"}]}})
+        with patch.object(ai_tools.time, "sleep") as sleep:
+            requests, events, _ = self.run_loop([quota, [chunk(types.Part(text="Back again."))]])
+        self.assertEqual(len(requests), 2)
+        sleep.assert_called_once()
+        self.assertGreaterEqual(sleep.call_args.args[0], 7)
+        self.assertEqual(events[0][0], "status")
+        self.assertEqual(events[-1], ("chunk", "Back again."))
+
+    def test_quota_retry_happens_once_and_skips_long_waits(self):
+        def quota(seconds):
+            return errors.ClientError(429, {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED",
+                "message": f"Please retry in {seconds}s."}})
+        with patch.object(ai_tools.time, "sleep") as sleep:
+            _, events, _ = self.run_loop([quota(5), quota(5)])
+        sleep.assert_called_once()
+        self.assertIn("usage limit", events[-1][1])
+        with patch.object(ai_tools.time, "sleep") as sleep:
+            _, events, _ = self.run_loop([quota(90)])
+        sleep.assert_not_called()
+        self.assertIn("usage limit", events[-1][1])
 
     def test_rejected_personal_keys_are_classified_without_exposing_sdk_diagnostics(self):
         secret = "synthetic-private-api-key"
@@ -257,7 +283,7 @@ class GeminiToolTests(TestCase):
                 [chunk(types.Part(function_call=types.FunctionCall(name="get_value_history", args={}, id="read")))],
                 [chunk(types.Part(function_call=types.FunctionCall(name="answer_with_data", args={
                     "format": "json", "facts": [{"name": "point", "source_id": 1, "path": "points.1.total"}]}, id="answer")))],
-            ], tool_result=({"points": points}, None))
+            ], tool_result=({"points": points}, None), question="Show my portfolio as JSON")
         shown = requests[1]["contents"][-1].parts[0].function_response.response["result"]
         self.assertTrue(shown["_sampling"]["sampled"])
         self.assertEqual(shown["points"][-1]["total"], 99)

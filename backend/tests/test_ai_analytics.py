@@ -303,6 +303,31 @@ class CheckedAnswerTests(TestCase):
         self.assertEqual(ai_answers.requested_json_fields("Reply only as JSON with US and TW objects containing currency, profit and reason."),
                          ["US.currency", "US.profit", "US.reason", "TW.currency", "TW.profit", "TW.reason"])
 
+    def test_table_accepts_natural_labels_but_json_keeps_strict_keys(self):
+        fact = {"name": "TW Dividends (this year)", "source_id": 1, "path": "performance.period_pl"}
+        table = ai_answers.render({"format": "table", "facts": [fact]}, self.sources, "What did I earn?")
+        self.assertIn("| TW · Profit or loss | USD 1,234,567.89 |", table)
+        with self.assertRaisesRegex(ValueError, "simple labels"):
+            ai_answers.render({"format": "json", "facts": [fact]}, self.sources, "Reply as JSON.")
+        with self.assertRaises(ValueError):
+            ai_answers.render({"facts": [{**fact, "name": "a | b"}]}, self.sources, "q")
+
+    def test_explanation_may_repeat_the_users_own_numbers_but_no_others(self):
+        good = {"name": "profit", "source_id": 1, "path": "performance.period_pl"}
+        question = "How has 2330 done over the last 3 months?"
+        answer = ai_answers.render({"facts": [good], "explanation": "2330 rose over the 3 months."},
+                                   self.sources, question)
+        self.assertIn("2330 rose over the 3 months.", answer)
+        with self.assertRaisesRegex(ValueError, "qualitative"):
+            ai_answers.render({"facts": [good], "explanation": "2330 gained 12% in 3 months."},
+                              self.sources, question)
+
+    def test_json_is_only_used_when_the_user_asked_for_it(self):
+        args = {"format": "json", "facts": [{"name": "profit", "source_id": 1, "path": "performance.period_pl"}]}
+        self.assertIn("| Metric | Value |", ai_answers.render(args, self.sources, "Should I rebalance?"))
+        self.assertEqual(json.loads(ai_answers.render(args, self.sources, "Give me JSON please")),
+                         {"profit": 1234567.89})
+
     def test_filtered_counts_cannot_be_labeled_as_whole_account_counts(self):
         source = {1: {"total_count": 3, "_evidence": {**self.sources[1]["_evidence"], "filters": {"market": "US"}}}}
         with self.assertRaisesRegex(ValueError, "Whole-account counts"):

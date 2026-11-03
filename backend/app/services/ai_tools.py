@@ -19,6 +19,7 @@ import json
 import logging
 import math
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
@@ -1870,6 +1871,17 @@ def _claude_loop(api_key: str, model: str, system_prompt: str,
         messages.append({"role": "user", "content": results})
 
 
+_RATE_LIMIT_WAIT_CAP = 25.0
+
+
+def _retry_delay_seconds(exc: Exception) -> float | None:
+    """The wait a 429 asks for ("retryDelay": "11s" / "retry in 11.5s")."""
+    text = str(exc)
+    m = re.search(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s", text) \
+        or re.search(r"retry in (\d+(?:\.\d+)?)\s*s", text, re.IGNORECASE)
+    return float(m.group(1)) if m else None
+
+
 def _gemini_error_category(exc: Exception) -> str:
     """Classify provider diagnostics without logging keys or request contents."""
     code = getattr(exc, "code", None)
@@ -1956,6 +1968,7 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
         return types.GenerateContentConfig(**kwargs)
 
     with_thoughts = True
+    rate_limit_retried = False
     for _ in range(MAX_TOOL_ROUNDS):
         fcalls = []
         model_parts = []
@@ -1992,6 +2005,17 @@ def _gemini_loop(api_key: str, model: str, system_prompt: str,
                 with_thoughts = False
                 continue
             code = getattr(exc, "code", None)
+            # A per-minute quota (the free tier allows 15 requests a minute, and
+            # one question can use several) says exactly when it frees up.
+            # Waiting that out once turns a failed answer into a slower one.
+            # The SDK's own retry gives up after ~2s, well short of the window.
+            delay = _retry_delay_seconds(exc) if code == 429 else None
+            if delay is not None and delay <= _RATE_LIMIT_WAIT_CAP and not rate_limit_retried \
+                    and not emitted_any and not fcalls:
+                rate_limit_retried = True
+                yield ("status", f"Gemini is busy — retrying in {math.ceil(delay)}s…")
+                time.sleep(delay + 0.5)
+                continue
             category = _gemini_error_category(exc)
             logging.getLogger(__name__).warning("Gemini request failed: %s, status=%s, category=%s", type(exc).__name__, code, category)
             if category == "invalid_api_key":
