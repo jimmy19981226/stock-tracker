@@ -183,6 +183,8 @@ enum Theme {
         static let snapRadius: CGFloat = 22
         /// Width the trailing price labels take from the plot.
         static let axisAllowance: CGFloat = 36
+        /// Space between the card's top edge and the floating scrub tip.
+        static let tipGap: CGFloat = 6
         /// Most events a tip lists before "+N more".
         static let tipMaxLines = 3
     }

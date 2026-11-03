@@ -170,6 +170,22 @@ final class DesignTour: XCTestCase {
 
     /// The market-index strip, expanded — the one panel whose sparkline shares
     /// its box with a label.
+    /// The stock chart's floating scrub tip, held at 60% of the range.
+    func testStockScrub() throws { try inspectStockScrub(theme: "light") }
+    func testStockScrubDark() throws { try inspectStockScrub(theme: "dark") }
+
+    private func inspectStockScrub(theme: String) throws {
+        appearance = theme
+        let app = makeApp()
+        app.launchEnvironment["UITEST_MARKET"] = "TW"
+        app.launchEnvironment["UITEST_TICKER"] = "2330"
+        app.launchEnvironment["UITEST_SCRUB"] = "0.6"
+        app.launch()
+        _ = app.staticTexts["Buy"].firstMatch.waitForExistence(timeout: 90)
+        sleep(3)
+        snap(app, "24-stock-scrub-\(theme)")
+    }
+
     func testIndexBar() throws {
         let app = makeApp()
         app.launch()

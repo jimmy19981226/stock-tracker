@@ -285,6 +285,7 @@ private struct PriceChartCard: View {
         let range = (bars.first?.date ?? .now)...(bars.last?.date ?? .now)
         let clusters = makeClusters(makeEvents(range: range), bars: bars, range: range)
         let snapped = snappedCluster(clusters, range: range)
+        let selected = nearestBar(to: scrubDate, in: bars)
         let scale = domain(bars)
 
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -312,38 +313,46 @@ private struct PriceChartCard: View {
                         PointMark(x: .value("Date", c.date), y: .value("Close", c.y))
                             .symbol { MarkerGlyph(kind: c.kind, count: c.events.count) }
                     }
-                    if let raw = scrubDate, let sel = nearestBar(to: raw, in: bars) {
-                        RuleMark(x: .value("Date", min(max(raw, range.lowerBound), range.upperBound)))
-                            .foregroundStyle(Theme.textTertiary.opacity(0.5))
-                            .lineStyle(StrokeStyle(lineWidth: 1))
-                            // y must fit too: a RuleMark spans the full plot height, so
-                            // `.top` puts the tip above the chart, where the card clips
-                            // it — the line moved but the price never showed.
-                            .annotation(position: .top,
-                                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                                // The line never snaps to a mark: it tracks the
-                                // finger day by day and always shows that day's
-                                // price. A nearby mark's records are added below
-                                // the price, not swapped in for it — swapping left
-                                // a dead zone around every mark with no price.
-                                if let c = snapped {
-                                    EventTip(date: sel.date, price: Fmt.number(sel.close, digits: 2),
-                                             events: c.events)
-                                } else {
-                                    ChartScrubTip(date: sel.date,
-                                                  value: Fmt.number(sel.close, digits: 2),
-                                                  timeZone: .gmt)
-                                }
-                            }
+                    // The rule and tip are drawn by the card overlay below, not
+                    // here: the card clips its content, and the tip floats above
+                    // the card so it never covers the stretch of line being read.
+                    if let sel = selected {
                         PointMark(x: .value("Date", sel.date), y: .value("Close", sel.close))
                             .symbolSize(46)
                             .foregroundStyle(Theme.accent)
                     }
                 }
                 .chartXSelection(value: $scrubDate)
+                .chartOverlay { proxy in
+                    // Publishes the selected day's exact column in plot space,
+                    // so the overlay's rule lines up with the point to the pixel.
+                    GeometryReader { geo in
+                        if let sel = selected, let plot = proxy.plotFrame,
+                           let x = proxy.position(forX: sel.date) {
+                            let r = geo[plot]
+                            // Anchor before `.position`: positioned, the view
+                            // fills the whole reader and the rule landed mid-chart.
+                            Color.clear
+                                .frame(width: 1, height: r.height)
+                                .anchorPreference(key: ScrubColumnKey.self, value: .bounds) { $0 }
+                                .position(x: r.minX + x, y: r.midY)
+                        }
+                    }
+                }
                 .sensoryFeedback(.selection, trigger: nearestBar(to: scrubDate, in: bars)?.date)
                 .sensoryFeedback(.impact(weight: .light), trigger: snapped?.id) { _, new in new != nil }
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { chartWidth = $0 }
+                #if DEBUG
+                // UI tests can't hold a finger down while screenshotting, so the
+                // design tour presets the scrub at a fraction of the range.
+                .onAppear {
+                    if let raw = ProcessInfo.processInfo.environment["UITEST_SCRUB"],
+                       let f = Double(raw) {
+                        let span = range.upperBound.timeIntervalSince(range.lowerBound)
+                        scrubDate = range.lowerBound.addingTimeInterval(span * f)
+                    }
+                }
+                #endif
                 .chartYScale(domain: scale)
                 .chartYAxis {
                     AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { mark in
@@ -360,10 +369,55 @@ private struct PriceChartCard: View {
                 .chartXAxis(.hidden)
                 .frame(height: 132)
                 .appCard(padding: Theme.Space.m + 2)
+                .overlayPreferenceValue(ScrubColumnKey.self) { anchor in
+                    GeometryReader { geo in
+                        if let anchor, let sel = selected {
+                            scrubOverlay(column: geo[anchor], width: geo.size.width,
+                                         sel: sel, snapped: snapped)
+                        }
+                    }
+                    .allowsHitTesting(false)
+                }
 
                 legend
             }
         }
+    }
+
+    @State private var tipSize: CGSize = .zero
+
+    /// The tip floats above the card with its rule dropping from the tip's
+    /// bottom edge through the plot, so nothing on the line is ever covered.
+    /// The line never snaps to a mark: it tracks the finger day by day and
+    /// always shows that day's price; a nearby mark's records are added below
+    /// the price, not swapped in for it (swapping left a dead zone around
+    /// every mark with no price).
+    @ViewBuilder
+    private func scrubOverlay(column: CGRect, width: CGFloat, sel: Bar, snapped: Cluster?) -> some View {
+        let gap = Theme.ChartMarker.tipGap
+        let tipBottom = -gap
+        let half = tipSize.width / 2
+        let cx = Swift.min(Swift.max(column.midX, half), Swift.max(width - half, half))
+
+        Rectangle()
+            .fill(Theme.textTertiary.opacity(0.6))
+            .frame(width: 1, height: column.maxY - tipBottom)
+            .position(x: column.midX, y: (tipBottom + column.maxY) / 2)
+
+        Group {
+            if let c = snapped {
+                EventTip(date: sel.date, price: Fmt.number(sel.close, digits: 2), events: c.events)
+            } else {
+                ChartScrubTip(date: sel.date, value: Fmt.number(sel.close, digits: 2), timeZone: .gmt)
+            }
+        }
+        .fixedSize()
+        // Solid once it floats: it no longer covers the line, but it does sit
+        // over the period picker, and see-through text over text is unreadable.
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.pill, style: .continuous))
+        .shadow(color: Theme.shadowStrong, radius: 6, x: 0, y: 2)
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { tipSize = $0 }
+        .position(x: cx, y: tipBottom - tipSize.height / 2)
     }
 
     private var legend: some View {
@@ -386,6 +440,15 @@ private struct PriceChartCard: View {
 
 /// The three chart marks, drawn once so the plot and its legend can never
 /// disagree about what a shape means.
+/// The selected day's column inside the plot, handed from the chart (which
+/// knows the scale) to the card overlay (which isn't clipped).
+private struct ScrubColumnKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 /// `mixed` is a merged badge holding more than one kind.
 private enum MarkerKind { case buy, sell, dividend, mixed }
 
