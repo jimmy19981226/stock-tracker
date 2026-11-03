@@ -1063,10 +1063,17 @@ struct FlowRow: Layout {
 struct ChartScrubTip: View {
     let date: Date
     let value: String
+    /// Pass `.gmt` for dates parsed as UTC midnight (price bars); in local
+    /// time they'd read as the previous day anywhere west of Greenwich.
+    var timeZone: TimeZone = .current
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(date, format: .dateTime.year().month(.abbreviated).day())
+            Text(date, format: {
+                var f = Date.FormatStyle.dateTime.year().month(.abbreviated).day()
+                f.timeZone = timeZone
+                return f
+            }())
                 .font(Theme.Typo.axis)
                 .foregroundStyle(Theme.textSecondary)
             Text(value)
@@ -1075,9 +1082,8 @@ struct ChartScrubTip: View {
         }
         .padding(.horizontal, Theme.Space.s)
         .padding(.vertical, 5)
-        .background(Theme.card)
+        .background(Theme.chartTip)
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.pill, style: .continuous))
-        .shadow(color: Theme.shadow, radius: 4, x: 0, y: 2)
     }
 }
 

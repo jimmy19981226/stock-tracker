@@ -159,6 +159,11 @@ enum Theme {
         static let pillRadius: CGFloat = radius - inset
     }
 
+    /// Fill for a chart's scrub tip. See-through without blur, so the line and
+    /// marks under it stay readable while the finger moves — an opaque tip hid
+    /// exactly the stretch of chart being pointed at.
+    static var chartTip: Color { card.opacity(0.72) }
+
     /// Trade and dividend badges on a price chart. Sized to read at a glance
     /// against the line: the old 8pt glyphs drowned in it, and a buy (gain
     /// green) on the teal line was nearly invisible. The halo is card-coloured
@@ -171,6 +176,15 @@ enum Theme {
         static let halo: CGFloat = 1.5
         /// Glyph size as a fraction of the badge diameter.
         static let glyphScale: CGFloat = 0.55
+        /// Marks nearer than one badge plus this gap merge into a counted
+        /// badge. Measured on screen, so zooming the period splits them again.
+        static let clusterGap: CGFloat = 3
+        /// How far (pt) a finger may land from a mark and still select it.
+        static let snapRadius: CGFloat = 22
+        /// Width the trailing price labels take from the plot.
+        static let axisAllowance: CGFloat = 36
+        /// Most events a tip lists before "+N more".
+        static let tipMaxLines = 3
     }
 
     // MARK: - Typography

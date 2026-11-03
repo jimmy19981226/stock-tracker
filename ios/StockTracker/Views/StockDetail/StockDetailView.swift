@@ -171,12 +171,27 @@ private struct PriceChartCard: View {
         let date: Date
         let close: Double
     }
-    private struct Marker: Identifiable {
+    /// One trade or dividend, already worded for the tip.
+    fileprivate struct Event {
+        let id: String
+        let date: Date
+        let kind: MarkerKind
+        let text: String
+    }
+    /// Events too close to tell apart on screen, drawn as one badge.
+    fileprivate struct Cluster: Identifiable {
         let id: String
         let date: Date
         let y: Double
-        let kind: MarkerKind
+        let events: [Event]
+
+        var kind: MarkerKind {
+            let kinds = Set(events.map(\.kind))
+            return kinds.count == 1 ? kinds.first! : .mixed
+        }
     }
+
+    @State private var chartWidth: CGFloat = 320
 
     private static let dayFormat: DateFormatter = {
         let f = DateFormatter()
@@ -196,22 +211,56 @@ private struct PriceChartCard: View {
         }
     }
 
-    private func makeMarkers(bars: [Bar], range: ClosedRange<Date>) -> [Marker] {
-        func closest(_ d: Date) -> Double? {
-            bars.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) }?.close
-        }
-        var out: [Marker] = []
+    private func makeEvents(range: ClosedRange<Date>) -> [Event] {
+        var out: [Event] = []
         for (i, t) in detail.trades.enumerated() {
-            guard let d = Self.dayFormat.date(from: String(t.date.prefix(10))),
-                  range.contains(d), let y = closest(d) ?? Optional(t.price) else { continue }
-            out.append(Marker(id: "t\(i)", date: d, y: y, kind: t.type == .buy ? .buy : .sell))
+            guard let d = Self.dayFormat.date(from: String(t.date.prefix(10))), range.contains(d) else { continue }
+            let verb = t.type == .buy ? "Bought" : "Sold"
+            out.append(Event(id: "t\(i)", date: d, kind: t.type == .buy ? .buy : .sell,
+                             text: "\(verb) \(Fmt.shares(t.shares)) sh @ \(Fmt.money(t.price, currency: currency))"))
         }
         for (i, dv) in detail.dividends.enumerated() {
-            guard let d = Self.dayFormat.date(from: String(dv.date.prefix(10))),
-                  range.contains(d), let y = closest(d) else { continue }
-            out.append(Marker(id: "d\(i)", date: d, y: y, kind: .dividend))
+            guard let d = Self.dayFormat.date(from: String(dv.date.prefix(10))), range.contains(d) else { continue }
+            out.append(Event(id: "d\(i)", date: d, kind: .dividend,
+                             text: "Dividend \(Fmt.amount(dv.amount, currency: currency))"))
         }
-        return out
+        return out.sorted { $0.date < $1.date }
+    }
+
+    /// Seconds of history one screen point covers at the current width.
+    private func secondsPerPoint(_ range: ClosedRange<Date>) -> Double {
+        let plot = Swift.max(chartWidth - Theme.ChartMarker.axisAllowance, 1)
+        return range.upperBound.timeIntervalSince(range.lowerBound) / Double(plot)
+    }
+
+    /// Greedy left-to-right grouping: an event joins the open cluster while it
+    /// sits within one badge width of that cluster's first event.
+    private func makeClusters(_ events: [Event], bars: [Bar], range: ClosedRange<Date>) -> [Cluster] {
+        let m = Theme.ChartMarker.self
+        let window = Double(m.badge + m.halo * 2 + m.clusterGap) * secondsPerPoint(range)
+        var groups: [[Event]] = []
+        for e in events {
+            if let first = groups.last?.first, e.date.timeIntervalSince(first.date) <= window {
+                groups[groups.count - 1].append(e)
+            } else {
+                groups.append([e])
+            }
+        }
+        return groups.compactMap { g in
+            guard let a = g.first, let b = g.last else { return nil }
+            let mid = Date(timeIntervalSince1970: (a.date.timeIntervalSince1970 + b.date.timeIntervalSince1970) / 2)
+            guard let y = nearestBar(to: mid, in: bars)?.close else { return nil }
+            return Cluster(id: a.id, date: mid, y: y, events: g)
+        }
+    }
+
+    /// The cluster under the finger, if one is within snapping distance.
+    private func snappedCluster(_ clusters: [Cluster], range: ClosedRange<Date>) -> Cluster? {
+        guard let raw = scrubDate else { return nil }
+        let reach = Double(Theme.ChartMarker.snapRadius) * secondsPerPoint(range)
+        return clusters
+            .min { abs($0.date.timeIntervalSince(raw)) < abs($1.date.timeIntervalSince(raw)) }
+            .flatMap { abs($0.date.timeIntervalSince(raw)) <= reach ? $0 : nil }
     }
 
     private func nearestBar(to date: Date?, in bars: [Bar]) -> Bar? {
@@ -234,7 +283,8 @@ private struct PriceChartCard: View {
     var body: some View {
         let bars = makeBars()
         let range = (bars.first?.date ?? .now)...(bars.last?.date ?? .now)
-        let markers = makeMarkers(bars: bars, range: range)
+        let clusters = makeClusters(makeEvents(range: range), bars: bars, range: range)
+        let snapped = snappedCluster(clusters, range: range)
         let scale = domain(bars)
 
         VStack(alignment: .leading, spacing: Theme.Space.m) {
@@ -258,9 +308,9 @@ private struct PriceChartCard: View {
                             .lineStyle(StrokeStyle(lineWidth: 1.8, lineCap: .round))
                             .interpolationMethod(.monotone)
                     }
-                    ForEach(markers) { m in
-                        PointMark(x: .value("Date", m.date), y: .value("Close", m.y))
-                            .symbol { MarkerGlyph(kind: m.kind) }
+                    ForEach(clusters) { c in
+                        PointMark(x: .value("Date", c.date), y: .value("Close", c.y))
+                            .symbol { MarkerGlyph(kind: c.kind, count: c.events.count) }
                     }
                     if let raw = scrubDate, let sel = nearestBar(to: raw, in: bars) {
                         RuleMark(x: .value("Date", min(max(raw, range.lowerBound), range.upperBound)))
@@ -271,8 +321,19 @@ private struct PriceChartCard: View {
                             // it — the line moved but the price never showed.
                             .annotation(position: .top,
                                         overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                                ChartScrubTip(date: sel.date,
-                                              value: Fmt.number(sel.close, digits: 2))
+                                // The line never snaps to a mark: it tracks the
+                                // finger day by day and always shows that day's
+                                // price. A nearby mark's records are added below
+                                // the price, not swapped in for it — swapping left
+                                // a dead zone around every mark with no price.
+                                if let c = snapped {
+                                    EventTip(date: sel.date, price: Fmt.number(sel.close, digits: 2),
+                                             events: c.events)
+                                } else {
+                                    ChartScrubTip(date: sel.date,
+                                                  value: Fmt.number(sel.close, digits: 2),
+                                                  timeZone: .gmt)
+                                }
                             }
                         PointMark(x: .value("Date", sel.date), y: .value("Close", sel.close))
                             .symbolSize(46)
@@ -281,6 +342,8 @@ private struct PriceChartCard: View {
                 }
                 .chartXSelection(value: $scrubDate)
                 .sensoryFeedback(.selection, trigger: nearestBar(to: scrubDate, in: bars)?.date)
+                .sensoryFeedback(.impact(weight: .light), trigger: snapped?.id) { _, new in new != nil }
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { chartWidth = $0 }
                 .chartYScale(domain: scale)
                 .chartYAxis {
                     AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { mark in
@@ -323,41 +386,108 @@ private struct PriceChartCard: View {
 
 /// The three chart marks, drawn once so the plot and its legend can never
 /// disagree about what a shape means.
-private enum MarkerKind { case buy, sell, dividend }
+/// `mixed` is a merged badge holding more than one kind.
+private enum MarkerKind { case buy, sell, dividend, mixed }
 
 /// A filled badge with a card-coloured halo, so it separates from the price
 /// line in both themes. The glyph carries the meaning without hue (▲ buy,
 /// ▼ sell, $ dividend); the fill only reinforces it. Dividends wear a neutral
-/// ink, not the accent, because the line itself is the accent.
+/// ink, not the accent, because the line itself is the accent. A merged badge
+/// stretches into a capsule with its count ("▲2"; a mixed group shows the
+/// count alone).
 private struct MarkerGlyph: View {
     let kind: MarkerKind
+    var count = 1
     var size: CGFloat = Theme.ChartMarker.badge
 
     private var fill: Color {
         switch kind {
         case .buy: Theme.gain
         case .sell: Theme.loss
-        case .dividend: Theme.textStrong
+        case .dividend, .mixed: Theme.textStrong
         }
     }
 
-    private var symbol: String {
+    private var symbol: String? {
         switch kind {
         case .buy: "arrowtriangle.up.fill"
         case .sell: "arrowtriangle.down.fill"
         case .dividend: "dollarsign"
+        case .mixed: nil
         }
     }
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: size * Theme.ChartMarker.glyphScale, weight: .heavy))
-            .foregroundStyle(Theme.card)
-            .frame(width: size, height: size)
-            .background(Circle().fill(fill))
-            .padding(Theme.ChartMarker.halo)
-            .background(Circle().fill(Theme.card))
-            .shadow(color: Theme.shadowStrong, radius: 1.5, y: 0.5)
+        HStack(spacing: 1) {
+            if let symbol { Image(systemName: symbol) }
+            if count > 1 { Text("\(count)") }
+        }
+        .font(.system(size: size * Theme.ChartMarker.glyphScale, weight: .heavy, design: .rounded))
+        .foregroundStyle(Theme.card)
+        .padding(.horizontal, count > 1 ? size * 0.25 : 0)
+        .frame(minWidth: size)
+        .frame(height: size)
+        .background(Capsule().fill(fill))
+        .padding(Theme.ChartMarker.halo)
+        .background(Capsule().fill(Theme.card))
+        .shadow(color: Theme.shadowStrong, radius: 1.5, y: 0.5)
+    }
+}
+
+/// The scrub tip near a mark: the day and price under the finger first, the
+/// same as everywhere else on the line, then one line per nearby trade or
+/// dividend. An event's own date is shown when it isn't the day under the finger.
+private struct EventTip: View {
+    let date: Date
+    let price: String
+    fileprivate let events: [PriceChartCard.Event]
+
+    private static let day: Date.FormatStyle = {
+        var f = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        f.timeZone = .gmt  // bar dates are UTC midnight; local time would show the day before in the Americas
+        return f
+    }()
+    private static let dayYear: Date.FormatStyle = {
+        var f = Date.FormatStyle.dateTime.year().month(.abbreviated).day()
+        f.timeZone = .gmt
+        return f
+    }()
+
+    var body: some View {
+        let max = Theme.ChartMarker.tipMaxLines
+        let shown = events.count > max + 1 ? Array(events.prefix(max)) : events
+        let today = date.formatted(Self.day)
+
+        VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(date.formatted(Self.dayYear))
+                    .font(Theme.Typo.axis)
+                    .foregroundStyle(Theme.textSecondary)
+                Text(price)
+                    .font(Theme.Typo.inlineNum)
+                    .foregroundStyle(Theme.text)
+            }
+            .padding(.bottom, 2)
+            ForEach(shown, id: \.id) { e in
+                let day = e.date.formatted(Self.day)
+                HStack(spacing: 5) {
+                    MarkerGlyph(kind: e.kind, size: Theme.ChartMarker.legend)
+                    Text(day == today ? e.text : "\(e.text) · \(day)")
+                        .font(Theme.Typo.inlineNumSm)
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                }
+            }
+            if shown.count < events.count {
+                Text("+\(events.count - shown.count) more")
+                    .font(Theme.Typo.axis)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+        }
+        .padding(.horizontal, Theme.Space.s)
+        .padding(.vertical, 5)
+        .background(Theme.chartTip)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.pill, style: .continuous))
     }
 }
 
@@ -667,25 +797,77 @@ private struct RecordsCard: View {
         (trades.map(Row.trade) + dividends.map(Row.dividend)).sorted { $0.date > $1.date }
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            Text("Your records")
-                .font(Theme.Typo.row)
-                .foregroundStyle(Theme.text)
+    /// Newest first, a page at a time: a long-held ticker can carry years of
+    /// DRIP buys and dividends, and an unbounded list pushed everything else
+    /// on the screen out of reach.
+    private static let pageSize = 10
+    @State private var page = 0
 
-            if rows.isEmpty {
+    var body: some View {
+        let all = rows
+        let pages = Swift.max(1, (all.count + Self.pageSize - 1) / Self.pageSize)
+        // Clamp here rather than on change: a deletion can shrink the list
+        // out from under the page we're on.
+        let current = Swift.min(page, pages - 1)
+        let start = current * Self.pageSize
+        let slice = Array(all[start..<Swift.min(start + Self.pageSize, all.count)])
+
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Your records")
+                    .font(Theme.Typo.row)
+                    .foregroundStyle(Theme.text)
+                Spacer()
+                if !all.isEmpty {
+                    Text("\(all.count)")
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+
+            if all.isEmpty {
                 Text("No trades or dividends recorded for this ticker.")
                     .font(Theme.Typo.detail)
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.vertical, Theme.Space.xs)
             } else {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                ForEach(Array(slice.enumerated()), id: \.element.id) { index, row in
                     line(row)
-                    if index < rows.count - 1 { RowDivider(inset: 0) }
+                    if index < slice.count - 1 { RowDivider(inset: 0) }
+                }
+                if pages > 1 {
+                    pager(current: current, pages: pages, start: start,
+                          shown: slice.count, total: all.count)
                 }
             }
         }
         .appCard()
+        .animation(.easeOut(duration: 0.18), value: current)
+    }
+
+    private func pager(current: Int, pages: Int, start: Int, shown: Int, total: Int) -> some View {
+        HStack {
+            IconButton(symbol: "chevron.left", size: 36,
+                       tint: current > 0 ? Theme.accent : Theme.textTertiary) {
+                page = current - 1
+            }
+            .disabled(current == 0)
+            .accessibilityLabel("Newer records")
+            Spacer()
+            Text("\(start + 1)–\(start + shown) of \(total)")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .numeral()
+            Spacer()
+            IconButton(symbol: "chevron.right", size: 36,
+                       tint: current < pages - 1 ? Theme.accent : Theme.textTertiary) {
+                page = current + 1
+            }
+            .disabled(current >= pages - 1)
+            .accessibilityLabel("Older records")
+        }
+        .padding(.top, Theme.Space.s)
+        .sensoryFeedback(.selection, trigger: current)
     }
 
     @ViewBuilder
