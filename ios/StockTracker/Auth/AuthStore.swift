@@ -4,7 +4,7 @@ import SwiftUI
 struct AuthUser: Codable, Equatable {
     let name: String
     let email: String
-    let picture: String?
+    var picture: String?
     let provider: String   // "google" | "guest"
     var givenName: String? = nil
 
@@ -56,11 +56,12 @@ final class AuthStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: Self.userKey),
            var user = try? JSONDecoder().decode(AuthUser.self, from: data) {
             // Upgrade older cached profiles without requiring another sign-in.
-            if !user.isGuest, user.givenName == nil,
+            if !user.isGuest, user.givenName == nil || user.picture == nil,
                let token = Keychain.get(Self.tokenKey),
                let identity = try? GoogleAuth.decodeIdentity(token),
                identity.email == user.email {
-                user.givenName = identity.givenName
+                if user.givenName == nil { user.givenName = identity.givenName }
+                if user.picture == nil { user.picture = identity.picture }
             }
             state = .signedIn(user)
         } else {

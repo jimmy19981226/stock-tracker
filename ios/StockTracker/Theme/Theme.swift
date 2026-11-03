@@ -146,6 +146,33 @@ enum Theme {
         static let illustration: CGFloat = 52
     }
 
+    /// The floating tab bar. Glass, not a card: it is navigation chrome
+    /// (rule 8), and content scrolling under it should stay faintly visible.
+    enum TabBar {
+        static let itemHeight: CGFloat = 52
+        static let icon: CGFloat = 20
+        static let iconFrame: CGFloat = 24
+        static let iconLabelGap: CGFloat = 3
+        /// Inset between the bar's edge and the selection pill.
+        static let inset: CGFloat = 5
+        static let radius: CGFloat = 28
+        static let pillRadius: CGFloat = radius - inset
+    }
+
+    /// Trade and dividend badges on a price chart. Sized to read at a glance
+    /// against the line: the old 8pt glyphs drowned in it, and a buy (gain
+    /// green) on the teal line was nearly invisible. The halo is card-coloured
+    /// so a badge cuts the line instead of sitting on it.
+    enum ChartMarker {
+        /// Small enough that trades a few days apart don't cover each other
+        /// (17pt did); the halo, not the size, is what lifts it off the line.
+        static let badge: CGFloat = 11
+        static let legend: CGFloat = 11
+        static let halo: CGFloat = 1.5
+        /// Glyph size as a fraction of the badge diameter.
+        static let glyphScale: CGFloat = 0.55
+    }
+
     // MARK: - Typography
     // Native San Francisco. Text styles scale with the user's accessibility setting.
     enum Typo {

@@ -88,12 +88,7 @@ struct SettingsView: View {
     private var accountCard: some View {
         let signedIn = auth.user?.isGuest == false
         return HStack(spacing: Theme.Space.m + 2) {
-            Text(auth.user?.initials.isEmpty == false ? auth.user!.initials : "G")
-                .font(Theme.Typo.row)
-                .foregroundStyle(Theme.accentChipText)
-                .frame(width: 38, height: 38)
-                .background(Theme.accentTint)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.badge, style: .continuous))
+            AccountAvatar(user: auth.user, size: 38)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(auth.user.map { $0.name.isEmpty ? $0.email : $0.name } ?? "Guest")

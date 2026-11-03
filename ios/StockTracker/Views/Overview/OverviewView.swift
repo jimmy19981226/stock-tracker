@@ -112,11 +112,10 @@ struct OverviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Spacer()
             Button(action: onOpenSettings) {
-                Image(systemName: "person.crop.circle")
-                    .font(.system(size: 25, weight: .light))
-                    .foregroundStyle(Theme.text)
-                    .frame(width: 48, height: 48)
+                AccountAvatar(user: auth.user, size: 44)
+                    .padding(2)
                     .background(Theme.card, in: Circle())
+                    .shadow(color: Theme.shadow, radius: 6, y: 2)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Account settings")

@@ -74,7 +74,7 @@ struct RootView: View {
         // safe-area inset above the keyboard and the active screen/composer
         // uses the remaining space. A tab tap dismisses editing first.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            AppTabBar(selection: $tab)
+            AppTabBar(selection: $tab, onReselect: popToRoot)
                 .padding(.horizontal, Theme.Space.m)
                 .padding(.top, Theme.Space.xs)
                 .padding(.bottom, Theme.Space.xs)
@@ -113,6 +113,16 @@ struct RootView: View {
         }
     }
 
+    /// Tapping the tab you're already on returns to its first screen, as in
+    /// every iOS app. Switching in from another tab still restores where you were.
+    private func popToRoot(_ reselected: AppTab) {
+        guard reselected == .overview, overviewMarket != nil || overviewTicker != nil else { return }
+        withAnimation(.easeOut(duration: 0.22)) {
+            overviewTicker = nil
+            overviewMarket = nil
+        }
+    }
+
     private func bootstrap() async {
         async let markets: Void = store.loadMarkets()
         async let all: Void = store.loadAll()
@@ -132,51 +142,63 @@ struct RootView: View {
 /// The drawn tab bar.
 private struct AppTabBar: View {
     @Binding var selection: AppTab
+    var onReselect: (AppTab) -> Void = { _ in }
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// One pill shared by every item, so a tap slides it across rather than
+    /// fading one off and another on.
+    @Namespace private var pill
+    /// Bumped only for the tab just chosen, so only that glyph bounces —
+    /// keyed on `selected` alone, the tab being left would bounce too.
+    @State private var bounce: [AppTab: Int] = [:]
 
     var body: some View {
-        HStack(spacing: 4) {
+        let shape = RoundedRectangle(cornerRadius: Theme.TabBar.radius, style: .continuous)
+        HStack(spacing: 0) {
             ForEach(AppTab.allCases) { tab in
-                let on = tab == selection
-                Button {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
-                                                    to: nil, from: nil, for: nil)
-                    selection = tab
-                } label: {
-                    VStack(spacing: 5) {
-                        Image(systemName: on && tab.hasFilledTwin ? tab.symbol + ".fill" : tab.symbol)
-                            .font(.system(size: 22, weight: on ? .semibold : .regular))
-                            .frame(height: 25)
-                        Text(tab.label)
-                            .font(on ? Theme.Typo.tabOn : Theme.Typo.tab)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
-                    }
-                    .foregroundStyle(on ? Theme.accentSelected : Theme.textSecondary)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 56)
-                    .background {
-                        if on {
-                            RoundedRectangle(cornerRadius: 19, style: .continuous)
-                                .fill(Theme.accentTint)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(tab.label)
-                .accessibilityIdentifier("tab.\(tab.rawValue)")
-                .accessibilityAddTraits(on ? .isSelected : [])
+                item(tab)
             }
         }
-        .padding(6)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 25, style: .continuous)
-                .strokeBorder(Theme.line.opacity(0.65), lineWidth: 0.5)
-        }
-        .shadow(color: Theme.shadow, radius: 14, x: 0, y: 4)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: selection)
+        .padding(Theme.TabBar.inset)
+        .background(.ultraThinMaterial, in: shape)
+        .background(Theme.chrome, in: shape)
+        .shadow(color: Theme.shadowStrong, radius: 18, x: 0, y: 6)
+        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82), value: selection)
         .sensoryFeedback(.selection, trigger: selection)
+    }
+
+    private func item(_ tab: AppTab) -> some View {
+        let on = tab == selection
+        return Button {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                            to: nil, from: nil, for: nil)
+            if !reduceMotion { bounce[tab, default: 0] += 1 }
+            if selection == tab { onReselect(tab) } else { selection = tab }
+        } label: {
+            VStack(spacing: Theme.TabBar.iconLabelGap) {
+                Image(systemName: on && tab.hasFilledTwin ? tab.symbol + ".fill" : tab.symbol)
+                    .font(.system(size: Theme.TabBar.icon, weight: on ? .semibold : .regular))
+                    .frame(height: Theme.TabBar.iconFrame)
+                    .symbolEffect(.bounce, options: .speed(1.4), value: bounce[tab, default: 0])
+                Text(tab.label)
+                    .font(on ? Theme.Typo.tabOn : Theme.Typo.tab)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(on ? Theme.accentSelected : Theme.textSecondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: Theme.TabBar.itemHeight)
+            .background {
+                if on {
+                    RoundedRectangle(cornerRadius: Theme.TabBar.pillRadius, style: .continuous)
+                        .fill(Theme.accentTint)
+                        .matchedGeometryEffect(id: "pill", in: pill)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.label)
+        .accessibilityIdentifier("tab.\(tab.rawValue)")
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

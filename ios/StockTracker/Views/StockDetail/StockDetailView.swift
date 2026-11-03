@@ -266,8 +266,11 @@ private struct PriceChartCard: View {
                         RuleMark(x: .value("Date", min(max(raw, range.lowerBound), range.upperBound)))
                             .foregroundStyle(Theme.textTertiary.opacity(0.5))
                             .lineStyle(StrokeStyle(lineWidth: 1))
+                            // y must fit too: a RuleMark spans the full plot height, so
+                            // `.top` puts the tip above the chart, where the card clips
+                            // it — the line moved but the price never showed.
                             .annotation(position: .top,
-                                        overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
+                                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
                                 ChartScrubTip(date: sel.date,
                                               value: Fmt.number(sel.close, digits: 2))
                             }
@@ -312,7 +315,7 @@ private struct PriceChartCard: View {
 
     private func legendItem(_ kind: MarkerKind, _ label: String) -> some View {
         HStack(spacing: 4) {
-            MarkerGlyph(kind: kind)
+            MarkerGlyph(kind: kind, size: Theme.ChartMarker.legend)
             Text(label)
         }
     }
@@ -322,22 +325,39 @@ private struct PriceChartCard: View {
 /// disagree about what a shape means.
 private enum MarkerKind { case buy, sell, dividend }
 
+/// A filled badge with a card-coloured halo, so it separates from the price
+/// line in both themes. The glyph carries the meaning without hue (▲ buy,
+/// ▼ sell, $ dividend); the fill only reinforces it. Dividends wear a neutral
+/// ink, not the accent, because the line itself is the accent.
 private struct MarkerGlyph: View {
     let kind: MarkerKind
+    var size: CGFloat = Theme.ChartMarker.badge
+
+    private var fill: Color {
+        switch kind {
+        case .buy: Theme.gain
+        case .sell: Theme.loss
+        case .dividend: Theme.textStrong
+        }
+    }
+
+    private var symbol: String {
+        switch kind {
+        case .buy: "arrowtriangle.up.fill"
+        case .sell: "arrowtriangle.down.fill"
+        case .dividend: "dollarsign"
+        }
+    }
 
     var body: some View {
-        switch kind {
-        case .buy:
-            Image(systemName: "arrowtriangle.up.fill")
-                .font(.system(size: 8)).foregroundStyle(Theme.gain)
-        case .sell:
-            Image(systemName: "arrowtriangle.down.fill")
-                .font(.system(size: 8)).foregroundStyle(Theme.loss)
-        case .dividend:
-            Circle().stroke(Theme.accent, lineWidth: 1.5)
-                .background(Circle().fill(Theme.card))
-                .frame(width: 7, height: 7)
-        }
+        Image(systemName: symbol)
+            .font(.system(size: size * Theme.ChartMarker.glyphScale, weight: .heavy))
+            .foregroundStyle(Theme.card)
+            .frame(width: size, height: size)
+            .background(Circle().fill(fill))
+            .padding(Theme.ChartMarker.halo)
+            .background(Circle().fill(Theme.card))
+            .shadow(color: Theme.shadowStrong, radius: 1.5, y: 0.5)
     }
 }
 

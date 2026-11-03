@@ -15,6 +15,54 @@ struct BrandLine: View {
     }
 }
 
+/// The signed-in person's Google photo, falling back to their initials, then
+/// to a generic glyph for a guest. Used wherever the account is represented,
+/// so the home button and Settings never disagree about who you are.
+struct AccountAvatar: View {
+    let user: AuthUser?
+    var size: CGFloat
+
+    /// Google serves profile photos at 96px by default (`=s96-c`); ask for one
+    /// sized to the screen so it isn't upscaled into blur on a 3x display.
+    private var photoURL: URL? {
+        guard let raw = user?.picture, !raw.isEmpty else { return nil }
+        let px = Int(size * 3)
+        if let r = raw.range(of: #"=s\d+-c$"#, options: .regularExpression) {
+            return URL(string: raw.replacingCharacters(in: r, with: "=s\(px)-c"))
+        }
+        return URL(string: raw)
+    }
+
+    var body: some View {
+        ZStack {
+            Circle().fill(Theme.accentTint)
+            fallback
+            if let url = photoURL {
+                AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.2))) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    }
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var fallback: some View {
+        if let u = user, !u.isGuest, !u.initials.isEmpty {
+            Text(u.initials)
+                .font(Theme.Typo.row)
+                .foregroundStyle(Theme.accentChipText)
+        } else {
+            Image(systemName: "person.fill")
+                .font(.system(size: size * 0.42))
+                .foregroundStyle(Theme.accentChipText)
+        }
+    }
+}
+
 /// A screen's 32pt title, optionally with a trailing control on the same
 /// baseline (a caption, an "+ Add" button).
 struct ScreenTitle<Trailing: View>: View {
@@ -613,6 +661,9 @@ struct SeriesChart: View {
     var fromLabel: String = ""
     var endDot = true
 
+    /// Drag across the plot to read the exact value on any day.
+    @State private var scrubDate: Date?
+
     private var domain: ClosedRange<Double> {
         let values = points.map(\.value)
         let lo = zeroBased ? 0 : (values.min() ?? 0)
@@ -621,7 +672,13 @@ struct SeriesChart: View {
         return (lo - (zeroBased ? 0 : pad))...(hi + pad)
     }
 
+    private func nearest(to date: Date?) -> Point? {
+        guard let date else { return nil }
+        return points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+    }
+
     var body: some View {
+        let selected = nearest(to: scrubDate)
         VStack(spacing: 4) {
             Chart {
                 ForEach(points) { p in
@@ -639,12 +696,28 @@ struct SeriesChart: View {
                         .lineStyle(StrokeStyle(lineWidth: 1.8, lineCap: .round))
                         .interpolationMethod(.monotone)
                 }
-                if endDot, let last = points.last {
+                if let sel = selected {
+                    // Anchored to the snapped point, not the raw finger position,
+                    // so the rule, dot and tip always agree on one day.
+                    RuleMark(x: .value("Date", sel.date))
+                        .foregroundStyle(Theme.textTertiary.opacity(0.5))
+                        .lineStyle(StrokeStyle(lineWidth: 1))
+                        .annotation(position: .top,
+                                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                            ChartScrubTip(date: sel.date,
+                                          value: Fmt.amount(sel.value, currency: currency))
+                        }
+                    PointMark(x: .value("Date", sel.date), y: .value("Value", sel.value))
+                        .foregroundStyle(Theme.accent)
+                        .symbolSize(46)
+                } else if endDot, let last = points.last {
                     PointMark(x: .value("Date", last.date), y: .value("Value", last.value))
                         .foregroundStyle(Theme.accent)
                         .symbolSize(46)
                 }
             }
+            .chartXSelection(value: $scrubDate)
+            .sensoryFeedback(.selection, trigger: selected?.date)
             .chartYScale(domain: domain)
             .chartYAxis {
                 AxisMarks(position: axisEdge == .leading ? .leading : .trailing,
